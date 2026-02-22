@@ -1,0 +1,15 @@
+---
+export interface Props {
+  severity: 'red' | 'orange' | 'yellow';
+}
+const { severity } = Astro.props;
+const styles = {
+  red:    'bg-red-600 text-white',
+  orange: 'bg-orange-500 text-white',
+  yellow: 'bg-yellow-400 text-black',
+};
+const labels = { red: '🔴 ROUGE', orange: '🟠 ORANGE', yellow: '🟡 JAUNE' };
+---
+<span class={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase ${styles[severity]}`}>
+  {labels[severity]}
+</span>

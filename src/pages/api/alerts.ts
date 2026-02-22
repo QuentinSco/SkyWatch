@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
-import { fetchGDACS } from '../../lib/gdacs';
-import { fetchNOAA } from '../../lib/noaa';
-import { fetchMeteoAlarm } from '../../lib/meteoalarm';
+import { fetchGDACS } from '../../../public/lib/gdacs';
+import { fetchNOAA } from '../../../public/lib/noaa';
+import { fetchMeteoAlarm } from '../../../public/lib/meteoalarm';
 
 export const prerender = false;
 

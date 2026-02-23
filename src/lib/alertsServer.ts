@@ -387,7 +387,8 @@ export async function fetchGDACS(): Promise<Alert[]> {
       const description = gdacsGetTag(item, 'description').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
       const pubDate = gdacsGetTag(item, 'pubDate');
       const link = gdacsGetTag(item, 'link') || 'https://www.gdacs.org';
-      const country = gdacsGetTag(item, 'gdacs:country') || gdacsGetTag(item, 'gdacs:eventname') || '';
+      const gdacsCountry = gdacsGetTag(item, 'gdacs:country');
+      const eventName = gdacsGetTag(item, 'gdacs:eventname') || '';
       const magRaw = gdacsGetTag(item, 'gdacs:magnitude');
       const magnitude = magRaw ? parseFloat(magRaw) : windKmh ?? undefined;
       const eventId = gdacsGetTag(item, 'gdacs:eventid') || `${eventType}-${lat}-${lon}`;
@@ -397,6 +398,8 @@ export async function fetchGDACS(): Promise<Alert[]> {
       const region = regionFromCoords(lat, lon);
       const basin = eventType === 'TC' ? basinFromCoords(lat, lon) : undefined;
 
+      const country = gdacsCountry || (eventType === 'TC' ? (basin ?? '') : eventName);
+
       let severity: Severity;
       if (level >= 3) severity = 'red';
       else if (level === 2) severity = 'orange';
@@ -404,6 +407,7 @@ export async function fetchGDACS(): Promise<Alert[]> {
       else severity = 'orange';
       const label = GDACS_TYPE_LABELS[eventType] ?? 'Événement';
       const magStr = windKmh ? ` ${windKmh} km/h` : magnitude ? ` M${magnitude}` : '';
+      const tcName = eventType === 'TC' && eventName ? ` (${eventName})` : '';
 
       alerts.push({
         id: `gdacs-${eventId}`,
@@ -418,7 +422,7 @@ export async function fetchGDACS(): Promise<Alert[]> {
         lon,
         validFrom: pubDate,
         validTo: null,
-        headline: `${label}${magStr} — ${country || 'Région inconnue'}`,
+        headline: `${label}${magStr}${tcName} — ${country || 'Région inconnue'}`,
         description,
         link,
         ...(basin ? { basin } : {}),

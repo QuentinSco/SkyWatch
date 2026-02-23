@@ -1,58 +1,46 @@
-import { getAirportsNearCoords, getAirportsByCountry, getCentroid } from '/lib/normalize.js';
+import { getAirportsNearCoords, getAirportsByCountry } from '/lib/normalize.js';
 
-const PROXY    = '/api/proxy?url=';
-const FEED_URL = 'https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-rss-europe';
+const PROXY = '/api/proxy?url=';
 
-const COUNTRY_NAME_ISO3 = {
-  France: 'FRA', Germany: 'DEU', Spain: 'ESP', Italy: 'ITA',
-  'United Kingdom': 'GBR', Portugal: 'PRT', Netherlands: 'NLD',
-  Belgium: 'BEL', Switzerland: 'CHE', Austria: 'AUT', Poland: 'POL',
-  Romania: 'ROU', Croatia: 'HRV', Greece: 'GRC', Sweden: 'SWE',
-  Norway: 'NOR', Denmark: 'DNK', Finland: 'FIN', 'Czech Republic': 'CZE',
-  Slovakia: 'SVK', Hungary: 'HUN', Bulgaria: 'BGR', Slovenia: 'SVN',
-  Serbia: 'SRB', Ireland: 'IRL', Luxembourg: 'LUX', Andorra: 'AND',
+const MA_FEED_SLUGS = {
+  AT: 'austria', BA: 'bosnia-and-herzegovina', BE: 'belgium', BG: 'bulgaria',
+  CY: 'cyprus', CZ: 'czech-republic', DE: 'germany', DK: 'denmark',
+  ES: 'spain', FI: 'finland', FR: 'france', GR: 'greece', HR: 'croatia',
+  HU: 'hungary', IE: 'ireland', IL: 'israel', IS: 'iceland', IT: 'italy',
+  LT: 'lithuania', LV: 'latvia', MD: 'moldova', ME: 'montenegro',
+  MK: 'north-macedonia', MT: 'malta', NL: 'netherlands', PL: 'poland',
+  PT: 'portugal', RO: 'romania', RS: 'serbia', SI: 'slovenia', SK: 'slovakia',
+};
+
+const MA_COUNTRY_ISO2_TO_ISO3 = {
+  AT: 'AUT', BA: 'BIH', BE: 'BEL', BG: 'BGR', CY: 'CYP', CZ: 'CZE',
+  DE: 'DEU', DK: 'DNK', ES: 'ESP', FI: 'FIN', FR: 'FRA', GR: 'GRC',
+  HR: 'HRV', HU: 'HUN', IE: 'IRL', IL: 'ISR', IS: 'ISL', IT: 'ITA',
+  LT: 'LTU', LV: 'LVA', MD: 'MDA', ME: 'MNE', MK: 'MKD', MT: 'MLT',
+  NL: 'NLD', PL: 'POL', PT: 'PRT', RO: 'ROU', RS: 'SRB', SI: 'SVN',
+  SK: 'SVK',
+};
+
+const MA_COUNTRY_NAME = {
+  AT: 'Austria', BA: 'Bosnia and Herzegovina', BE: 'Belgium', BG: 'Bulgaria',
+  CY: 'Cyprus', CZ: 'Czech Republic', DE: 'Germany', DK: 'Denmark',
+  ES: 'Spain', FI: 'Finland', FR: 'France', GR: 'Greece', HR: 'Croatia',
+  HU: 'Hungary', IE: 'Ireland', IL: 'Israel', IS: 'Iceland', IT: 'Italy',
+  LT: 'Lithuania', LV: 'Latvia', MD: 'Moldova', ME: 'Montenegro',
+  MK: 'North Macedonia', MT: 'Malta', NL: 'Netherlands', PL: 'Poland',
+  PT: 'Portugal', RO: 'Romania', RS: 'Serbia', SI: 'Slovenia', SK: 'Slovakia',
 };
 
 const AWT_LABEL = {
-  1:  'Vent violent',
-  2:  'Neige / Verglas',
-  3:  'Orages',
-  4:  'Brouillard',
-  5:  'Chaleur extrême',
-  6:  'Froid extrême',
-  7:  'Événement côtier',
-  8:  'Feux de forêt',
-  9:  'Avalanche',
-  10: 'Pluie intense',
-  11: 'Inondation',
-  12: 'Inondation / Pluie',
+  1: 'Vent violent', 2: 'Neige / Verglas', 3: 'Orages', 4: 'Brouillard',
+  5: 'Chaleur extrême', 6: 'Froid extrême', 7: 'Événement côtier',
+  10: 'Pluie intense', 11: 'Inondation', 12: 'Inondation / Pluie',
 };
 
-// Phénomènes non pertinents pour le dispatch
 const EXCLUDED_AWT = new Set([8, 9, 13]);
 
-// Pays non desservis AF
-const EXCLUDED_COUNTRIES = new Set([
-  'Ukraine', 'Belarus', 'Moldova', 'Kosovo', 'Albania',
-  'North Macedonia', 'Bosnia and Herzegovina', 'Andorra',
-  'Montenegro', 'San Marino', 'Liechtenstein', 'Armenia',
-  'Azerbaijan', 'Georgia',
-]);
-
-// Seuil minimum par phénomène (niveau MeteoAlarm 1-4)
-// MeteoAlarm : 1=vert, 2=jaune, 3=orange, 4=rouge
-// Pour le vent, on exige niveau 3+ (orange/rouge) car niveau 2 = < 60 km/h sans impact dispatch
 const MIN_LEVEL = {
-  1:  3,   // Vent : niveau orange minimum (~75-90 km/h)
-  2:  2,   // Neige / Verglas : jaune suffit
-  3:  2,   // Orages
-  4:  2,   // Brouillard
-  5:  2,   // Chaleur
-  6:  2,   // Froid
-  7:  2,   // Côtier
-  10: 2,   // Pluie
-  11: 2,   // Inondation
-  12: 2,   // Inondation / Pluie
+  1: 3, 2: 2, 3: 2, 4: 2, 5: 2, 6: 2, 7: 2, 10: 2, 11: 2, 12: 2,
 };
 
 function levelToSeverity(level) {
@@ -61,21 +49,34 @@ function levelToSeverity(level) {
   return 'yellow';
 }
 
-export async function fetchMeteoAlarm() {
-  const alerts = [];
+let emmaCentroidsCache = null;
+
+async function getEmmaCentroids() {
+  if (emmaCentroidsCache) return emmaCentroidsCache;
   try {
-    const url = PROXY + encodeURIComponent(FEED_URL);
+    const res = await fetch('/lib/emmaCentroids.json');
+    if (res.ok) emmaCentroidsCache = await res.json();
+  } catch (_) {}
+  return emmaCentroidsCache ?? {};
+}
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10000);
+async function fetchCountryFeed(iso2, slug, emmaCentroids) {
+  const alerts = [];
+  const iso3 = MA_COUNTRY_ISO2_TO_ISO3[iso2] ?? '';
+  const countryName = MA_COUNTRY_NAME[iso2] ?? iso2;
+  const feedUrl = `https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-rss-${slug}`;
+  const url = PROXY + encodeURIComponent(feedUrl);
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+
+  try {
     const res = await fetch(url, {
       signal: controller.signal,
       headers: { 'Accept': 'application/xml, text/xml, */*' },
     });
     clearTimeout(timer);
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) return alerts;
     const xml = await res.text();
 
     for (const item of xml.split('<item>').slice(1)) {
@@ -84,35 +85,30 @@ export async function fetchMeteoAlarm() {
         return m ? m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').trim() : '';
       };
 
-      const title   = getTag('title');
-      const country = title.replace(/^MeteoAlarm\s+/i, '').trim();
-      if (!country) continue;
-
-      if (EXCLUDED_COUNTRIES.has(country)) continue;
+      const title = getTag('title');
+      if (!title || title === countryName) continue;
 
       const description = getTag('description');
-      const pubDate     = getTag('pubDate');
-      const link        = getTag('link') || 'https://www.meteoalarm.org';
+      const pubDate = getTag('pubDate');
+      const link = getTag('link') || `https://www.meteoalarm.org?region=${iso2}`;
+
+      const emmaMatch = link.match(/EMMA_ID:([A-Z]{2}\d+)/);
+      const emmaCode = emmaMatch ? emmaMatch[1] : null;
 
       const eventRegex = /data-awareness-level="(\d+)"[^>]*data-awareness-type="(\d+)"/g;
       let match;
       const events = [];
       while ((match = eventRegex.exec(description)) !== null) {
-        const level = parseInt(match[1], 10);
-        const awt   = parseInt(match[2], 10);
-        events.push({ level, awt });
+        events.push({ level: parseInt(match[1], 10), awt: parseInt(match[2], 10) });
       }
 
       if (events.length === 0) continue;
 
-      // Filtre : phénomène pertinent + seuil minimum par type
       const significant = events.filter(e =>
-        !EXCLUDED_AWT.has(e.awt) &&
-        e.level >= (MIN_LEVEL[e.awt] ?? 2)
+        !EXCLUDED_AWT.has(e.awt) && e.level >= (MIN_LEVEL[e.awt] ?? 2)
       );
       if (significant.length === 0) continue;
 
-      // Groupe par type, garde le niveau max
       const byType = new Map();
       for (const e of significant) {
         if (!byType.has(e.awt) || e.level > byType.get(e.awt)) {
@@ -120,40 +116,53 @@ export async function fetchMeteoAlarm() {
         }
       }
 
-      const iso3     = COUNTRY_NAME_ISO3[country] ?? '';
-      const centroid = iso3 ? getCentroid(iso3) : null;
-      const lat      = centroid?.lat ?? null;
-      const lon      = centroid?.lon ?? null;
-      const airports = centroid
-        ? getAirportsNearCoords(centroid.lat, centroid.lon, 600)
+      const regionCentroid = emmaCode ? emmaCentroids[emmaCode] : null;
+      const lat = regionCentroid?.lat ?? null;
+      const lon = regionCentroid?.lon ?? null;
+      const regionName = regionCentroid?.name ?? title;
+
+      const airports = regionCentroid
+        ? getAirportsNearCoords(regionCentroid.lat, regionCentroid.lon, 400)
         : iso3
           ? getAirportsByCountry(iso3)
           : [];
 
       for (const [awt, level] of byType.entries()) {
-        const severity   = levelToSeverity(level);
+        const severity = levelToSeverity(level);
         const phenomenon = AWT_LABEL[awt] ?? `Phénomène type ${awt}`;
+        const levelLabel = level >= 4 ? 'ROUGE' : level === 3 ? 'ORANGE' : 'JAUNE';
 
         alerts.push({
-          id:          'MA-' + country + '-' + awt + '-' + pubDate,
-          source:      'MeteoAlarm',
-          region:      'EUR',
+          id: `MA-${emmaCode ?? countryName}-${awt}-${pubDate}`,
+          source: 'MeteoAlarm',
+          region: 'EUR',
           severity,
           phenomenon,
-          country,
+          country: countryName,
           airports,
           lat,
           lon,
-          validFrom:   pubDate,
-          validTo:     pubDate,
-          headline:    `${severity === 'red' ? 'Alerte rouge' : severity === 'orange' ? 'Alerte orange' : 'Alerte jaune'} ${phenomenon} — ${country}`,
-          description: `Niveau ${level >= 4 ? 'ROUGE' : level === 3 ? 'ORANGE' : 'JAUNE'} — ${phenomenon} en ${country}`,
+          validFrom: pubDate,
+          validTo: pubDate,
+          headline: `Alerte ${levelLabel} ${phenomenon} — ${regionName} (${countryName})`,
+          description: `Niveau ${levelLabel} — ${phenomenon} dans la région ${regionName}, ${countryName}`,
           link,
         });
       }
     }
   } catch (e) {
-    if (e.name !== 'AbortError') console.error('[MeteoAlarm]', e);
+    clearTimeout(timer);
+    if (e.name !== 'AbortError') console.error(`[MeteoAlarm:${iso2}]`, e);
   }
   return alerts;
+}
+
+export async function fetchMeteoAlarm() {
+  const emmaCentroids = await getEmmaCentroids();
+  const results = await Promise.allSettled(
+    Object.entries(MA_FEED_SLUGS).map(([iso2, slug]) =>
+      fetchCountryFeed(iso2, slug, emmaCentroids)
+    )
+  );
+  return results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
 }

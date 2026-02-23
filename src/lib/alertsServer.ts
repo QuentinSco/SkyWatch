@@ -1,3 +1,5 @@
+import emmaCentroidsData from './emmaCentroids.json';
+
 type Severity = 'red' | 'orange' | 'yellow';
 
 interface Alert {
@@ -415,16 +417,6 @@ export async function fetchGDACS(): Promise<Alert[]> {
 }
 
 // ─── MeteoAlarm ───────────────────────────────────────────────────────────────
-const COUNTRY_NAME_ISO3: Record<string, string> = {
-  France: 'FRA', Germany: 'DEU', Spain: 'ESP', Italy: 'ITA',
-  'United Kingdom': 'GBR', Portugal: 'PRT', Netherlands: 'NLD',
-  Belgium: 'BEL', Switzerland: 'CHE', Austria: 'AUT', Poland: 'POL',
-  Romania: 'ROU', Croatia: 'HRV', Greece: 'GRC', Sweden: 'SWE',
-  Norway: 'NOR', Denmark: 'DNK', Finland: 'FIN', 'Czech Republic': 'CZE',
-  Slovakia: 'SVK', Hungary: 'HUN', Bulgaria: 'BGR', Slovenia: 'SVN',
-  Serbia: 'SRB', Ireland: 'IRL', Luxembourg: 'LUX',
-};
-
 const AWT_LABEL: Record<number, string> = {
   1: 'Vent violent', 2: 'Neige / Verglas', 3: 'Orages', 4: 'Brouillard',
   5: 'Chaleur extrême', 6: 'Froid extrême', 7: 'Événement côtier',
@@ -433,50 +425,68 @@ const AWT_LABEL: Record<number, string> = {
 
 const EXCLUDED_AWT = new Set([8, 9, 13]);
 
-const EXCLUDED_COUNTRIES = new Set([
-  'Ukraine', 'Belarus', 'Moldova', 'Kosovo', 'Albania',
-  'North Macedonia', 'Bosnia and Herzegovina', 'Montenegro',
-  'San Marino', 'Liechtenstein', 'Armenia', 'Azerbaijan', 'Georgia',
-]);
-
 const MIN_LEVEL: Record<number, number> = {
   1: 3, 2: 2, 3: 2, 4: 2, 5: 2, 6: 2, 7: 2, 10: 2, 11: 2, 12: 2,
 };
 
-const COUNTRY_CENTROIDS: Record<string, { lat: number; lon: number }> = {
-  FRA: { lat: 46.2276, lon: 2.2137 }, DEU: { lat: 51.1657, lon: 10.4515 },
-  ESP: { lat: 40.4637, lon: -3.7492 }, ITA: { lat: 41.8719, lon: 12.5674 },
-  GBR: { lat: 55.3781, lon: -3.4360 }, PRT: { lat: 39.3999, lon: -8.2245 },
-  NLD: { lat: 52.1326, lon: 5.2913 }, BEL: { lat: 50.5039, lon: 4.4699 },
-  CHE: { lat: 46.8182, lon: 8.2275 }, AUT: { lat: 47.5162, lon: 14.5501 },
-  POL: { lat: 51.9194, lon: 19.1451 }, ROU: { lat: 45.9432, lon: 24.9668 },
-  HRV: { lat: 45.1000, lon: 15.2000 }, GRC: { lat: 39.0742, lon: 21.8243 },
-  SWE: { lat: 60.1282, lon: 18.6435 }, NOR: { lat: 60.4720, lon: 8.4689 },
-  DNK: { lat: 56.2639, lon: 9.5018 }, FIN: { lat: 61.9241, lon: 25.7482 },
-  CZE: { lat: 49.8175, lon: 15.4730 }, SVK: { lat: 48.6690, lon: 19.6990 },
-  HUN: { lat: 47.1625, lon: 19.5033 }, BGR: { lat: 42.7339, lon: 25.4858 },
-  SVN: { lat: 46.1512, lon: 14.9955 }, SRB: { lat: 44.0165, lon: 21.0059 },
-  IRL: { lat: 53.1424, lon: -7.6921 }, LUX: { lat: 49.8153, lon: 6.1296 },
+const MA_COUNTRY_ISO2_TO_ISO3: Record<string, string> = {
+  AT: 'AUT', BA: 'BIH', BE: 'BEL', BG: 'BGR', CY: 'CYP', CZ: 'CZE',
+  DE: 'DEU', DK: 'DNK', ES: 'ESP', FI: 'FIN', FR: 'FRA', GR: 'GRC',
+  HR: 'HRV', HU: 'HUN', IE: 'IRL', IL: 'ISR', IS: 'ISL', IT: 'ITA',
+  LT: 'LTU', LV: 'LVA', MD: 'MDA', ME: 'MNE', MK: 'MKD', MT: 'MLT',
+  NL: 'NLD', PL: 'POL', PT: 'PRT', RO: 'ROU', RS: 'SRB', SI: 'SVN',
+  SK: 'SVK',
 };
+
+const MA_COUNTRY_NAME: Record<string, string> = {
+  AT: 'Austria', BA: 'Bosnia and Herzegovina', BE: 'Belgium', BG: 'Bulgaria',
+  CY: 'Cyprus', CZ: 'Czech Republic', DE: 'Germany', DK: 'Denmark',
+  ES: 'Spain', FI: 'Finland', FR: 'France', GR: 'Greece', HR: 'Croatia',
+  HU: 'Hungary', IE: 'Ireland', IL: 'Israel', IS: 'Iceland', IT: 'Italy',
+  LT: 'Lithuania', LV: 'Latvia', MD: 'Moldova', ME: 'Montenegro',
+  MK: 'North Macedonia', MT: 'Malta', NL: 'Netherlands', PL: 'Poland',
+  PT: 'Portugal', RO: 'Romania', RS: 'Serbia', SI: 'Slovenia', SK: 'Slovakia',
+};
+
+const MA_FEED_SLUGS: Record<string, string> = {
+  AT: 'austria', BA: 'bosnia-and-herzegovina', BE: 'belgium', BG: 'bulgaria',
+  CY: 'cyprus', CZ: 'czech-republic', DE: 'germany', DK: 'denmark',
+  ES: 'spain', FI: 'finland', FR: 'france', GR: 'greece', HR: 'croatia',
+  HU: 'hungary', IE: 'ireland', IL: 'israel', IS: 'iceland', IT: 'italy',
+  LT: 'lithuania', LV: 'latvia', MD: 'moldova', ME: 'montenegro',
+  MK: 'north-macedonia', MT: 'malta', NL: 'netherlands', PL: 'poland',
+  PT: 'portugal', RO: 'romania', RS: 'serbia', SI: 'slovenia', SK: 'slovakia',
+};
+
+type EmmaCentroid = { lat: number; lon: number; country: string; name: string };
+const emmaCentroidsImport = emmaCentroidsData as Record<string, EmmaCentroid>;
 
 export async function fetchMeteoAlarm(): Promise<Alert[]> {
   const alerts: Alert[] = [];
-  try {
-    const FEED_URL = 'https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-rss-europe';
-    const res = await fetch(FEED_URL, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; SkyWatch/1.0)',
-        'Accept': 'application/xml, text/xml, */*',
-      },
-      signal: AbortSignal.timeout(12000),
-    });
+  const emmaCentroids = emmaCentroidsImport;
 
-    if (!res.ok) {
-      console.error('[MeteoAlarm] HTTP', res.status);
-      return alerts;
-    }
+  const countryEntries = Object.entries(MA_FEED_SLUGS);
+  const results = await Promise.allSettled(
+    countryEntries.map(async ([iso2, slug]) => {
+      const url = `https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-rss-${slug}`;
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; SkyWatch/1.0)',
+          'Accept': 'application/xml, text/xml, */*',
+        },
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!res.ok) return { iso2, items: [] };
+      const xml = await res.text();
+      return { iso2, xml };
+    })
+  );
 
-    const xml = await res.text();
+  for (const result of results) {
+    if (result.status !== 'fulfilled' || !('xml' in result.value)) continue;
+    const { iso2, xml } = result.value as { iso2: string; xml: string };
+    const iso3 = MA_COUNTRY_ISO2_TO_ISO3[iso2] ?? '';
+    const countryName = MA_COUNTRY_NAME[iso2] ?? iso2;
 
     for (const item of xml.split('<item>').slice(1)) {
       const getTag = (tag: string) => {
@@ -485,12 +495,14 @@ export async function fetchMeteoAlarm(): Promise<Alert[]> {
       };
 
       const title = getTag('title');
-      const country = title.replace(/^MeteoAlarm\s+/i, '').trim();
-      if (!country || EXCLUDED_COUNTRIES.has(country)) continue;
+      if (!title || title === countryName) continue;
 
       const description = getTag('description');
       const pubDate = getTag('pubDate');
-      const link = getTag('link') || 'https://www.meteoalarm.org';
+      const link = getTag('link') || `https://www.meteoalarm.org?region=${iso2}`;
+
+      const emmaMatch = link.match(/EMMA_ID:([A-Z]{2}\d+)/);
+      const emmaCode = emmaMatch ? emmaMatch[1] : null;
 
       const eventRegex = /data-awareness-level="(\d+)"[^>]*data-awareness-type="(\d+)"/g;
       let match;
@@ -513,12 +525,13 @@ export async function fetchMeteoAlarm(): Promise<Alert[]> {
         }
       }
 
-      const iso3 = COUNTRY_NAME_ISO3[country] ?? '';
-      const centroid = iso3 ? COUNTRY_CENTROIDS[iso3] : null;
-      const lat = centroid?.lat;
-      const lon = centroid?.lon;
-      const airports = centroid
-        ? getAirportsNearCoords(centroid.lat, centroid.lon, 600)
+      const regionCentroid = emmaCode ? emmaCentroids[emmaCode] : null;
+      const lat = regionCentroid?.lat;
+      const lon = regionCentroid?.lon;
+      const regionName = regionCentroid?.name ?? title;
+
+      const airports = regionCentroid
+        ? getAirportsNearCoords(regionCentroid.lat, regionCentroid.lon, 400)
         : iso3
           ? getAirportsByCountry(iso3)
           : [];
@@ -529,25 +542,23 @@ export async function fetchMeteoAlarm(): Promise<Alert[]> {
         const levelLabel = level >= 4 ? 'ROUGE' : level === 3 ? 'ORANGE' : 'JAUNE';
 
         alerts.push({
-          id: `MA-${country}-${awt}-${pubDate}`,
+          id: `MA-${emmaCode ?? countryName}-${awt}-${pubDate}`,
           source: 'MeteoAlarm',
           region: 'EUR',
           severity,
           phenomenon,
-          country,
+          country: countryName,
           airports,
           ...(lat !== undefined ? { lat } : {}),
           ...(lon !== undefined ? { lon } : {}),
           validFrom: pubDate,
           validTo: pubDate,
-          headline: `Alerte ${levelLabel} ${phenomenon} — ${country}`,
-          description: `Niveau ${levelLabel} — ${phenomenon} en ${country}`,
+          headline: `Alerte ${levelLabel} ${phenomenon} — ${regionName} (${countryName})`,
+          description: `Niveau ${levelLabel} — ${phenomenon} dans la région ${regionName}, ${countryName}`,
           link,
         });
       }
     }
-  } catch (e: any) {
-    if (e?.name !== 'AbortError') console.error('[MeteoAlarm]', e);
   }
   return alerts;
 }

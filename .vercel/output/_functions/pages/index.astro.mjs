@@ -14,10 +14,10 @@ const $$Index = createComponent(($$result, $$props, $$slots) => {
       Les \xE9v\xE8nement \xE0 J restent sous responsabilit\xE9 dispatcher individuelle.
 <span class="text-blue-400 text-xs ml-2">\u2014 Cliquez sur une ligne pour afficher le d\xE9tail.</span> </div> </header> <div class="mb-8 rounded-xl overflow-hidden border border-gray-200 shadow-sm"> <div class="bg-gray-50 border-b border-gray-200 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
 Carte des alertes actives
-</div> <div id="alert-map" style="height: 420px; width: 100%;"></div> </div> <main id="main-content"> <div class="text-gray-400 text-sm italic">Chargement des alertes...</div> </main> <footer class="mt-12 pt-6 border-t border-gray-200 text-xs text-gray-400 flex flex-wrap gap-4 justify-between"> <span>Sources : GDACS (UN/CE) \xB7 NOAA/NWS \xB7 MeteoAlarm (EUMETNET)</span> <span>SkyWatch POC v0.1 \u2014 Open source uniquement</span> </footer> <script type="module" src="/lib/main.js"><\/script> </body> </html>`])), renderScript($$result, "/tmp/cc-agent/64009239/project/src/pages/index.astro?astro&type=script&index=0&lang.ts"), renderHead());
-}, "/tmp/cc-agent/64009239/project/src/pages/index.astro", void 0);
+</div> <div id="alert-map" style="height: 420px; width: 100%;"></div> </div> <main id="main-content"> <div class="text-gray-400 text-sm italic">Chargement des alertes...</div> </main> <footer class="mt-12 pt-6 border-t border-gray-200 text-xs text-gray-400 flex flex-wrap gap-4 justify-between"> <span>Sources : GDACS (UN/CE) \xB7 NOAA/NWS \xB7 MeteoAlarm (EUMETNET)</span> <span>SkyWatch POC v0.1 \u2014 Open source uniquement</span> </footer> <script type="module" src="/lib/main.js"><\/script> </body> </html>`])), renderScript($$result, "/home/project/src/pages/index.astro?astro&type=script&index=0&lang.ts"), renderHead());
+}, "/home/project/src/pages/index.astro", void 0);
 
-const $$file = "/tmp/cc-agent/64009239/project/src/pages/index.astro";
+const $$file = "/home/project/src/pages/index.astro";
 const $$url = "";
 
 const _page = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({

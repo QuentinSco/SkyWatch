@@ -4544,6 +4544,7 @@ const VAAC_FEEDS = [
   }
 ];
 const VAAC_WASHINGTON_BASE = "https://www.ospo.noaa.gov/products/atmosphere/vaac";
+const VAAC_WASHINGTON_ORIGIN = "https://www.ospo.noaa.gov";
 function vaacGetTag(xml, tag) {
   const m = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
   return m ? m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").trim() : "";
@@ -4596,7 +4597,7 @@ async function fetchVAACWashington() {
     const linkRe = /href="([^"]*\/xml_files\/FVXX\d+_\d+_\d+\.xml)"/gi;
     let m;
     while ((m = linkRe.exec(html)) !== null) {
-      const href = m[1].startsWith("http") ? m[1] : `${VAAC_WASHINGTON_BASE}/${m[1].replace(/^\//, "")}`;
+      const href = m[1].startsWith("http") ? m[1] : `${VAAC_WASHINGTON_ORIGIN}${m[1].startsWith("/") ? "" : "/"}${m[1]}`;
       if (!xmlLinks.includes(href)) xmlLinks.push(href);
     }
     if (xmlLinks.length === 0) {

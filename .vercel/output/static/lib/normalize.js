@@ -154,24 +154,25 @@ export function getCentroid(iso3) {
 const REGION_MAP = {
   // Amérique du Nord
   USA: 'AMN', CAN: 'AMN', MEX: 'AMN',
-  // Amérique du Sud
+  // Amérique du Sud + Caraïbes / Outremer Atlantique
   BRA: 'AMS', ARG: 'AMS', CHL: 'AMS', COL: 'AMS', PER: 'AMS', VEN: 'AMS',
-  // Outremer
-  GLP: 'AMO', MTQ: 'AMO', GUF: 'AMO', REU: 'AMO', MYT: 'AMO', NCL: 'AMO', PYF: 'AMO',
+  GLP: 'AMS', MTQ: 'AMS', GUF: 'AMS',
   // Europe
   FRA: 'EUR', DEU: 'EUR', ESP: 'EUR', ITA: 'EUR', GBR: 'EUR', PRT: 'EUR',
   NLD: 'EUR', BEL: 'EUR', CHE: 'EUR', AUT: 'EUR', POL: 'EUR', ROU: 'EUR',
   HRV: 'EUR', GRC: 'EUR', SWE: 'EUR', NOR: 'EUR', DNK: 'EUR', FIN: 'EUR',
   CZE: 'EUR', SVK: 'EUR', HUN: 'EUR', BGR: 'EUR', SVN: 'EUR', SRB: 'EUR',
   IRL: 'EUR', LUX: 'EUR',
-  // Asie / Afrique / Océan Indien
+  // Afrique / Moyen-Orient / Océan Indien
+  DZA: 'AFR', TUN: 'AFR', MAR: 'AFR', EGY: 'AFR',
+  SEN: 'AFR', CIV: 'AFR', NGA: 'AFR', GAB: 'AFR', COG: 'AFR',
+  TZA: 'AFR', ETH: 'AFR', KEN: 'AFR', ZAF: 'AFR', MDG: 'AFR',
+  REU: 'AFR', COM: 'AFR', MUS: 'AFR', MYT: 'AFR',
+  ARE: 'AFR', SAU: 'AFR', QAT: 'AFR', IRN: 'AFR',
+  // Asie
   CHN: 'ASIE', JPN: 'ASIE', IND: 'ASIE', SGP: 'ASIE', HKG: 'ASIE',
   THA: 'ASIE', VNM: 'ASIE', IDN: 'ASIE', MYS: 'ASIE', PAK: 'ASIE',
-  ARE: 'ASIE', SAU: 'ASIE', QAT: 'ASIE', IRN: 'ASIE',
-  DZA: 'ASIE', TUN: 'ASIE', MAR: 'ASIE', EGY: 'ASIE',
-  SEN: 'ASIE', CIV: 'ASIE', NGA: 'ASIE', GAB: 'ASIE', COG: 'ASIE',
-  TZA: 'ASIE', ETH: 'ASIE', KEN: 'ASIE', ZAF: 'ASIE', MDG: 'ASIE',
-  REU: 'ASIE', COM: 'ASIE', MUS: 'ASIE',
+  NCL: 'ASIE', PYF: 'ASIE',
 };
 
 export function getRegion(iso3) {
@@ -210,10 +211,17 @@ export function noaaSeverity(event) {
 
 // Region depuis coordonnées (fallback GDACS)
 export function regionFromCoords(lat, lon) {
-  if (lon > 25 || (lat < 40 && lon > -20)) return 'ASIE';
-  if (lon < -30 && lat < 15) return 'AMS';
-  if (lon < -30 && lat > 15) return 'AMN';
-  return 'ASIE';
+  // Asie (est)
+  if (lon > 60) return 'ASIE';
+  // Afrique / Moyen-Orient
+  if (lon > 20 && lat < 40) return 'AFR';
+  if (lon > -20 && lat < 40) return 'AFR';
+  // Amérique du Nord
+  if (lon < -30 && lat > 20) return 'AMN';
+  // Amérique du Sud / Caraïbes
+  if (lon < -30 && lat <= 20) return 'AMS';
+  // Europe
+  return 'EUR';
 }
 
 export function airportsFromCoords(lat, lon) {

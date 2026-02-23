@@ -97,10 +97,12 @@ function getAirportsByCountry(iso3) {
   return AF_AIRPORTS.filter((a) => a.iso3 === iso3).map((a) => a.icao);
 }
 function regionFromCoords(lat, lon) {
-  if (lon > 25 || lat < 40 && lon > -20) return "ASIE";
-  if (lon < -30 && lat < 15) return "AMS";
-  if (lon < -30 && lat > 15) return "AMN";
-  return "ASIE";
+  if (lon > 60) return "ASIE";
+  if (lon > 20 && lat < 40) return "AFR";
+  if (lon > -20 && lat < 40) return "AFR";
+  if (lon < -30 && lat > 20) return "AMN";
+  if (lon < -30 && lat <= 20) return "AMS";
+  return "EUR";
 }
 function basinFromCoords(lat, lon) {
   if (lon > 30 && lat < 30) return "Océan Indien";

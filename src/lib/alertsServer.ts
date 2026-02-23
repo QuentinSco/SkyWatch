@@ -126,10 +126,12 @@ function getAirportsByCountry(iso3: string): string[] {
 }
 
 function regionFromCoords(lat: number, lon: number): string {
-  if (lon > 25 || (lat < 40 && lon > -20)) return 'ASIE';
-  if (lon < -30 && lat < 15) return 'AMS';
-  if (lon < -30 && lat > 15) return 'AMN';
-  return 'ASIE';
+  if (lon > 60) return 'ASIE';
+  if (lon > 20 && lat < 40) return 'AFR';
+  if (lon > -20 && lat < 40) return 'AFR';
+  if (lon < -30 && lat > 20) return 'AMN';
+  if (lon < -30 && lat <= 20) return 'AMS';
+  return 'EUR';
 }
 
 function basinFromCoords(lat: number, lon: number): string {

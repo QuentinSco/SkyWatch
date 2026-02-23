@@ -1,6 +1,6 @@
 import { renderRegion } from '/lib/render.js';
 
-const REGIONS = ['AMN', 'AMS', 'AMO', 'EUR', 'ASIE'];
+const REGIONS = ['AMN', 'AMS', 'EUR', 'AFR', 'ASIE'];
 
 document.addEventListener('click', (e) => {
   const row = e.target.closest('tr[data-detail-id]');

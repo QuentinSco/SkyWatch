@@ -1,9 +1,9 @@
 const REGION_LABELS = {
   AMN:  '🌎 Amérique du Nord',
   AMS:  '🌎 Amérique du Sud',
-  AMO:  '🏝 Amérique / Outremer',
   EUR:  '🌍 Europe',
-  ASIE: '🌏 Asie / Afrique / Océan Indien',
+  AFR:  '🌍 Afrique / Moyen-Orient',
+  ASIE: '🌏 Asie',
 };
 
 const SOURCE_LINKS = {

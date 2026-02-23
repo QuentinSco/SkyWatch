@@ -4516,6 +4516,146 @@ async function fetchGDACS() {
   }
   return alerts;
 }
+const VAAC_FEEDS = [
+  {
+    id: "london",
+    name: "VAAC Londres",
+    url: "https://www.metoffice.gov.uk/hazardmanager/vaac/rss/all_vaac_feed.rss"
+  },
+  {
+    id: "toulouse",
+    name: "VAAC Toulouse",
+    url: "https://vaac.meteo.fr/rss/vaac_feed.rss"
+  },
+  {
+    id: "montreal",
+    name: "VAAC Montréal",
+    url: "https://crpg.meteo.gc.ca/vaac/rss/en/vaac_rss.xml"
+  },
+  {
+    id: "washington",
+    name: "VAAC Washington",
+    url: "https://www.ssd.noaa.gov/VAAC/vaac_msgs_rss.xml"
+  },
+  {
+    id: "anchorage",
+    name: "VAAC Anchorage",
+    url: "https://vaac.arh.noaa.gov/doc.php?type=vaa&output=rss"
+  },
+  {
+    id: "tokyo",
+    name: "VAAC Tokyo",
+    url: "https://ds.data.jma.go.jp/svd/vaac/data/rss/tyo_vaac_advisory.rss"
+  }
+];
+function vaacGetTag(xml, tag) {
+  const m = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
+  return m ? m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").trim() : "";
+}
+function vaacParseVolcanoCoords(text) {
+  const m = text.match(/([NS])\s*(\d+(?:\.\d+)?)\s+([EW])\s*(\d+(?:\.\d+)?)/i);
+  if (!m) {
+    const m2 = text.match(/(\d+(?:\.\d+)?)\s*([NS])\s+(\d+(?:\.\d+)?)\s*([EW])/i);
+    if (!m2) return null;
+    const lat2 = parseFloat(m2[1]) * (m2[2].toUpperCase() === "S" ? -1 : 1);
+    const lon2 = parseFloat(m2[3]) * (m2[4].toUpperCase() === "W" ? -1 : 1);
+    return { lat: lat2, lon: lon2 };
+  }
+  const lat = parseFloat(m[2]) * (m[1].toUpperCase() === "S" ? -1 : 1);
+  const lon = parseFloat(m[4]) * (m[3].toUpperCase() === "W" ? -1 : 1);
+  return { lat, lon };
+}
+function vaacParseFlLevel(text) {
+  const m = text.match(/FL\s*(\d{3})/i);
+  return m ? `FL${m[1]}` : "";
+}
+function vaacParseFirArea(text) {
+  const m = text.match(/FIR\s*[:\-]?\s*([A-Z\s]{3,30})/i);
+  return m ? m[1].trim() : "";
+}
+function vaacSeverity(flLevel) {
+  if (!flLevel) return "yellow";
+  const fl = parseInt(flLevel.replace("FL", ""), 10);
+  if (fl >= 200) return "red";
+  if (fl >= 100) return "orange";
+  return "yellow";
+}
+async function fetchVAAC() {
+  const alerts = [];
+  const results = await Promise.allSettled(
+    VAAC_FEEDS.map(async (feed) => {
+      const res = await fetch(feed.url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; SkyWatch/1.0)",
+          "Accept": "application/xml, text/xml, application/rss+xml, */*"
+        },
+        signal: AbortSignal.timeout(1e4)
+      });
+      if (!res.ok) {
+        console.warn(`[VAAC ${feed.id}] HTTP ${res.status}`);
+        return { feed, items: [] };
+      }
+      const xml = await res.text();
+      const items = xml.split("<item>").slice(1);
+      return { feed, items };
+    })
+  );
+  for (const result of results) {
+    if (result.status !== "fulfilled") continue;
+    const { feed, items } = result.value;
+    for (const item of items) {
+      const title = vaacGetTag(item, "title");
+      const description = vaacGetTag(item, "description").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      const pubDate = vaacGetTag(item, "pubDate");
+      const link = vaacGetTag(item, "link") || feed.url;
+      const combined = `${title} ${description}`;
+      const volcanoMatch = combined.match(/VOLCANO[:\s]+([A-Z][A-Z\s\-']+?)(?:\s{2,}|\n|\/|PSN|FL|ERUPTION|SIGMET)/i);
+      const volcanoName = volcanoMatch ? volcanoMatch[1].trim() : "Volcan inconnu";
+      const coords = vaacParseVolcanoCoords(combined);
+      if (!coords) continue;
+      const { lat, lon } = coords;
+      const flLevel = vaacParseFlLevel(combined);
+      const severity = vaacSeverity(flLevel);
+      const region = regionFromCoords(lat, lon);
+      const airports = getAirportsNearCoords(lat, lon, 600);
+      const firArea = vaacParseFirArea(combined);
+      const countryLabel = firArea || feed.name;
+      const flStr = flLevel ? ` — Cendres ${flLevel}` : "";
+      const headline = `Avis cendres volcaniques : ${volcanoName}${flStr} (${feed.name})`;
+      const validToMatch = combined.match(/(\d{2}\/\d{4}Z)/g);
+      const validTo = validToMatch && validToMatch.length > 0 ? (() => {
+        const now = /* @__PURE__ */ new Date();
+        const [dayTime] = [validToMatch[validToMatch.length - 1]];
+        const day = parseInt(dayTime.slice(0, 2), 10);
+        const hh = parseInt(dayTime.slice(3, 5), 10);
+        const mm = parseInt(dayTime.slice(5, 7), 10);
+        const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), day, hh, mm));
+        if (d.getTime() < Date.now() - 864e5) {
+          d.setUTCMonth(d.getUTCMonth() + 1);
+        }
+        return d.toISOString();
+      })() : null;
+      alerts.push({
+        id: `vaac-${feed.id}-${volcanoName.replace(/\s/g, "")}-${pubDate}`,
+        source: "VAAC",
+        region,
+        severity,
+        phenomenon: "Cendres volcaniques",
+        country: countryLabel,
+        airports,
+        lat,
+        lon,
+        validFrom: pubDate,
+        validTo,
+        headline,
+        description: description.slice(0, 500),
+        link,
+        eventType: "VAAC"
+      });
+    }
+  }
+  return alerts;
+}
 const AWT_LABEL = {
   1: "Vent violent",
   2: "Neige / Verglas",
@@ -4735,14 +4875,15 @@ const GET = async () => {
       headers: { "Content-Type": "application/json", "X-Cache": "HIT" }
     });
   }
-  const [gdacs, noaa, meteoalarm] = await Promise.all([
+  const [gdacs, noaa, meteoalarm, vaac] = await Promise.all([
     fetchGDACS(),
     fetchNOAA(),
-    fetchMeteoAlarm()
+    fetchMeteoAlarm(),
+    fetchVAAC()
   ]);
   const SEVERITY_ORDER = { red: 0, orange: 1, yellow: 2 };
-  const all = [...gdacs, ...noaa, ...meteoalarm].sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
-  cache = { ts: Date.now(), data: all, noaaOk: noaa.length > 0 };
+  const all = [...gdacs, ...noaa, ...meteoalarm, ...vaac].sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+  cache = { ts: Date.now(), data: all, noaaOk: noaa.length > 0 || vaac.length > 0 };
   return new Response(JSON.stringify(all), {
     headers: { "Content-Type": "application/json", "X-Cache": "MISS" }
   });

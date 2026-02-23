@@ -10,12 +10,14 @@ const SOURCE_LINKS = {
   GDACS:      'https://www.gdacs.org',
   NOAA:       'https://www.weather.gov/alerts',
   MeteoAlarm: 'https://www.meteoalarm.org',
+  VAAC:       'https://www.icao.int/safety/meteorology/vaac/Pages/default.aspx',
 };
 
 const SOURCE_LABEL = {
   GDACS:      '📋 Rapport GDACS complet',
   NOAA:       '📋 Alerte NOAA complète',
   MeteoAlarm: '📋 Détail MeteoAlarm',
+  VAAC:       '📋 Avis VAAC complet',
 };
 
 function severityBadge(s) {

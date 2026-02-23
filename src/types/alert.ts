@@ -3,7 +3,7 @@ export type Region = 'AMN' | 'AMS' | 'EUR' | 'ASIE' | 'AMO';
 
 export interface WeatherAlert {
   id: string;
-  source: 'GDACS' | 'NOAA' | 'MeteoAlarm';
+  source: 'GDACS' | 'NOAA' | 'MeteoAlarm' | 'VAAC';
   region: Region;
   severity: Severity;
   phenomenon: string;   // ex : "Tropical Cyclone", "Blizzard", "Storm"

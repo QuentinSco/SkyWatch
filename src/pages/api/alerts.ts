@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { fetchGDACS, fetchNOAA, fetchMeteoAlarm } from '../../lib/alertsServer';
+import { fetchGDACS, fetchNOAA, fetchMeteoAlarm, fetchVAAC } from '../../lib/alertsServer';
 
 export const prerender = false;
 
@@ -13,17 +13,18 @@ export const GET: APIRoute = async () => {
     });
   }
 
-  const [gdacs, noaa, meteoalarm] = await Promise.all([
+  const [gdacs, noaa, meteoalarm, vaac] = await Promise.all([
     fetchGDACS(),
     fetchNOAA(),
     fetchMeteoAlarm(),
+    fetchVAAC(),
   ]);
 
   const SEVERITY_ORDER: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
-  const all = [...gdacs, ...noaa, ...meteoalarm]
+  const all = [...gdacs, ...noaa, ...meteoalarm, ...vaac]
     .sort((a: any, b: any) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
 
-  cache = { ts: Date.now(), data: all, noaaOk: noaa.length > 0 };
+  cache = { ts: Date.now(), data: all, noaaOk: noaa.length > 0 || vaac.length > 0 };
 
   return new Response(JSON.stringify(all), {
     headers: { 'Content-Type': 'application/json', 'X-Cache': 'MISS' },

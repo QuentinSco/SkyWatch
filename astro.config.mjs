@@ -1,10 +1,10 @@
 import { defineConfig } from 'astro/config';
-import netlify from '@astrojs/netlify';
+import vercel from '@astrojs/vercel';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   output: 'server',
-  adapter: netlify(),
+  adapter: vercel(),
   vite: {
     plugins: [tailwindcss()],
   },

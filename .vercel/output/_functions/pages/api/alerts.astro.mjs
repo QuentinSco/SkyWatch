@@ -4687,7 +4687,8 @@ async function fetchMeteoAlarm() {
       const lat = regionCentroid?.lat;
       const lon = regionCentroid?.lon;
       const regionName = regionCentroid?.name ?? title;
-      const airports = regionCentroid ? getAirportsNearCoords(regionCentroid.lat, regionCentroid.lon, 400) : iso3 ? getAirportsByCountry(iso3) : [];
+      const isRemoteIsland = regionCentroid ? regionCentroid.lon < -22 || regionCentroid.lon < -14 && regionCentroid.lat < 35 : false;
+      const airports = regionCentroid && !isRemoteIsland ? getAirportsNearCoords(regionCentroid.lat, regionCentroid.lon, 300) : iso3 ? getAirportsByCountry(iso3) : [];
       for (const [awt, level] of byType.entries()) {
         const severity = level >= 4 ? "red" : level === 3 ? "orange" : "yellow";
         const phenomenon = AWT_LABEL[awt] ?? `Phénomène type ${awt}`;

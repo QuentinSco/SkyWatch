@@ -121,8 +121,12 @@ async function fetchCountryFeed(iso2, slug, emmaCentroids) {
       const lon = regionCentroid?.lon ?? null;
       const regionName = regionCentroid?.name ?? title;
 
-      const airports = regionCentroid
-        ? getAirportsNearCoords(regionCentroid.lat, regionCentroid.lon, 400)
+      const isRemoteIsland = regionCentroid
+        ? (regionCentroid.lon < -22) || (regionCentroid.lon < -14 && regionCentroid.lat < 35)
+        : false;
+
+      const airports = (regionCentroid && !isRemoteIsland)
+        ? getAirportsNearCoords(regionCentroid.lat, regionCentroid.lon, 300)
         : iso3
           ? getAirportsByCountry(iso3)
           : [];

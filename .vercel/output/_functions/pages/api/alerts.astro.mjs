@@ -4636,8 +4636,12 @@ async function fetchVAACWashington() {
       const spdMatch = xml.match(/<(?:[^:>]+:)?speedOfMotion[^>]*>(\d+(?:\.\d+)?)<\/(?:[^:>]+:)?speedOfMotion>/i);
       const direction = dirMatch ? Math.round(parseFloat(dirMatch[1])) : null;
       const speedKt = spdMatch ? Math.round(parseFloat(spdMatch[1])) : null;
-      const nextAdvisoryMatch = xml.match(/<gml:timePosition[^>]*>([^<]+)<\/gml:timePosition>/gi);
-      const validTo = nextAdvisoryMatch && nextAdvisoryMatch.length > 1 ? nextAdvisoryMatch[nextAdvisoryMatch.length - 1].replace(/<[^>]+>/g, "").trim() : null;
+      const nextAdvisoryBlock = xml.match(/<(?:[^:>]+:)?nextAdvisoryTime[^>]*>[\s\S]*?<\/(?:[^:>]+:)?nextAdvisoryTime>/i);
+      const noFurtherAdvisory = /NO_FURTHER_ADVISORIES|no further advisories/i.test(xml);
+      const nextAdvisoryTimeStr = nextAdvisoryBlock ? (nextAdvisoryBlock[0].match(/<gml:timePosition[^>]*>([^<]+)<\/gml:timePosition>/i) || [])[1] || null : null;
+      const validTo = nextAdvisoryTimeStr;
+      if (noFurtherAdvisory) continue;
+      if (nextAdvisoryTimeStr && new Date(nextAdvisoryTimeStr) < /* @__PURE__ */ new Date()) continue;
       const severity = vaacSeverity(flLevel);
       const region = regionFromCoords(lat, lon);
       const airports = getAirportsNearCoords(lat, lon, 600);

@@ -444,7 +444,8 @@ export async function fetchGDACS(): Promise<Alert[]> {
 // ─── VAAC ─────────────────────────────────────────────────────────────────────
 // Volcanic Ash Advisory Centers — flux RSS ICAO
 // Couverture : Londres (EUR/AFR/ATL), Toulouse (ATL/AFR/EUR), Montréal (AMN/AMS),
-//              Washington (AMN/AMC), Anchorage (PAC/AMN), Tokyo (ASIE/PAC)
+//              Anchorage (PAC/AMN), Tokyo (ASIE/PAC)
+// Note: Washington utilise désormais des fichiers IWXXM XML (voir fetchVAACWashington)
 const VAAC_FEEDS = [
   {
     id: 'london',
@@ -462,11 +463,6 @@ const VAAC_FEEDS = [
     url: 'https://crpg.meteo.gc.ca/vaac/rss/en/vaac_rss.xml',
   },
   {
-    id: 'washington',
-    name: 'VAAC Washington',
-    url: 'https://www.ssd.noaa.gov/VAAC/vaac_msgs_rss.xml',
-  },
-  {
     id: 'anchorage',
     name: 'VAAC Anchorage',
     url: 'https://vaac.arh.noaa.gov/doc.php?type=vaa&output=rss',
@@ -477,6 +473,8 @@ const VAAC_FEEDS = [
     url: 'https://ds.data.jma.go.jp/svd/vaac/data/rss/tyo_vaac_advisory.rss',
   },
 ];
+
+const VAAC_WASHINGTON_BASE = 'https://www.ospo.noaa.gov/products/atmosphere/vaac';
 
 function vaacGetTag(xml: string, tag: string): string {
   const m = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
@@ -515,8 +513,135 @@ function vaacSeverity(flLevel: string): Severity {
   return 'yellow';
 }
 
+function iwxxmGetTag(xml: string, tag: string): string {
+  const m = xml.match(new RegExp(`<(?:[^:>]+:)?${tag}[^>]*>([\\s\\S]*?)<\\/(?:[^:>]+:)?${tag}>`, 'i'));
+  return m ? m[1].replace(/<[^>]+>/g, '').trim() : '';
+}
+
+function iwxxmGetAttr(xml: string, tag: string, attr: string): string {
+  const m = xml.match(new RegExp(`<(?:[^:>]+:)?${tag}[^>]*\\s${attr}="([^"]*)"`, 'i'));
+  return m ? m[1] : '';
+}
+
+async function fetchVAACWashington(): Promise<Alert[]> {
+  const alerts: Alert[] = [];
+  try {
+    const listRes = await fetch(`${VAAC_WASHINGTON_BASE}/messages.html`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SkyWatch/1.0)' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!listRes.ok) {
+      console.warn(`[VAAC Washington] listing HTTP ${listRes.status}`);
+      return alerts;
+    }
+    const html = await listRes.text();
+
+    const xmlLinks: string[] = [];
+    const linkRe = /href="([^"]*\/xml_files\/FVXX\d+_\d+_\d+\.xml)"/gi;
+    let m;
+    while ((m = linkRe.exec(html)) !== null) {
+      const href = m[1].startsWith('http') ? m[1] : `${VAAC_WASHINGTON_BASE}/${m[1].replace(/^\//, '')}`;
+      if (!xmlLinks.includes(href)) xmlLinks.push(href);
+    }
+
+    if (xmlLinks.length === 0) {
+      console.warn('[VAAC Washington] aucun fichier XML trouvé dans la page listing');
+      return alerts;
+    }
+
+    const xmlResults = await Promise.allSettled(
+      xmlLinks.map(url =>
+        fetch(url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SkyWatch/1.0)' },
+          signal: AbortSignal.timeout(10000),
+        }).then(r => r.ok ? r.text() : Promise.reject(r.status))
+      )
+    );
+
+    for (let i = 0; i < xmlResults.length; i++) {
+      const res = xmlResults[i];
+      if (res.status !== 'fulfilled') continue;
+      const xml = res.value;
+
+      const volcanoRaw = iwxxmGetTag(xml, 'name');
+      const volcanoName = volcanoRaw
+        ? volcanoRaw.replace(/\s+\d+$/, '').trim()
+        : 'Volcan inconnu';
+
+      const posTag = xml.match(/<gml:pos[^>]*>([\s\S]*?)<\/gml:pos>/i);
+      if (!posTag) continue;
+      const parts = posTag[1].trim().split(/\s+/);
+      if (parts.length < 2) continue;
+      const lat = parseFloat(parts[0]);
+      const lon = parseFloat(parts[1]);
+      if (isNaN(lat) || isNaN(lon)) continue;
+
+      const issueTimeRaw = iwxxmGetTag(xml, 'timePosition');
+      const stateOrRegion = iwxxmGetTag(xml, 'stateOrRegion');
+      const advisoryNumber = iwxxmGetTag(xml, 'advisoryNumber');
+      const eruptionDetails = iwxxmGetTag(xml, 'eruptionDetails');
+
+      const upperLimitMatch = xml.match(/<(?:[^:>]+:)?upperLimit\s+uom="FL"[^>]*>(\d+)<\/(?:[^:>]+:)?upperLimit>/i);
+      const flValue = upperLimitMatch ? parseInt(upperLimitMatch[1], 10) : 0;
+      const flLevel = flValue > 0 ? `FL${String(flValue).padStart(3, '0')}` : '';
+
+      const dirMatch = xml.match(/<(?:[^:>]+:)?directionOfMotion[^>]*>(\d+(?:\.\d+)?)<\/(?:[^:>]+:)?directionOfMotion>/i);
+      const spdMatch = xml.match(/<(?:[^:>]+:)?speedOfMotion[^>]*>(\d+(?:\.\d+)?)<\/(?:[^:>]+:)?speedOfMotion>/i);
+      const direction = dirMatch ? Math.round(parseFloat(dirMatch[1])) : null;
+      const speedKt   = spdMatch ? Math.round(parseFloat(spdMatch[1])) : null;
+
+      const nextAdvisoryMatch = xml.match(/<gml:timePosition[^>]*>([^<]+)<\/gml:timePosition>/gi);
+      const validTo = nextAdvisoryMatch && nextAdvisoryMatch.length > 1
+        ? nextAdvisoryMatch[nextAdvisoryMatch.length - 1].replace(/<[^>]+>/g, '').trim()
+        : null;
+
+      const severity = vaacSeverity(flLevel);
+      const region   = regionFromCoords(lat, lon);
+      const airports = getAirportsNearCoords(lat, lon, 600);
+
+      const flStr = flLevel ? ` — Cendres ${flLevel}` : '';
+      const motionStr = direction !== null && speedKt !== null
+        ? ` | ${direction}° / ${speedKt} kt`
+        : '';
+      const headline = `Avis cendres volcaniques : ${volcanoName}${flStr}${motionStr} (VAAC Washington)`;
+      const country = stateOrRegion || 'Amérique Centrale';
+      const description = [
+        advisoryNumber ? `Advisory ${advisoryNumber}` : '',
+        eruptionDetails,
+        flLevel ? `Niveau cendres : ${flLevel}` : '',
+        direction !== null ? `Direction : ${direction}°` : '',
+        speedKt !== null ? `Vitesse : ${speedKt} kt` : '',
+      ].filter(Boolean).join(' — ').slice(0, 500);
+
+      alerts.push({
+        id: `vaac-washington-${volcanoName.replace(/\s/g, '')}-${issueTimeRaw}`,
+        source: 'VAAC',
+        region,
+        severity,
+        phenomenon: 'Cendres volcaniques',
+        country,
+        airports,
+        lat,
+        lon,
+        validFrom: issueTimeRaw,
+        validTo,
+        headline,
+        description,
+        link: xmlLinks[i],
+        eventType: 'VAAC',
+      });
+    }
+  } catch (e) {
+    console.error('[VAAC Washington]', e);
+  }
+  return alerts;
+}
+
 export async function fetchVAAC(): Promise<Alert[]> {
   const alerts: Alert[] = [];
+
+  const washingtonAlerts = await fetchVAACWashington();
+  alerts.push(...washingtonAlerts);
 
   const results = await Promise.allSettled(
     VAAC_FEEDS.map(async (feed) => {

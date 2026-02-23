@@ -4736,6 +4736,8 @@ async function fetchVAAC() {
         }
         return d.toISOString();
       })() : null;
+      if (/DISSIPATED|VA EMS ENDED|NO FURTHER|NOT IDENTIFIABLE/i.test(combined)) continue;
+      if (validTo && new Date(validTo) < /* @__PURE__ */ new Date()) continue;
       alerts.push({
         id: `vaac-${feed.id}-${volcanoName.replace(/\s/g, "")}-${pubDate}`,
         source: "VAAC",
@@ -4755,7 +4757,15 @@ async function fetchVAAC() {
       });
     }
   }
-  return alerts;
+  const deduped = /* @__PURE__ */ new Map();
+  for (const alert of alerts) {
+    const key = `${alert.lat?.toFixed(2)},${alert.lon?.toFixed(2)}`;
+    const existing = deduped.get(key);
+    if (!existing || new Date(alert.validFrom || 0) > new Date(existing.validFrom || 0)) {
+      deduped.set(key, alert);
+    }
+  }
+  return Array.from(deduped.values());
 }
 const AWT_LABEL = {
   1: "Vent violent",

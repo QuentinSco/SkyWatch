@@ -713,6 +713,9 @@ export async function fetchVAAC(): Promise<Alert[]> {
           })()
         : null;
 
+      if (/DISSIPATED|VA EMS ENDED|NO FURTHER|NOT IDENTIFIABLE/i.test(combined)) continue;
+      if (validTo && new Date(validTo) < new Date()) continue;
+
       alerts.push({
         id: `vaac-${feed.id}-${volcanoName.replace(/\s/g, '')}-${pubDate}`,
         source: 'VAAC',
@@ -733,7 +736,16 @@ export async function fetchVAAC(): Promise<Alert[]> {
     }
   }
 
-  return alerts;
+  const deduped = new Map<string, Alert>();
+  for (const alert of alerts) {
+    const key = `${alert.lat?.toFixed(2)},${alert.lon?.toFixed(2)}`;
+    const existing = deduped.get(key);
+    if (!existing || new Date(alert.validFrom || 0) > new Date(existing.validFrom || 0)) {
+      deduped.set(key, alert);
+    }
+  }
+
+  return Array.from(deduped.values());
 }
 
 // ─── MeteoAlarm ───────────────────────────────────────────────────────────────

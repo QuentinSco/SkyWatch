@@ -611,7 +611,7 @@ const prerender = false;
 const CACHE_TTL = 5 * 60 * 1e3;
 let cache = null;
 const GET = async () => {
-  if (cache && Date.now() - cache.ts < CACHE_TTL) {
+  if (cache && cache.noaaOk && Date.now() - cache.ts < CACHE_TTL) {
     return new Response(JSON.stringify(cache.data), {
       headers: { "Content-Type": "application/json", "X-Cache": "HIT" }
     });
@@ -623,7 +623,7 @@ const GET = async () => {
   ]);
   const SEVERITY_ORDER = { red: 0, orange: 1, yellow: 2 };
   const all = [...gdacs, ...noaa, ...meteoalarm].sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
-  cache = { ts: Date.now(), data: all };
+  cache = { ts: Date.now(), data: all, noaaOk: noaa.length > 0 };
   return new Response(JSON.stringify(all), {
     headers: { "Content-Type": "application/json", "X-Cache": "MISS" }
   });

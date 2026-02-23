@@ -4,10 +4,10 @@ import { fetchGDACS, fetchNOAA, fetchMeteoAlarm } from '../../lib/alertsServer';
 export const prerender = false;
 
 const CACHE_TTL = 5 * 60 * 1000;
-let cache: { ts: number; data: unknown } | null = null;
+let cache: { ts: number; data: unknown; noaaOk: boolean } | null = null;
 
 export const GET: APIRoute = async () => {
-  if (cache && Date.now() - cache.ts < CACHE_TTL) {
+  if (cache && cache.noaaOk && Date.now() - cache.ts < CACHE_TTL) {
     return new Response(JSON.stringify(cache.data), {
       headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' },
     });
@@ -23,7 +23,7 @@ export const GET: APIRoute = async () => {
   const all = [...gdacs, ...noaa, ...meteoalarm]
     .sort((a: any, b: any) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
 
-  cache = { ts: Date.now(), data: all };
+  cache = { ts: Date.now(), data: all, noaaOk: noaa.length > 0 };
 
   return new Response(JSON.stringify(all), {
     headers: { 'Content-Type': 'application/json', 'X-Cache': 'MISS' },

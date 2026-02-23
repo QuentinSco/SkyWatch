@@ -28,11 +28,7 @@
 			"dest": "_render"
 		},
 		{
-			"src": "^/api-alerts\\.json/?$",
-			"dest": "_render"
-		},
-		{
-			"src": "^/$",
+			"src": "^/api/proxy/?$",
 			"dest": "_render"
 		}
 	]

@@ -1,11 +1,9 @@
 import type { APIRoute } from 'astro';
-import { fetchGDACS } from '../../../public/lib/gdacs';
-import { fetchNOAA } from '../../../public/lib/noaa';
-import { fetchMeteoAlarm } from '../../../public/lib/meteoalarm';
+import { fetchGDACS, fetchNOAA, fetchMeteoAlarm } from '../../lib/alertsServer';
 
 export const prerender = false;
 
-const CACHE_TTL = 5 * 60 * 1000; // 5 min
+const CACHE_TTL = 5 * 60 * 1000;
 let cache: { ts: number; data: unknown } | null = null;
 
 export const GET: APIRoute = async () => {
@@ -21,9 +19,9 @@ export const GET: APIRoute = async () => {
     fetchMeteoAlarm(),
   ]);
 
-  const SEVERITY_ORDER = { red: 0, orange: 1, yellow: 2 };
+  const SEVERITY_ORDER: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
   const all = [...gdacs, ...noaa, ...meteoalarm]
-    .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+    .sort((a: any, b: any) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
 
   cache = { ts: Date.now(), data: all };
 

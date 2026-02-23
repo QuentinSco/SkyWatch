@@ -1,6 +1,6 @@
 import { getAirportsNearCoords, getAirportsByCountry, getCentroid } from '/lib/normalize.js';
 
-const PROXY    = 'https://api.allorigins.win/raw?url=';
+const PROXY    = '/api/proxy?url=';
 const FEED_URL = 'https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-rss-europe';
 
 const COUNTRY_NAME_ISO3 = {

@@ -4346,6 +4346,9 @@ async function fetchNOAA() {
       }
       const airports = [...airportSet];
       if (airports.length === 0) continue;
+      const airportCoords = airports.map((icao) => AF_AIRPORTS.find((a) => a.icao === icao)).filter((a) => a != null);
+      const lat = airportCoords.length ? airportCoords.reduce((s, a) => s + a.lat, 0) / airportCoords.length : void 0;
+      const lon = airportCoords.length ? airportCoords.reduce((s, a) => s + a.lon, 0) / airportCoords.length : void 0;
       raw.push({
         id: `NOAA-${p.id}`,
         source: "NOAA",
@@ -4354,6 +4357,8 @@ async function fetchNOAA() {
         phenomenon: p.event,
         country: "United States",
         airports,
+        ...lat !== void 0 ? { lat } : {},
+        ...lon !== void 0 ? { lon } : {},
         validFrom: p.onset || p.effective || "",
         validTo: p.expires || "",
         headline: p.headline || p.event,
@@ -4371,7 +4376,10 @@ async function fetchNOAA() {
         const ex = seen.get(key);
         const severity = SEVERITY_ORDER[a.severity] < SEVERITY_ORDER[ex.severity] ? a.severity : ex.severity;
         const airports = [.../* @__PURE__ */ new Set([...ex.airports, ...a.airports])];
-        seen.set(key, { ...ex, severity, airports });
+        const mergedCoords = airports.map((icao) => AF_AIRPORTS.find((ap) => ap.icao === icao)).filter((ap) => ap != null);
+        const lat = mergedCoords.length ? mergedCoords.reduce((s, ap) => s + ap.lat, 0) / mergedCoords.length : ex.lat;
+        const lon = mergedCoords.length ? mergedCoords.reduce((s, ap) => s + ap.lon, 0) / mergedCoords.length : ex.lon;
+        seen.set(key, { ...ex, severity, airports, ...lat !== void 0 ? { lat } : {}, ...lon !== void 0 ? { lon } : {} });
       }
     }
     alerts.push(...seen.values());

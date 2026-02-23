@@ -203,8 +203,20 @@ export async function fetchNOAA(): Promise<Alert[]> {
   try {
     const res = await fetch(
       'https://api.weather.gov/alerts/active?status=actual&message_type=alert,update',
-      { headers: { 'User-Agent': 'SkyWatch/0.1', 'Accept': 'application/geo+json' } }
+      {
+        headers: { 'User-Agent': 'SkyWatch/0.1', 'Accept': 'application/geo+json' },
+        signal: AbortSignal.timeout(10000),
+      }
     );
+    if (!res.ok) {
+      console.error('[NOAA] HTTP', res.status);
+      return alerts;
+    }
+    const ct = res.headers.get('content-type') ?? '';
+    if (!ct.includes('json') && !ct.includes('geo+json')) {
+      console.error('[NOAA] Unexpected content-type:', ct);
+      return alerts;
+    }
     const json = await res.json();
     const raw: Alert[] = [];
 

@@ -365,7 +365,11 @@ async function fetchGDACS() {
       const eventType = gdacsParseEventType(item);
       if (!eventType) continue;
       const level = gdacsParseLevel(item);
-      if (level < 2) continue;
+      const severityRaw = gdacsGetTag(item, "gdacs:severity");
+      const windMatch = severityRaw.match(/(\d+(?:\.\d+)?)\s*km\/h/i);
+      const windKmh = windMatch ? parseFloat(windMatch[1]) : null;
+      const isTcByWind = eventType === "TC" && windKmh !== null && windKmh >= 120;
+      if (level < 2 && !isTcByWind) continue;
       const coords = gdacsParseCoords(item);
       if (!coords) continue;
       const { lat, lon } = coords;
@@ -373,17 +377,21 @@ async function fetchGDACS() {
       const description = gdacsGetTag(item, "description").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
       const pubDate = gdacsGetTag(item, "pubDate");
       const link = gdacsGetTag(item, "link") || "https://www.gdacs.org";
-      const country = gdacsGetTag(item, "gdacs:country") || "";
+      const country = gdacsGetTag(item, "gdacs:country") || gdacsGetTag(item, "gdacs:eventname") || "";
       const magRaw = gdacsGetTag(item, "gdacs:magnitude");
-      const magnitude = magRaw ? parseFloat(magRaw) : void 0;
+      const magnitude = magRaw ? parseFloat(magRaw) : windKmh ?? void 0;
       const eventId = gdacsGetTag(item, "gdacs:eventid") || `${eventType}-${lat}-${lon}`;
       const radius = GDACS_IMPACT_RADIUS[eventType] ?? 400;
       const airports = getAirportsNearCoords(lat, lon, radius);
       const region = regionFromCoords(lat, lon);
       const basin = eventType === "TC" ? basinFromCoords(lat, lon) : void 0;
-      const severity = level >= 3 ? "red" : "orange";
+      let severity;
+      if (level >= 3) severity = "red";
+      else if (level === 2) severity = "orange";
+      else if (windKmh !== null && windKmh >= 180) severity = "red";
+      else severity = "orange";
       const label = GDACS_TYPE_LABELS[eventType] ?? "Événement";
-      const magStr = magnitude ? ` M${magnitude}` : "";
+      const magStr = windKmh ? ` ${windKmh} km/h` : magnitude ? ` M${magnitude}` : "";
       alerts.push({
         id: `gdacs-${eventId}`,
         source: "GDACS",

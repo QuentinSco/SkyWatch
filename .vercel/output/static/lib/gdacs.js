@@ -105,9 +105,20 @@ export async function fetchGDACS() {
       const eventType = parseEventType(item);
       if (!eventType) continue;
 
-      const level    = parseGdacsLevel(item);
-      const severity = levelToSeverity(level);
-      if (level < 2) continue;
+      const level = parseGdacsLevel(item);
+
+      const severityRaw = getTag(item, 'gdacs:severity');
+      const windMatch = severityRaw.match(/(\d+(?:\.\d+)?)\s*km\/h/i);
+      const windKmh = windMatch ? parseFloat(windMatch[1]) : null;
+
+      const isTcByWind = eventType === 'TC' && windKmh !== null && windKmh >= 120;
+      if (level < 2 && !isTcByWind) continue;
+
+      let severity;
+      if (level >= 3) severity = 'red';
+      else if (level === 2) severity = 'orange';
+      else if (windKmh !== null && windKmh >= 180) severity = 'red';
+      else severity = 'orange';
 
       const coords = parseCoords(item);
       if (!coords) continue;
@@ -118,9 +129,9 @@ export async function fetchGDACS() {
       const description = getTag(item, 'description').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
       const pubDate     = getTag(item, 'pubDate');
       const link        = getTag(item, 'link') || 'https://www.gdacs.org';
-      const country     = getTag(item, 'gdacs:country') || '';
+      const country     = getTag(item, 'gdacs:country') || getTag(item, 'gdacs:eventname') || '';
       const magRaw      = getTag(item, 'gdacs:magnitude');
-      const magnitude   = magRaw ? parseFloat(magRaw) : null;
+      const magnitude   = magRaw ? parseFloat(magRaw) : windKmh;
       const eventId     = getTag(item, 'gdacs:eventid') || `${eventType}-${lat}-${lon}`;
 
       const radius   = IMPACT_RADIUS[eventType] ?? 400;
@@ -129,7 +140,7 @@ export async function fetchGDACS() {
       const basin    = eventType === 'TC' ? basinFromCoords(lat, lon) : null;
 
       const label  = TYPE_LABELS[eventType] ?? 'Événement';
-      const magStr = magnitude ? ` M${magnitude}` : '';
+      const magStr = magnitude ? ` ${windKmh ? windKmh + ' km/h' : 'M' + magnitude}` : '';
 
       alerts.push({
         id:          `gdacs-${eventId}`,

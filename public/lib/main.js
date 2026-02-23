@@ -1,4 +1,5 @@
 import { renderRegion } from '/lib/render.js';
+import { initMap } from '/lib/map.js';
 
 const REGIONS = ['AMN', 'AMS', 'EUR', 'AFR', 'ASIE'];
 
@@ -33,6 +34,8 @@ async function main() {
       <span class="bg-orange-400 text-white px-2 py-1 rounded-full text-xs font-semibold">${orange} orange${orange > 1 ? 's' : ''}</span>
       <span class="bg-yellow-400 text-gray-900 px-2 py-1 rounded-full text-xs font-semibold">${yellow} jaune${yellow > 1 ? 's' : ''}</span>
     `;
+
+    initMap(all);
 
     document.getElementById('main-content').innerHTML =
       REGIONS.map(r => renderRegion(r, all)).join('');

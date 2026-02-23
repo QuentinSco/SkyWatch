@@ -18,6 +18,33 @@ const regionLabel: Record<Region, string> = {
 
 const filtered = alerts.filter(a => a.region === region);
 
+function formatShortDate(str: string | undefined): string {
+  if (!str) return '—';
+  try {
+    return new Date(str).toLocaleString('fr-FR', {
+      day: '2-digit', month: '2-digit',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch { return str; }
+}
+
+function timeWindowStatus(validTo: string | undefined): { label: string; cls: string } | null {
+  if (!validTo) return null;
+  const now = Date.now();
+  const to = new Date(validTo).getTime();
+  const msLeft = to - now;
+  if (msLeft < 0) return { label: 'Expirée', cls: 'text-gray-400 italic' };
+  const h = Math.floor(msLeft / 3600000);
+  const m = Math.floor((msLeft % 3600000) / 60000);
+  if (h < 6) {
+    const label = h > 0 ? `expire dans ${h}h${m > 0 ? m + 'm' : ''}` : `expire dans ${m}m`;
+    return { label, cls: 'text-red-500 font-semibold' };
+  }
+  if (h < 24) return { label: `expire dans ${h}h`, cls: 'text-orange-500 font-medium' };
+  const d = Math.floor(h / 24);
+  return { label: `expire dans ${d}j`, cls: 'text-gray-500' };
+}
+
 const borderColor = filtered.some(a => a.severity === 'red')
   ? 'border-red-500'
   : filtered.some(a => a.severity === 'orange')
@@ -44,6 +71,7 @@ const borderColor = filtered.some(a => a.severity === 'red')
             <th class="py-3 px-4">Phénomène</th>
             <th class="py-3 px-4">Pays / Zone</th>
             <th class="py-3 px-4">Aéroports AF concernés</th>
+            <th class="py-3 px-4">Fenêtre</th>
             <th class="py-3 px-4">Source</th>
             <th class="py-3 px-4">Résumé</th>
           </tr>
@@ -77,6 +105,19 @@ const borderColor = filtered.some(a => a.severity === 'red')
                   )
                   : <span class="text-gray-300 italic text-xs">—</span>
                 }
+              </td>
+
+              <td class="py-2 px-4">
+                {(() => {
+                  const status = timeWindowStatus(alert.validTo);
+                  return (
+                    <div class="text-xs leading-tight whitespace-nowrap">
+                      <div class="text-gray-500">{formatShortDate(alert.validFrom)}</div>
+                      <div class="text-gray-400 text-[10px]">→ {formatShortDate(alert.validTo)}</div>
+                      {status && <div class={`mt-0.5 text-[10px] ${status.cls}`}>{status.label}</div>}
+                    </div>
+                  );
+                })()}
               </td>
 
               <td class="py-2 px-4">

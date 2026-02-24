@@ -81,6 +81,19 @@ function popupContent(a) {
 export function initMap(alerts) {
   if (!document.getElementById('alert-map')) return;
 
+  if (!document.getElementById('emoji-marker-style')) {
+    const style = document.createElement('style');
+    style.id = 'emoji-marker-style';
+    style.textContent = `
+      .leaflet-div-icon.custom-emoji-marker {
+        background: none !important;
+        border: none !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
   if (mapInstance) {
     mapInstance.remove();
     mapInstance = null;

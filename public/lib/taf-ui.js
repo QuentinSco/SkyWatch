@@ -330,34 +330,35 @@ document.getElementById('taf-vol-last-update').textContent =
       }
 
       container.innerHTML = `
-        <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-          <table class="w-full text-sm text-left text-gray-700 bg-white">
-            <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th class="py-2 px-3">Niveau</th>
-                <th class="py-2 px-3">Vol</th>
-                <th class="py-2 px-3">Immat / Type</th>
-                <th class="py-2 px-3">Destination</th>
-                <th class="py-2 px-3">Menace</th>
-                <th class="py-2 px-3">Fenêtre TAF</th>
-                <th class="py-2 px-3">ETA</th>
-              </tr>
-            </thead>
-            <tbody>${hits.map(renderTafVolRow).join('')}</tbody>
-          </table>
-        </div>
-      `;
-
-      container.insertAdjacentHTML('beforeend', `
+      <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+        <table class="w-full text-sm text-left text-gray-700 bg-white">
+          <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th class="py-2 px-3">Niveau</th>
+              <th class="py-2 px-3">Vol</th>
+              <th class="py-2 px-3">Immat / Type</th>
+              <th class="py-2 px-3">Destination</th>
+              <th class="py-2 px-3">Menace</th>
+              <th class="py-2 px-3">Fenêtre TAF</th>
+              <th class="py-2 px-3">ETA</th>
+            </tr>
+          </thead>
+          <tbody>${hits.map(renderTafVolRow).join('')}</tbody>
+        </table>
+      </div>
       <div class="text-xs text-gray-400 mt-2 flex items-center gap-2">
-        <span id="taf-vol-last-update"></span>
-        <button onclick="window._refreshVolRisks()"
+        <span>Mis à jour à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+        <button id="btn-refresh-vol"
           class="text-blue-500 hover:text-blue-700 underline text-xs">
           ↺ Actualiser
         </button>
       </div>
-    `);
+    `;
     
+    // Branche le bouton après injection dans le DOM
+    document.getElementById('btn-refresh-vol')
+      ?.addEventListener('click', loadTafVolRisks);
+
     } catch (e) {
       const msg = e.name === 'AbortError' ? 'Timeout — API trop lente (>15s)' : e.message;
       container.innerHTML = `

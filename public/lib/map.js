@@ -46,15 +46,22 @@ function phenomenonEmoji(phenomenon) {
 function makeCircleIcon(severity, phenomenon) {
   const color = SEVERITY_COLOR[severity] ?? '#6b7280';
   const emoji = phenomenonEmoji(phenomenon);
-  return L.divIcon({
-    className: 'custom-emoji-marker',  // ← classe vide custom, pas de styles Leaflet
+
+  // Encode l'emoji en SVG foreignObject
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36">
+    <circle cx="18" cy="18" r="16" fill="white" stroke="${color}" stroke-width="2.5"/>
+    <text x="18" y="23" text-anchor="middle" font-size="16">${emoji}</text>
+  </svg>`;
+
+  const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+
+  return L.icon({
+    iconUrl:    url,
     iconSize:   [36, 36],
     iconAnchor: [18, 18],
     popupAnchor:[0, -20],
-    html: `<div style="width:34px!important;height:34px!important;background:white;border:2.5px solid ${color};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1;box-shadow:0 1px 4px rgba(0,0,0,0.25);cursor:pointer">${emoji}</div>`,
   });
 }
-
 
 function popupContent(a) {
   const severityLabel = { red: 'ROUGE', orange: 'ORANGE', yellow: 'JAUNE' }[a.severity] ?? a.severity;

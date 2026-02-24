@@ -90,6 +90,28 @@
     }, {});
   }
 
+  function phenomenonEmoji(phenomenon) {
+    const map = {
+      'Thunderstorm':        '⛈️',
+      'Rain':                '🌧️',
+      'Snow':                '❄️',
+      'Wind':                '💨',
+      'Fog':                 '🌫️',
+      'Ice':                 '🧊',
+      'Flood':               '🌊',
+      'Avalanche':           '🏔️',
+      'Coastal Event':       '🌊',
+      'Forest Fire':         '🔥',
+      'High Temperature':    '🌡️',
+      'Low Temperature':     '🥶',
+      'Dust/Sand':           '🌪️',
+      'Tornado':             '🌪️',
+      'Hurricane':           '🌀',
+    };
+    return map[phenomenon] ?? '⚠️';
+  }
+  
+
   // ── Rendu ligne alerte ────────────────────────────────────────────────────────
   function renderAlertRow(alert) {
     const badge  = SEVERITY_BADGE[alert.severity] ?? 'bg-gray-200 text-gray-600';

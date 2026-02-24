@@ -594,8 +594,11 @@ async function fetchVAACRss(
   const alerts: Alert[] = [];
   try {
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'SkyWatch/0.1', 'Accept': 'application/rss+xml,text/xml,*/*' },
-      signal:  AbortSignal.timeout(8000),
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept':     'application/rss+xml,text/xml,application/xml,*/*',
+      },
+      signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) { console.warn(`[VAAC ${sourceName}] HTTP ${res.status}`); return alerts; }
 
@@ -618,7 +621,7 @@ async function fetchVAACRss(
   return alerts;
 }
 
-// ── Fetch HTML scraper générique ──────────────────────────────────────────────
+
 async function fetchVAACHtml(
   sourceName: string,
   url: string,
@@ -627,8 +630,12 @@ async function fetchVAACHtml(
   const alerts: Alert[] = [];
   try {
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SkyWatch/1.0)' },
-      signal:  AbortSignal.timeout(8000),
+      headers: {
+        'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept':          'text/html,application/xhtml+xml,*/*;q=0.9',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) { console.warn(`[VAAC ${sourceName}] HTTP ${res.status}`); return alerts; }
 
@@ -650,6 +657,7 @@ async function fetchVAACHtml(
   }
   return alerts;
 }
+
 const VAAC_WASHINGTON_BASE   = 'https://www.ospo.noaa.gov/products/atmosphere/vaac';
 const VAAC_WASHINGTON_ORIGIN = 'https://www.ospo.noaa.gov';
 // ── VAAC Washington (IWXXM XML — inchangé) ────────────────────────────────────
@@ -686,7 +694,15 @@ async function fetchVAACWashington(): Promise<Alert[]> {
       if (res.status !== 'fulfilled') continue;
       const xml = res.value;
 
-      if (!hasAshCloudExtent(xml)) { console.debug('[VAAC Washington] skip (no extent):', xmlLinks[i]); continue; }
+      const hasIwxxmExtent =
+        /<(?:[^:>]+:)?posList[^>]*>[^<]{10,}<\/(?:[^:>]+:)?posList>/i.test(xml) ||
+
+        /<(?:[^:>]+:)?ashCloud[^/][^>]*>[\s\S]{20,}<\/(?:[^:>]+:)?ashCloud>/i.test(xml);
+
+      if (!hasIwxxmExtent) {
+        console.debug('[VAAC Washington] skip (no ash polygon):', xmlLinks[i]);
+        continue;
+      }
 
       const volcanoRaw  = iwxxmGetTag(xml, 'name');
       const volcanoName = volcanoRaw ? volcanoRaw.replace(/\s+\d+$/, '').trim() : 'Volcan inconnu';
@@ -759,8 +775,8 @@ export async function fetchVAAC(): Promise<Alert[]> {
 
     // ── Americas ────────────────────────────────────────────────────────────
     fetchVAACWashington(),                                          // XML IWXXM
-    fetchVAACRss('Anchorage', 'https://vaac.arh.noaa.gov/doc.php?type=vaa&output=rss',           'AMN'),
-    fetchVAACRss('Montreal',  'https://crpg.meteo.gc.ca/vaac/rss/en/vaac_rss.xml',              'AMN'),
+    fetchVAACHtml('Anchorage', 'https://www.weather.gov/vaac/VA_advisories', 'AMN'),
+    fetchVAACHtml('Montreal', 'https://weather.gc.ca/eer/vaac/index_e.html', 'AMN'),
     fetchVAACHtml('Buenos Aires', 'https://ssl.smn.gob.ar/vaac/buenosaires/productos.php?lang=en', 'AMS'),
 
     // ── Europe & Africa ─────────────────────────────────────────────────────

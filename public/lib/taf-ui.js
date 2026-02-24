@@ -21,11 +21,10 @@
     FUNNEL_CLOUD: '🌪',
   };
   const CI_LABEL = {
-    'TEMPO':      { text: 'TEMPO',       cls: 'bg-purple-100 text-purple-700 border border-purple-300' },
-    'BECMG':      { text: 'BECMG',       cls: 'bg-blue-100 text-blue-700 border border-blue-300' },
-    'PROB30':     { text: 'PROB 30%',    cls: 'bg-gray-100 text-gray-600 border border-gray-300' },
-    'PROB40':     { text: 'PROB 40%',    cls: 'bg-yellow-100 text-yellow-700 border border-yellow-300' },
-    'INITIAL/FM': { text: 'TAF complet', cls: 'bg-gray-100 text-gray-500 border border-gray-200' },
+    'TEMPO':  { text: 'TEMPO',    cls: 'bg-purple-100 text-purple-700 border border-purple-300' },
+    'BECMG':  { text: 'BECMG',    cls: 'bg-blue-100 text-blue-700 border border-blue-300' },
+    'PROB30': { text: 'PROB 30%', cls: 'bg-gray-100 text-gray-600 border border-gray-300' },
+    'PROB40': { text: 'PROB 40%', cls: 'bg-yellow-100 text-yellow-700 border border-yellow-300' },
   };
   const SEVERITY_ORDER = { red: 0, orange: 1, yellow: 2 };
 
@@ -60,7 +59,7 @@
   function renderThreatBadge(threat) {
     const icon   = THREAT_ICONS[threat.type] ?? '⚠️';
     const badge  = SEVERITY_BADGE[threat.severity];
-    const ci     = CI_LABEL[threat.changeIndicator];
+    const ci     = CI_LABEL[threat.changeIndicator] ?? null;
     const showCi = ci && threat.changeIndicator !== 'INITIAL/FM';
     return `
       <div class="flex flex-col gap-1 text-xs">
@@ -211,7 +210,7 @@
     const taf    = hit.taf;
     const icon   = THREAT_ICONS[threat.type] ?? '⚠️';
     const badge  = SEVERITY_BADGE[threat.severity];
-    const ci     = CI_LABEL[threat.changeIndicator] ?? CI_LABEL['INITIAL/FM'];
+    const ci     = CI_LABEL[threat.changeIndicator] ?? null;
     const etaIso = flight.estimatedArrival || flight.scheduledArrival;
     const etaStr = formatIsoToLocalShort(etaIso);
     let tta = flight.timeToArrivalMinutes;
@@ -260,9 +259,12 @@
             <div>
               <div class="font-semibold text-gray-600 mb-1">Groupe TAF concerné</div>
               <div class="font-mono bg-white border border-gray-200 rounded px-2 py-1 text-gray-700 whitespace-pre-wrap">
-                ${threat.snippet}
-              </div>
+              <span class="text-gray-400 text-[11px] block mb-1">
+                🕐 ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
+              </span>
+              ${threat.snippet}
             </div>
+          </div>
             <div>
               <div class="font-semibold text-gray-600 mb-1">Toutes les menaces sur ${taf.iata}</div>
               ${threatsHtml}

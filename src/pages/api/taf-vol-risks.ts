@@ -24,18 +24,22 @@ let cache: { ts: number; data: TafFlightHit[] } | null = null;
 
 const MAX_LEAD_MIN_BEFORE_THREAT = 120;
 
-function overlapsThreatWindow(etaMs: number, threat: TafThreat): { ok: boolean; minutesBefore: number } {
-  const startMs = threat.periodStart * 1000;
-  const endMs   = threat.periodEnd   * 1000;
-  const minutesBefore = Math.round((startMs - etaMs) / 60000);
+function overlapsThreatWindow(
+  etaMs: number,
+  threat: TafThreat,
+): { ok: boolean; minutesBefore: number } {
+  const threatStartMs = threat.periodStart * 1000;
+  const threatEndMs   = threat.periodEnd   * 1000;
 
-  if (etaMs >= startMs && etaMs <= endMs) {
-    return { ok: true, minutesBefore };
-  }
-  if (minutesBefore > 0 && minutesBefore <= MAX_LEAD_MIN_BEFORE_THREAT) {
-    return { ok: true, minutesBefore };
-  }
-  return { ok: false, minutesBefore };
+  const BUFFER_MS = 60 * 60 * 1000; // 1h
+
+  const windowStart = threatStartMs - BUFFER_MS;
+  const windowEnd   = threatEndMs   + 2*BUFFER_MS;
+
+  const ok = etaMs >= windowStart && etaMs <= windowEnd;
+  const minutesBefore = Math.round((threatStartMs - etaMs) / 60000);
+
+  return { ok, minutesBefore };
 }
 
 export const prerender = false;
@@ -80,7 +84,7 @@ export const GET: APIRoute = async () => {
 
     // ── Filtrage vols invalides ───────────────────────────────────────────────
 const cleanedFlights = allFlights.filter(f => {
-  if (f.aircraftType === 'BUS') return false;          // rotations bus piste
+  if (f.aircraftType === 'BUS') return false;          // rotations bus
   if (!f.registration?.trim()) return false;           // vol annulé / non assigné
   return true;
 });

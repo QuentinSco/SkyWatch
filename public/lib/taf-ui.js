@@ -298,15 +298,6 @@
       </div>
     `;
 
-    container.insertAdjacentHTML('beforeend', `
-  <div class="text-xs text-gray-400 mt-2 flex items-center gap-2">
-    <span id="taf-vol-last-update"></span>
-    <button onclick="window._refreshVolRisks()"
-      class="text-blue-500 hover:text-blue-700 underline text-xs">
-      ↺ Actualiser
-    </button>
-  </div>
-`);
 
 document.getElementById('taf-vol-last-update').textContent =
   `Mis à jour à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
@@ -356,6 +347,17 @@ document.getElementById('taf-vol-last-update').textContent =
           </table>
         </div>
       `;
+
+      container.insertAdjacentHTML('beforeend', `
+      <div class="text-xs text-gray-400 mt-2 flex items-center gap-2">
+        <span id="taf-vol-last-update"></span>
+        <button onclick="window._refreshVolRisks()"
+          class="text-blue-500 hover:text-blue-700 underline text-xs">
+          ↺ Actualiser
+        </button>
+      </div>
+    `);
+    
     } catch (e) {
       const msg = e.name === 'AbortError' ? 'Timeout — API trop lente (>15s)' : e.message;
       container.innerHTML = `

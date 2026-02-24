@@ -1,6 +1,6 @@
-// public/lib/taf-ui.js
+(function () {
 
-const SEVERITY_BADGE = {
+  const SEVERITY_BADGE = {
     red:    'bg-red-600 text-white',
     orange: 'bg-orange-500 text-white',
     yellow: 'bg-yellow-400 text-black',
@@ -27,7 +27,8 @@ const SEVERITY_BADGE = {
     'PROB40':     { text: 'PROB 40%',    cls: 'bg-yellow-100 text-yellow-700 border border-yellow-300' },
     'INITIAL/FM': { text: 'TAF complet', cls: 'bg-gray-100 text-gray-500 border border-gray-200' },
   };
-  
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
   function formatUTC(ts) {
     return new Date(ts * 1000).toLocaleString('fr-FR', {
       day: '2-digit', month: '2-digit',
@@ -35,7 +36,7 @@ const SEVERITY_BADGE = {
       timeZone: 'UTC',
     }) + 'Z';
   }
-  
+
   function formatIsoToLocalShort(iso) {
     if (!iso) return '—';
     return new Date(iso).toLocaleString('fr-FR', {
@@ -43,7 +44,8 @@ const SEVERITY_BADGE = {
       hour: '2-digit', minute: '2-digit',
     });
   }
-  
+
+  // ── TAF : badge menace ────────────────────────────────────────────────────────
   function renderThreatBadge(threat) {
     const icon  = THREAT_ICONS[threat.type] ?? '⚠️';
     const badge = SEVERITY_BADGE[threat.severity];
@@ -62,7 +64,8 @@ const SEVERITY_BADGE = {
       </div>
     `;
   }
-  
+
+  // ── TAF : ligne tableau ───────────────────────────────────────────────────────
   function renderTafRiskCard(risk) {
     const badgeCls    = SEVERITY_BADGE[risk.worstSeverity];
     const threatsHtml = risk.threats.map(t => `
@@ -104,10 +107,13 @@ const SEVERITY_BADGE = {
       </tr>
     `;
   }
-  
+
+  // ── TAF : chargement section ──────────────────────────────────────────────────
   async function loadTafRisks() {
     const container  = document.getElementById('taf-main');
     const countersEl = document.getElementById('taf-counters');
+    if (!container) { console.error('[taf-ui] #taf-main introuvable'); return; }
+
     container.innerHTML = `
       <div class="flex items-center gap-3 text-gray-400 text-sm py-8 justify-center">
         <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
@@ -117,10 +123,15 @@ const SEVERITY_BADGE = {
         Chargement des TAFs sur le réseau AF…
       </div>
     `;
+
     try {
-      const res = await fetch('/api/taf-risks');
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch('/api/taf-risks', { signal: controller.signal });
+      clearTimeout(timer);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const risks = await res.json();
+
       const redCount    = risks.filter(r => r.worstSeverity === 'red').length;
       const orangeCount = risks.filter(r => r.worstSeverity === 'orange').length;
       if (countersEl) {
@@ -129,6 +140,7 @@ const SEVERITY_BADGE = {
           orangeCount ? `<span class="bg-orange-100 text-orange-700 font-semibold text-xs px-3 py-1 rounded-full">🟠 ${orangeCount}</span>` : '',
         ].join('');
       }
+
       if (risks.length === 0) {
         container.innerHTML = `
           <div class="text-center py-12 text-gray-400">
@@ -138,6 +150,7 @@ const SEVERITY_BADGE = {
         `;
         return;
       }
+
       container.innerHTML = `
         <div class="text-xs text-gray-400 mb-3">
           ${risks.length} aéroport${risks.length > 1 ? 's' : ''} avec phénomènes — Cliquez une ligne pour voir le TAF complet
@@ -158,14 +171,16 @@ const SEVERITY_BADGE = {
         </div>
       `;
     } catch (e) {
+      const msg = e.name === 'AbortError' ? 'Timeout — API trop lente (>15s)' : e.message;
       container.innerHTML = `
         <div class="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
-          ⚠️ Erreur lors du chargement des TAFs : ${e.message}
+          ⚠️ Erreur lors du chargement des TAFs : ${msg}
         </div>
       `;
     }
   }
-  
+
+  // ── Vols AF : rendu ligne ─────────────────────────────────────────────────────
   function renderTafVolRow(hit) {
     const threat = hit.threat;
     const flight = hit.flight;
@@ -184,6 +199,7 @@ const SEVERITY_BADGE = {
         ${renderThreatBadge(t)}
       </div>
     `).join('');
+
     return `
       <tr class="border-b border-gray-100 hover:bg-blue-50/70 transition cursor-pointer"
           onclick="this.nextElementSibling.classList.toggle('hidden')">
@@ -239,10 +255,13 @@ const SEVERITY_BADGE = {
       </tr>
     `;
   }
-  
+
+  // ── Vols AF : chargement section ──────────────────────────────────────────────
   async function loadTafVolRisks() {
     const container  = document.getElementById('taf-vol-main');
     const countersEl = document.getElementById('taf-vol-counters');
+    if (!container) { console.error('[taf-ui] #taf-vol-main introuvable'); return; }
+
     container.innerHTML = `
       <div class="flex items-center gap-3 text-gray-400 text-sm py-4">
         <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
@@ -252,10 +271,15 @@ const SEVERITY_BADGE = {
         Analyse des vols AF vs menaces TAF…
       </div>
     `;
+
     try {
-      const res = await fetch('/api/taf-vol-risks');
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch('/api/taf-vol-risks', { signal: controller.signal });
+      clearTimeout(timer);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const hits = await res.json();
+
       const red    = hits.filter(h => h.threat.severity === 'red').length;
       const orange = hits.filter(h => h.threat.severity === 'orange').length;
       if (countersEl) {
@@ -265,6 +289,7 @@ const SEVERITY_BADGE = {
           hits.length ? `<span class="text-gray-400 text-xs">Total ${hits.length} vol${hits.length > 1 ? 's' : ''}</span>` : '',
         ].join('');
       }
+
       if (hits.length === 0) {
         container.innerHTML = `
           <div class="text-gray-400 text-sm py-4">
@@ -273,6 +298,7 @@ const SEVERITY_BADGE = {
         `;
         return;
       }
+
       container.innerHTML = `
         <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
           <table class="w-full text-sm text-left text-gray-700 bg-white">
@@ -292,15 +318,19 @@ const SEVERITY_BADGE = {
         </div>
       `;
     } catch (e) {
+      const msg = e.name === 'AbortError' ? 'Timeout — API trop lente (>15s)' : e.message;
       container.innerHTML = `
         <div class="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
-          ⚠️ Erreur lors du chargement AF/TAF : ${e.message}
+          ⚠️ Erreur lors du chargement AF/TAF : ${msg}
         </div>
       `;
     }
   }
-  
-  // Lancement
-  loadTafRisks();
-  loadTafVolRisks();
-  
+
+  // ── Init ──────────────────────────────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', () => {
+    loadTafRisks();
+    loadTafVolRisks();
+  });
+
+})();

@@ -11,6 +11,7 @@
     "@astrojs/netlify": "^6.6.4",
     "@astrojs/node": "^9.5.4",
     "@astrojs/vercel": "^9.0.4",
+    "@upstash/redis": "^1.36.2",
     "astro": "^5.1.7"
   },
   "devDependencies": {

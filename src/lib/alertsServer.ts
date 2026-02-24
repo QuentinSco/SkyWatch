@@ -777,8 +777,7 @@ export async function fetchVAAC(): Promise<Alert[]> {
     fetchVAACWashington(),                                          // XML IWXXM
     fetchVAACHtml('Anchorage', 'https://www.weather.gov/vaac/VA_advisories', 'AMN'),
     fetchVAACHtml('Montreal', 'https://weather.gc.ca/eer/vaac/index_e.html', 'AMN'),
-    fetchVAACHtml('Buenos Aires', 'https://ssl.smn.gob.ar/vaac/buenosaires/productos.php?lang=en', 'AMS'),
-
+    fetchVAACHtml('Buenos Aires', 'https://www.ssd.noaa.gov/VAAC/OTH/BA/messages.html', 'AMS'),
     // ── Europe & Africa ─────────────────────────────────────────────────────
     fetchVAACHtml('London',   'https://www.ssd.noaa.gov/VAAC/OTH/UK/messages.html',             'EUR'),
     fetchVAACRss('Toulouse',  'https://vaac.meteo.fr/rss/vaac_feed.rss',                         'EUR'),

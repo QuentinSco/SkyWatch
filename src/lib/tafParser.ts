@@ -193,7 +193,8 @@ const SEVERITY_ORDER: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
 const SM_TO_M = 1609.344;
 function smToMeters(sm: number | string): number {
   if (sm === '6+' || sm === 'P6SM') return 9999;
-  return Math.round(parseFloat(String(sm)) * SM_TO_M);
+  const raw = parseFloat(String(sm)) * SM_TO_M;
+  return Math.round(raw / 50) * 50;
 }
 
 function getAirportName(icao: string): string {

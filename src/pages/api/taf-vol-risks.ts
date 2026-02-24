@@ -78,61 +78,71 @@ export const GET: APIRoute = async () => {
       dbg('⚠️ Aucun TAF avec menace détectée');
     }
 
-    // ── Matching ─────────────────────────────────────────────────────────────
-    const hits: TafFlightHit[] = [];
-    let totalFlightsChecked = 0;
-    let rejectedNoIcaoMatch = 0;
-    let rejectedTimeWindow  = 0;
+    // ── Filtrage vols invalides ───────────────────────────────────────────────
+const cleanedFlights = allFlights.filter(f => {
+  if (f.aircraftType === 'BUS') return false;          // rotations bus piste
+  if (!f.registration?.trim()) return false;           // vol annulé / non assigné
+  return true;
+});
 
-    for (const taf of tafRisks) {
-      if (!taf.icao) continue;
+// ── Matching ─────────────────────────────────────────────────────────────
+const hits: TafFlightHit[] = [];
+let totalFlightsChecked = 0;
+let rejectedNoIcaoMatch = 0;
+let rejectedTimeWindow  = 0;
 
-      const flights = allFlights.filter(f => f.icao === taf.icao);
+for (const taf of tafRisks) {
+  if (!taf.icao) continue;
 
-      dbg(`  ${taf.icao} (${taf.iata}) → ${taf.threats.length} menaces, ${flights.length} vols AF trouvés`);
+  // ← cleanedFlights au lieu de allFlights
+  const flights = cleanedFlights.filter(f => f.icao === taf.icao);
 
-      if (!flights.length) {
-        rejectedNoIcaoMatch += 1;
+  dbg(`  ${taf.icao} (${taf.iata}) → ${taf.threats.length} menaces, ${flights.length} vols AF trouvés`);
+
+  if (!flights.length) {
+    rejectedNoIcaoMatch += 1;
+    continue;
+  }
+
+  for (const threat of taf.threats) {
+    for (const flight of flights) {
+      totalFlightsChecked++;
+      const etaIso = flight.estimatedArrival ?? flight.scheduledArrival;
+      if (!etaIso) continue;
+
+      const etaMs = new Date(etaIso).getTime();
+      const { ok, minutesBefore } = overlapsThreatWindow(etaMs, threat);
+
+      if (!ok) {
+        rejectedTimeWindow++;
+        dbg(
+          `    ✗ AF${flight.flightNumber} ETA=${new Date(etaMs).toISOString()}` +
+          ` vs menace [${new Date(threat.periodStart * 1000).toISOString()} →` +
+          ` ${new Date(threat.periodEnd * 1000).toISOString()}]` +
+          ` | minutesBefore=${minutesBefore}`
+        );
         continue;
       }
 
-      for (const threat of taf.threats) {
-        for (const flight of flights) {
-          totalFlightsChecked++;
-          const etaIso = flight.estimatedArrival ?? flight.scheduledArrival;
-          if (!etaIso) continue;
+      dbg(
+        `    ✅ MATCH AF${flight.flightNumber} ETA=${new Date(etaMs).toISOString()}` +
+        ` | menace ${threat.type} ${threat.severity}` +
+        ` | minutesBefore=${minutesBefore}`
+      );
 
-          const etaMs = new Date(etaIso).getTime();
-          const { ok, minutesBefore } = overlapsThreatWindow(etaMs, threat);
-
-          if (!ok) {
-            rejectedTimeWindow++;
-            dbg(
-              `    ✗ AF${flight.flightNumber} ETA=${new Date(etaMs).toISOString()}` +
-              ` vs menace [${new Date(threat.periodStart * 1000).toISOString()} →` +
-              ` ${new Date(threat.periodEnd * 1000).toISOString()}]` +
-              ` | minutesBefore=${minutesBefore}`
-            );
-            continue;
-          }
-
-          dbg(
-            `    ✅ MATCH AF${flight.flightNumber} ETA=${new Date(etaMs).toISOString()}` +
-            ` | menace ${threat.type} ${threat.severity}` +
-            ` | minutesBefore=${minutesBefore}`
-          );
-
-          hits.push({ taf, threat, flight, minutesBeforeThreatStart: minutesBefore });
-        }
-      }
+      hits.push({ taf, threat, flight, minutesBeforeThreatStart: minutesBefore });
     }
+  }
+}
 
-    // ── Résumé matching ──────────────────────────────────────────────────────
-    dbg(`Matching terminé :`);
-    dbg(`  Vols vérifiés     : ${totalFlightsChecked}`);
-    dbg(`  Rejetés (no ICAO) : ${rejectedNoIcaoMatch}`);
-    dbg(`  Rejetés (fenêtre) : ${rejectedTimeWindow}`);
-    dbg(`  Hits              : ${hits.length}`);
+// ── Résumé matching ───────────────────────────────────────────────────────
+dbg(`Matching terminé :`);
+dbg(`  Vols bruts         : ${allFlights.length}`);
+dbg(`  Vols après filtre  : ${cleanedFlights.length}`);
+dbg(`  Vols vérifiés      : ${totalFlightsChecked}`);
+dbg(`  Rejetés (no ICAO)  : ${rejectedNoIcaoMatch}`);
+dbg(`  Rejetés (fenêtre)  : ${rejectedTimeWindow}`);
+dbg(`  Hits               : ${hits.length}`);
 
     // ── Tri ──────────────────────────────────────────────────────────────────
     hits.sort((a, b) => {

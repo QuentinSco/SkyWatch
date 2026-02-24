@@ -27,6 +27,7 @@
     'PROB40':     { text: 'PROB 40%',    cls: 'bg-yellow-100 text-yellow-700 border border-yellow-300' },
     'INITIAL/FM': { text: 'TAF complet', cls: 'bg-gray-100 text-gray-500 border border-gray-200' },
   };
+  const SEVERITY_ORDER = { red: 0, orange: 1, yellow: 2 };
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
   function formatUTC(ts) {
@@ -62,16 +63,21 @@
     const ci     = CI_LABEL[threat.changeIndicator];
     const showCi = ci && threat.changeIndicator !== 'INITIAL/FM';
     return `
-      <div class="flex items-start flex-wrap gap-2 text-xs">
-        <span class="${badge} px-2 py-0.5 rounded font-bold whitespace-nowrap">${icon} ${threat.label}</span>
-        <span class="text-gray-500 font-mono">${threat.value ?? ''}</span>
-        ${showCi ? `<span class="${ci.cls} px-2 py-0.5 rounded font-semibold whitespace-nowrap">${ci.text}</span>` : ''}
-        <span class="text-gray-400 ml-auto whitespace-nowrap">
-          ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
-        </span>
-      </div>
-      <div class="mt-1 font-mono text-xs bg-gray-100 rounded px-2 py-1 text-gray-700 truncate" title="${threat.snippet}">
-        ${threat.snippet}
+      <div class="flex flex-col gap-1 text-xs">
+        <!-- Fenêtre temporelle en premier, bien visible -->
+        <div class="flex items-center gap-2 font-mono font-semibold text-gray-700 bg-gray-100 rounded px-2 py-1 w-fit">
+          🕐 ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
+          ${showCi ? `<span class="${ci.cls} px-1.5 py-0.5 rounded font-semibold">${ci.text}</span>` : ''}
+        </div>
+        <!-- Badges menace -->
+        <div class="flex items-center flex-wrap gap-2">
+          <span class="${badge} px-2 py-0.5 rounded font-bold whitespace-nowrap">${icon} ${threat.label}</span>
+          <span class="text-gray-500 font-mono">${threat.value ?? ''}</span>
+        </div>
+        <!-- Snippet TAF -->
+        <div class="font-mono bg-white border border-gray-100 rounded px-2 py-1 text-gray-600 truncate" title="${threat.snippet}">
+          ${threat.snippet}
+        </div>
       </div>
     `;
   }
@@ -96,11 +102,18 @@
         <td class="py-2 px-4 text-gray-600">${risk.name}</td>
         <td class="py-2 px-4">
           <div class="flex flex-wrap gap-1">
-            ${risk.threats.map(t => {
-              const icon = THREAT_ICONS[t.type] ?? '⚠️';
-              const cls  = SEVERITY_BADGE[t.severity];
-              return `<span class="${cls} text-xs px-1.5 py-0.5 rounded font-semibold">${icon} ${t.label}</span>`;
-            }).join('')}
+          ${Object.values(
+            risk.threats.reduce((acc, t) => {
+              if (!acc[t.type] || SEVERITY_ORDER[t.severity] < SEVERITY_ORDER[acc[t.type].severity]) {
+                acc[t.type] = t;
+              }
+              return acc;
+            }, {})
+          ).map(t => {
+            const icon = THREAT_ICONS[t.type] ?? '⚠️';
+            const cls  = SEVERITY_BADGE[t.severity];
+            return `<span class="${cls} text-xs px-1.5 py-0.5 rounded font-semibold">${icon} ${t.label}</span>`;
+          }).join('')}
           </div>
         </td>
         <td class="py-2 px-4 font-mono text-xs text-gray-400 max-w-xs truncate" title="${risk.rawTaf}">

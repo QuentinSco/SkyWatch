@@ -63,10 +63,10 @@
     const showCi = ci !== null;
     return `
       <div class="flex flex-col gap-1 text-xs">
-        <div class="flex items-center gap-2 font-mono font-semibold text-gray-700 bg-gray-100 rounded px-2 py-1 w-fit">
-          🕐 ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
-          ${showCi ? `<span class="${ci.cls} px-1.5 py-0.5 rounded font-semibold">${ci.text}</span>` : ''}
-        </div>
+      <div class="flex items-center gap-2 font-mono font-semibold bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-1 w-fit text-xs">
+      🕐 ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
+      ${showCi ? `<span class="${ci.cls} px-1.5 py-0.5 rounded font-semibold">${ci.text}</span>` : ''}
+    </div>
         <div class="flex items-center flex-wrap gap-2">
           <span class="${badge} px-2 py-0.5 rounded font-bold whitespace-nowrap">${icon} ${threat.label}</span>
           <span class="text-gray-500 font-mono">${threat.value ?? ''}</span>
@@ -255,12 +255,16 @@
           <div class="flex flex-col gap-2 text-xs">
             <div>
               <div class="font-semibold text-gray-600 mb-1">Groupe TAF concerné</div>
-              <div class="font-mono bg-white border border-gray-200 rounded px-2 py-1 text-gray-700 whitespace-pre-wrap">
-                <span class="text-gray-400 text-[11px] block mb-1">
-                  🕐 ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
-                </span>
-                ${threat.snippet}
-              </div>
+              <div class="flex items-center gap-2 mb-1">
+              <span class="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 font-mono font-semibold text-xs px-2 py-1 rounded">
+                🕐 ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
+              </span>
+              ${showCi ? `<span class="${ci.cls} px-1.5 py-0.5 rounded text-[11px] font-semibold">${ci.text}</span>` : ''}
+            </div>
+            <div class="font-mono bg-white border border-gray-200 rounded px-2 py-1 text-gray-700 whitespace-pre-wrap">
+              ${threat.snippet}
+            </div>
+          </div>
             </div>
             <div>
               <div class="font-semibold text-gray-600 mb-1">Toutes les menaces sur ${taf.iata}</div>

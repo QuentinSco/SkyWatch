@@ -57,14 +57,15 @@
 
   // ── TAF : badge menace ────────────────────────────────────────────────────────
   function renderThreatBadge(threat) {
-    const icon  = THREAT_ICONS[threat.type] ?? '⚠️';
-    const badge = SEVERITY_BADGE[threat.severity];
-    const ci    = CI_LABEL[threat.changeIndicator] ?? CI_LABEL['INITIAL/FM'];
+    const icon   = THREAT_ICONS[threat.type] ?? '⚠️';
+    const badge  = SEVERITY_BADGE[threat.severity];
+    const ci     = CI_LABEL[threat.changeIndicator];
+    const showCi = ci && threat.changeIndicator !== 'INITIAL/FM';
     return `
       <div class="flex items-start flex-wrap gap-2 text-xs">
         <span class="${badge} px-2 py-0.5 rounded font-bold whitespace-nowrap">${icon} ${threat.label}</span>
         <span class="text-gray-500 font-mono">${threat.value ?? ''}</span>
-        <span class="${ci.cls} px-2 py-0.5 rounded font-semibold whitespace-nowrap">${ci.text}</span>
+        ${showCi ? `<span class="${ci.cls} px-2 py-0.5 rounded font-semibold whitespace-nowrap">${ci.text}</span>` : ''}
         <span class="text-gray-400 ml-auto whitespace-nowrap">
           ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
         </span>
@@ -74,7 +75,7 @@
       </div>
     `;
   }
-
+  
   // ── TAF : ligne tableau ───────────────────────────────────────────────────────
   function renderTafRiskCard(risk) {
     const badgeCls    = SEVERITY_BADGE[risk.worstSeverity];
@@ -200,17 +201,11 @@
     const ci     = CI_LABEL[threat.changeIndicator] ?? CI_LABEL['INITIAL/FM'];
     const etaIso = flight.estimatedArrival || flight.scheduledArrival;
     const etaStr = formatIsoToLocalShort(etaIso);
-    const ttaStr = typeof tta === 'number'
-      ? (() => {
-          const abs  = Math.abs(tta);
-          const sign = tta > 0 ? 'T-' : 'T+';
-          if (abs < 60) return sign + abs + 'min';
-          const h   = Math.floor(abs / 60);
-          const min = abs % 60;
-          return sign + h + 'h' + (min > 0 ? String(min).padStart(2, '0') + 'min' : '');
-        })()
-      : '—';
-
+    let tta = flight.timeToArrivalMinutes;
+    if (typeof tta !== 'number' && etaIso) {
+      tta = Math.round((new Date(etaIso).getTime() - Date.now()) / 60000);
+    }
+    const ttaStr = formatTta(tta);
     // Fenêtre de menace formatée
     const windowStr = `${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}`;
 

@@ -29,6 +29,36 @@
     ASIE: 'Asie',
     PAC:  'Pacifique',
   };
+  const PHENOMENON_EMOJI = {
+    // GDACS
+    'Cyclone tropical':      '🌀',
+    'Tremblement de terre':  '🫨',
+    'Éruption volcanique':   '🌋',
+    'Inondation':            '🌊',
+    'Tsunami':               '🌊',
+    'Incendie':              '🔥',
+    // VAAC
+    'Cendres volcaniques':   '🌋',
+    // MeteoAlarm / NOAA
+    'Orage':                 '⛈',
+    'Vent violent':          '💨',
+    'Neige / Verglas':       '🌨',
+    'Brouillard':            '🌫',
+    'Chaleur extrême':       '🌡',
+    'Froid extrême':         '❄️',
+    'Inondation / Pluie':    '🌊',
+    'Pluie intense':         '🌧',
+    // NOAA keywords
+    'Blizzard':              '❄️',
+    'Hurricane':             '🌀',
+    'Tornado':               '🌪',
+    'Fog':                   '🌫',
+    'Wind':                  '💨',
+    'Snow':                  '🌨',
+    'Flood':                 '🌊',
+    'Dust':                  '🏜',
+    'Freezing':              '🧊',
+  };
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
   function formatShortDate(iso) {
@@ -154,16 +184,40 @@
   function updateMapMarkers(alerts) {
     if (!leafletMap || !markersLayer) return;
     markersLayer.clearLayers();
+  
     for (const alert of alerts) {
       if (alert.lat == null || alert.lon == null) continue;
-      const color  = SEVERITY_DOT[alert.severity] ?? '#6b7280';
-      const marker = L.circleMarker([alert.lat, alert.lon], {
-        radius:      alert.severity === 'red' ? 10 : alert.severity === 'orange' ? 8 : 6,
-        color:       'white',
-        weight:      1.5,
-        fillColor:   color,
-        fillOpacity: 0.85,
+  
+      const color = SEVERITY_DOT[alert.severity] ?? '#6b7280';
+      const emoji = phenomenonEmoji(alert.phenomenon);
+  
+      // Canvas → PNG → L.icon
+      const canvas = document.createElement('canvas');
+      canvas.width  = 36;
+      canvas.height = 36;
+      const ctx = canvas.getContext('2d');
+  
+      ctx.beginPath();
+      ctx.arc(18, 18, 16, 0, Math.PI * 2);
+      ctx.fillStyle = 'white';
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+  
+      ctx.font = '18px serif';
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(emoji, 18, 19);
+  
+      const icon = L.icon({
+        iconUrl:     canvas.toDataURL('image/png'),
+        iconSize:    [36, 36],
+        iconAnchor:  [18, 18],
+        popupAnchor: [0, -20],
       });
+  
+      const marker = L.marker([alert.lat, alert.lon], { icon });
       marker.bindPopup(`
         <div class="text-xs font-sans">
           <div class="font-bold text-sm mb-1">${alert.phenomenon}</div>
@@ -171,12 +225,13 @@
           <div class="font-semibold" style="color:${color}">${SEVERITY_LABEL[alert.severity] ?? alert.severity}</div>
           <div class="text-gray-500 mt-1">${alert.headline.slice(0, 100)}${alert.headline.length > 100 ? '…' : ''}</div>
           <div class="text-gray-400 mt-1">Source : ${alert.source}</div>
-          ${alert.airports?.length ? `<div class="mt-1">✈️ ${alert.airports.join(' · ')}</div>` : ''}
+          ${alert.alerts?.length ? `<div class="mt-1">✈️ ${alert.airports.join(' · ')}</div>` : ''}
         </div>
       `);
       markersLayer.addLayer(marker);
     }
   }
+  
 
   // ── Chargement principal ──────────────────────────────────────────────────────
   async function loadAlerts() {

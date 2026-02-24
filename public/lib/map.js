@@ -1,19 +1,67 @@
 const SEVERITY_COLOR = { red: '#ef4444', orange: '#f97316', yellow: '#eab308' };
 const SEVERITY_RADIUS = { red: 14, orange: 10, yellow: 8 };
+const PHENOMENON_EMOJI = {
+  // GDACS
+  'Cyclone tropical':      '🌀',
+  'Tremblement de terre':  '🫨',
+  'Éruption volcanique':   '🌋',
+  'Inondation':            '🌊',
+  'Tsunami':               '🌊',
+  'Incendie':              '🔥',
+  // VAAC
+  'Cendres volcaniques':   '🌋',
+  // MeteoAlarm / NOAA
+  'Orage':                 '⛈',
+  'Vent violent':          '💨',
+  'Neige / Verglas':       '🌨',
+  'Brouillard':            '🌫',
+  'Chaleur extrême':       '🌡',
+  'Froid extrême':         '❄️',
+  'Inondation / Pluie':    '🌊',
+  'Pluie intense':         '🌧',
+  // NOAA keywords
+  'Blizzard':              '❄️',
+  'Hurricane':             '🌀',
+  'Tornado':               '🌪',
+  'Fog':                   '🌫',
+  'Wind':                  '💨',
+  'Snow':                  '🌨',
+  'Flood':                 '🌊',
+  'Dust':                  '🏜',
+  'Freezing':              '🧊',
+};
 
 let mapInstance = null;
 
-function makeCircleIcon(severity) {
+function phenomenonEmoji(phenomenon) {
+  if (!phenomenon) return '⚠️';
+  // Correspondance exacte d'abord
+  if (PHENOMENON_EMOJI[phenomenon]) return PHENOMENON_EMOJI[phenomenon];
+  // Sinon recherche par inclusion (ex: "High Wind Warning" → 'Wind')
+  const match = Object.entries(PHENOMENON_EMOJI)
+    .find(([k]) => phenomenon.toLowerCase().includes(k.toLowerCase()));
+  return match ? match[1] : '⚠️';
+}
+
+function makeCircleIcon(severity, phenomenon) {
   const color = SEVERITY_COLOR[severity] ?? '#6b7280';
-  const r = SEVERITY_RADIUS[severity] ?? 8;
-  const size = r * 2 + 6;
+  const emoji = phenomenonEmoji(phenomenon);
   return L.divIcon({
     className: '',
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-    html: `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="${color}" fill-opacity="0.85" stroke="white" stroke-width="1.5"/>
-    </svg>`,
+    iconSize:   [36, 36],
+    iconAnchor: [18, 18],
+    popupAnchor:[0, -20],
+    html: `
+      <div style="
+        width:34px; height:34px;
+        background:white;
+        border:2.5px solid ${color};
+        border-radius:50%;
+        display:flex; align-items:center; justify-content:center;
+        font-size:18px; line-height:1;
+        box-shadow:0 1px 4px rgba(0,0,0,0.25);
+      ">${emoji}</div>
+    `,
   });
 }
 
@@ -64,7 +112,7 @@ export function initMap(alerts) {
   const withCoords = alerts.filter(a => a.lat != null && a.lon != null);
 
   for (const a of withCoords) {
-    const marker = L.marker([a.lat, a.lon], { icon: makeCircleIcon(a.severity) });
+    const marker = L.marker([a.lat, a.lon], { icon: makeCircleIcon(a.severity, a.phenomenon) });
     marker.bindPopup(popupContent(a), { maxWidth: 300 });
     marker.addTo(mapInstance);
   }

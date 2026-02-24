@@ -6,3 +6,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.custom-emoji-marker {
+  background: none !important;
+  border: none !important;
+}

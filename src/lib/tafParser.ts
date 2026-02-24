@@ -228,7 +228,7 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
   const snippet = buildSnippet(fcst);
   const ci = formatChangeIndicator(changeIndicator);
 
-  if (wxString && /\bTS[A-Z]*/.test(wxString)) {
+  if (wxString && /\bTSRA*/.test(wxString)) {
     threats.push({
       type: 'THUNDERSTORM', label: 'Orage', value: wxString,
       severity: 'red', periodStart: timeFrom, periodEnd: timeTo,

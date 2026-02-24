@@ -88,6 +88,7 @@ export const AF_IATA_TO_ICAO: Record<string, string> = {
   MRU: 'FIMP', // Maurice
   MSP: 'KMSP', // Minneapolis
   NAS: 'MYNN', // Nassau
+  NBJ: 'FNBJ', // Luanda
   NBO: 'HKJK', // Nairobi
   NCE: 'LFMN', // Nice
   NDJ: 'FTTJ', // N'Djamena
@@ -161,6 +162,7 @@ const AIRPORT_NAMES: Record<string, string> = {
   KLAS: 'Las Vegas',          KLAX: 'Los Angeles',
   FOOL: 'Libreville',         LFBT: 'Lourdes-Tarbes',
   DXXX: 'Lomé',               SPIM: 'Lima',
+  FNBJ: 'Lunada',
   DNMM: 'Lagos',              KMCO: 'Orlando',
   MMMX: 'Mexico City (MEX)',  KMIA: 'Miami',
   RPLL: 'Manille',            FIMP: 'Maurice',

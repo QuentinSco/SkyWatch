@@ -60,27 +60,24 @@
     const icon   = THREAT_ICONS[threat.type] ?? '⚠️';
     const badge  = SEVERITY_BADGE[threat.severity];
     const ci     = CI_LABEL[threat.changeIndicator] ?? null;
-    const showCi = ci && threat.changeIndicator !== 'INITIAL/FM';
+    const showCi = ci !== null;
     return `
       <div class="flex flex-col gap-1 text-xs">
-        <!-- Fenêtre temporelle en premier, bien visible -->
         <div class="flex items-center gap-2 font-mono font-semibold text-gray-700 bg-gray-100 rounded px-2 py-1 w-fit">
           🕐 ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
-          ${showCi ? `<span class="${ci.cls} inline-block mt-1 px-1.5 py-0.5 rounded text-[11px] font-semibold">${ci.text}</span>` : ''}
+          ${showCi ? `<span class="${ci.cls} px-1.5 py-0.5 rounded font-semibold">${ci.text}</span>` : ''}
         </div>
-        <!-- Badges menace -->
         <div class="flex items-center flex-wrap gap-2">
           <span class="${badge} px-2 py-0.5 rounded font-bold whitespace-nowrap">${icon} ${threat.label}</span>
           <span class="text-gray-500 font-mono">${threat.value ?? ''}</span>
         </div>
-        <!-- Snippet TAF -->
         <div class="font-mono bg-white border border-gray-100 rounded px-2 py-1 text-gray-600 truncate" title="${threat.snippet}">
           ${threat.snippet}
         </div>
       </div>
     `;
   }
-  
+
   // ── TAF : ligne tableau ───────────────────────────────────────────────────────
   function renderTafRiskCard(risk) {
     const badgeCls    = SEVERITY_BADGE[risk.worstSeverity];
@@ -101,18 +98,18 @@
         <td class="py-2 px-4 text-gray-600">${risk.name}</td>
         <td class="py-2 px-4">
           <div class="flex flex-wrap gap-1">
-          ${Object.values(
-            risk.threats.reduce((acc, t) => {
-              if (!acc[t.type] || SEVERITY_ORDER[t.severity] < SEVERITY_ORDER[acc[t.type].severity]) {
-                acc[t.type] = t;
-              }
-              return acc;
-            }, {})
-          ).map(t => {
-            const icon = THREAT_ICONS[t.type] ?? '⚠️';
-            const cls  = SEVERITY_BADGE[t.severity];
-            return `<span class="${cls} text-xs px-1.5 py-0.5 rounded font-semibold">${icon} ${t.label}</span>`;
-          }).join('')}
+            ${Object.values(
+              risk.threats.reduce((acc, t) => {
+                if (!acc[t.type] || SEVERITY_ORDER[t.severity] < SEVERITY_ORDER[acc[t.type].severity]) {
+                  acc[t.type] = t;
+                }
+                return acc;
+              }, {})
+            ).map(t => {
+              const icon = THREAT_ICONS[t.type] ?? '⚠️';
+              const cls  = SEVERITY_BADGE[t.severity];
+              return `<span class="${cls} text-xs px-1.5 py-0.5 rounded font-semibold">${icon} ${t.label}</span>`;
+            }).join('')}
           </div>
         </td>
         <td class="py-2 px-4 font-mono text-xs text-gray-400 max-w-xs truncate" title="${risk.rawTaf}">
@@ -211,14 +208,14 @@
     const icon   = THREAT_ICONS[threat.type] ?? '⚠️';
     const badge  = SEVERITY_BADGE[threat.severity];
     const ci     = CI_LABEL[threat.changeIndicator] ?? null;
+    const showCi = ci !== null;                               // ← fix : était manquant
     const etaIso = flight.estimatedArrival || flight.scheduledArrival;
     const etaStr = formatIsoToLocalShort(etaIso);
     let tta = flight.timeToArrivalMinutes;
     if (typeof tta !== 'number' && etaIso) {
       tta = Math.round((new Date(etaIso).getTime() - Date.now()) / 60000);
     }
-    const ttaStr = formatTta(tta);
-    // Fenêtre de menace formatée
+    const ttaStr    = formatTta(tta);
     const windowStr = `${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}`;
 
     const threatsHtml = taf.threats.map(t => `
@@ -246,7 +243,7 @@
         <td class="py-2 px-3 text-xs text-gray-700">${icon} ${threat.label}</td>
         <td class="py-2 px-3 text-xs font-mono text-gray-700 whitespace-nowrap">
           <div class="font-semibold text-gray-800">${windowStr}</div>
-          ${showCi ? `<span class="${ci.cls} px-2 py-0.5 rounded font-semibold">${ci.text}</span>` : ''}
+          ${showCi ? `<span class="${ci.cls} inline-block mt-1 px-1.5 py-0.5 rounded text-[11px] font-semibold">${ci.text}</span>` : ''}
         </td>
         <td class="py-2 px-3 text-xs text-gray-500 whitespace-nowrap">
           ${etaStr}
@@ -259,12 +256,12 @@
             <div>
               <div class="font-semibold text-gray-600 mb-1">Groupe TAF concerné</div>
               <div class="font-mono bg-white border border-gray-200 rounded px-2 py-1 text-gray-700 whitespace-pre-wrap">
-              <span class="text-gray-400 text-[11px] block mb-1">
-                🕐 ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
-              </span>
-              ${threat.snippet}
+                <span class="text-gray-400 text-[11px] block mb-1">
+                  🕐 ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
+                </span>
+                ${threat.snippet}
+              </div>
             </div>
-          </div>
             <div>
               <div class="font-semibold text-gray-600 mb-1">Toutes les menaces sur ${taf.iata}</div>
               ${threatsHtml}

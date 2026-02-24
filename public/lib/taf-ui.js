@@ -45,6 +45,16 @@
     });
   }
 
+  function formatTta(tta) {
+    if (typeof tta !== 'number') return '—';
+    const abs  = Math.abs(tta);
+    const sign = tta > 0 ? 'T-' : 'T+';
+    if (abs < 60) return sign + abs + 'min';
+    const h   = Math.floor(abs / 60);
+    const min = abs % 60;
+    return sign + h + 'h' + (min > 0 ? String(min).padStart(2, '0') + 'min' : '');
+  }
+
   // ── TAF : badge menace ────────────────────────────────────────────────────────
   function renderThreatBadge(threat) {
     const icon  = THREAT_ICONS[threat.type] ?? '⚠️';
@@ -190,10 +200,20 @@
     const ci     = CI_LABEL[threat.changeIndicator] ?? CI_LABEL['INITIAL/FM'];
     const etaIso = flight.estimatedArrival || flight.scheduledArrival;
     const etaStr = formatIsoToLocalShort(etaIso);
-    const tta    = flight.timeToArrivalMinutes;
     const ttaStr = typeof tta === 'number'
-      ? (tta > 0 ? 'T-' + tta + ' min' : 'T+' + Math.abs(tta) + ' min')
+      ? (() => {
+          const abs  = Math.abs(tta);
+          const sign = tta > 0 ? 'T-' : 'T+';
+          if (abs < 60) return sign + abs + 'min';
+          const h   = Math.floor(abs / 60);
+          const min = abs % 60;
+          return sign + h + 'h' + (min > 0 ? String(min).padStart(2, '0') + 'min' : '');
+        })()
       : '—';
+
+    // Fenêtre de menace formatée
+    const windowStr = `${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}`;
+
     const threatsHtml = taf.threats.map(t => `
       <div class="mb-2 pb-2 border-b border-gray-100 last:border-0">
         ${renderThreatBadge(t)}
@@ -208,9 +228,6 @@
             ${SEVERITY_LABEL[threat.severity]}
           </span>
         </td>
-        <td class="py-2 px-3">
-          <span class="${ci.cls} px-2 py-0.5 rounded text-xs font-semibold">${ci.text}</span>
-        </td>
         <td class="py-2 px-3 font-mono font-semibold text-gray-800">AF${flight.flightNumber}</td>
         <td class="py-2 px-3 text-xs text-gray-500">
           ${flight.registration ?? '—'}
@@ -220,7 +237,11 @@
           ${taf.iata} (${taf.icao}) — ${taf.name}
         </td>
         <td class="py-2 px-3 text-xs text-gray-700">${icon} ${threat.label}</td>
-        <td class="py-2 px-3 text-xs text-gray-500">
+        <td class="py-2 px-3 text-xs font-mono text-gray-700 whitespace-nowrap">
+          <div class="font-semibold text-gray-800">${windowStr}</div>
+          <span class="${ci.cls} inline-block mt-1 px-1.5 py-0.5 rounded text-[11px] font-semibold">${ci.text}</span>
+        </td>
+        <td class="py-2 px-3 text-xs text-gray-500 whitespace-nowrap">
           ${etaStr}
           <div class="text-[10px] text-gray-400">${ttaStr}</div>
         </td>
@@ -228,12 +249,6 @@
       <tr class="hidden bg-gray-50">
         <td colspan="7" class="px-6 py-3">
           <div class="flex flex-col gap-2 text-xs">
-            <div class="flex flex-wrap gap-2 items-center">
-              <span class="${ci.cls} px-2 py-0.5 rounded font-semibold">${ci.text}</span>
-              <span class="text-gray-500">
-                Fenêtre menace : ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
-              </span>
-            </div>
             <div>
               <div class="font-semibold text-gray-600 mb-1">Groupe TAF concerné</div>
               <div class="font-mono bg-white border border-gray-200 rounded px-2 py-1 text-gray-700 whitespace-pre-wrap">
@@ -305,11 +320,11 @@
             <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-200">
               <tr>
                 <th class="py-2 px-3">Niveau</th>
-                <th class="py-2 px-3">Phase TAF</th>
                 <th class="py-2 px-3">Vol</th>
                 <th class="py-2 px-3">Immat / Type</th>
                 <th class="py-2 px-3">Destination</th>
                 <th class="py-2 px-3">Menace</th>
+                <th class="py-2 px-3">Fenêtre TAF</th>
                 <th class="py-2 px-3">ETA</th>
               </tr>
             </thead>

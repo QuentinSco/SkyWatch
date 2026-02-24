@@ -66,7 +66,7 @@
         <!-- Fenêtre temporelle en premier, bien visible -->
         <div class="flex items-center gap-2 font-mono font-semibold text-gray-700 bg-gray-100 rounded px-2 py-1 w-fit">
           🕐 ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
-          ${showCi ? `<span class="${ci.cls} px-1.5 py-0.5 rounded font-semibold">${ci.text}</span>` : ''}
+          ${showCi ? `<span class="${ci.cls} inline-block mt-1 px-1.5 py-0.5 rounded text-[11px] font-semibold">${ci.text}</span>` : ''}
         </div>
         <!-- Badges menace -->
         <div class="flex items-center flex-wrap gap-2">
@@ -246,7 +246,7 @@
         <td class="py-2 px-3 text-xs text-gray-700">${icon} ${threat.label}</td>
         <td class="py-2 px-3 text-xs font-mono text-gray-700 whitespace-nowrap">
           <div class="font-semibold text-gray-800">${windowStr}</div>
-          <span class="${ci.cls} inline-block mt-1 px-1.5 py-0.5 rounded text-[11px] font-semibold">${ci.text}</span>
+          ${showCi ? `<span class="${ci.cls} px-2 py-0.5 rounded font-semibold">${ci.text}</span>` : ''}
         </td>
         <td class="py-2 px-3 text-xs text-gray-500 whitespace-nowrap">
           ${etaStr}

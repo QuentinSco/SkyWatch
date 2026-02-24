@@ -55,6 +55,22 @@
     return sign + h + 'h' + (min > 0 ? String(min).padStart(2, '0') + 'min' : '');
   }
 
+  function lastUpdateBar() {
+    return `
+      <div class="text-xs text-gray-400 mt-2 flex items-center gap-2">
+        <span>Mis à jour à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+        <button id="btn-refresh-vol" class="text-blue-500 hover:text-blue-700 underline text-xs">
+          ↺ Actualiser
+        </button>
+      </div>
+    `;
+  }
+
+  function bindRefreshBtn() {
+    document.getElementById('btn-refresh-vol')
+      ?.addEventListener('click', loadTafVolRisks);
+  }
+
   // ── TAF : badge menace ────────────────────────────────────────────────────────
   function renderThreatBadge(threat) {
     const icon   = THREAT_ICONS[threat.type] ?? '⚠️';
@@ -63,10 +79,10 @@
     const showCi = ci !== null;
     return `
       <div class="flex flex-col gap-1 text-xs">
-      <div class="flex items-center gap-2 font-mono font-semibold bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-1 w-fit text-xs">
-      🕐 ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
-      ${showCi ? `<span class="${ci.cls} px-1.5 py-0.5 rounded font-semibold">${ci.text}</span>` : ''}
-    </div>
+        <div class="flex items-center gap-2 font-mono font-semibold bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-1 w-fit text-xs">
+          🕐 ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
+          ${showCi ? `<span class="${ci.cls} px-1.5 py-0.5 rounded font-semibold">${ci.text}</span>` : ''}
+        </div>
         <div class="flex items-center flex-wrap gap-2">
           <span class="${badge} px-2 py-0.5 rounded font-bold whitespace-nowrap">${icon} ${threat.label}</span>
           <span class="text-gray-500 font-mono">${threat.value ?? ''}</span>
@@ -173,7 +189,7 @@
 
       container.innerHTML = `
         <div class="text-xs text-gray-400 mb-3">
-          ${risks.length} aéroport${risks.length > 1 ? 's' : ''} avec phénomènes — Cliquez une ligne pour voir le TAF complet
+          ${risks.length} aéroport${risks.length > 1 ? 's' : ''} avec phénomènes — Cliquez une ligne pour voir le détail
         </div>
         <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
           <table class="w-full text-sm text-left text-gray-700 bg-white">
@@ -208,7 +224,7 @@
     const icon   = THREAT_ICONS[threat.type] ?? '⚠️';
     const badge  = SEVERITY_BADGE[threat.severity];
     const ci     = CI_LABEL[threat.changeIndicator] ?? null;
-    const showCi = ci !== null;                               // ← fix : était manquant
+    const showCi = ci !== null;
     const etaIso = flight.estimatedArrival || flight.scheduledArrival;
     const etaStr = formatIsoToLocalShort(etaIso);
     let tta = flight.timeToArrivalMinutes;
@@ -256,15 +272,14 @@
             <div>
               <div class="font-semibold text-gray-600 mb-1">Groupe TAF concerné</div>
               <div class="flex items-center gap-2 mb-1">
-              <span class="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 font-mono font-semibold text-xs px-2 py-1 rounded">
-                🕐 ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
-              </span>
-              ${showCi ? `<span class="${ci.cls} px-1.5 py-0.5 rounded text-[11px] font-semibold">${ci.text}</span>` : ''}
-            </div>
-            <div class="font-mono bg-white border border-gray-200 rounded px-2 py-1 text-gray-700 whitespace-pre-wrap">
-              ${threat.snippet}
-            </div>
-          </div>
+                <span class="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 font-mono font-semibold text-xs px-2 py-1 rounded">
+                  🕐 ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
+                </span>
+                ${showCi ? `<span class="${ci.cls} px-1.5 py-0.5 rounded text-[11px] font-semibold">${ci.text}</span>` : ''}
+              </div>
+              <div class="font-mono bg-white border border-gray-200 rounded px-2 py-1 text-gray-700 whitespace-pre-wrap">
+                ${threat.snippet}
+              </div>
             </div>
             <div>
               <div class="font-semibold text-gray-600 mb-1">Toutes les menaces sur ${taf.iata}</div>
@@ -298,13 +313,9 @@
       </div>
     `;
 
-
-document.getElementById('taf-vol-last-update').textContent =
-  `Mis à jour à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
-
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 15000);
+      const timer = setTimeout(() => controller.abort(), 30000);
       const res = await fetch('/api/taf-vol-risks', { signal: controller.signal });
       clearTimeout(timer);
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -325,47 +336,42 @@ document.getElementById('taf-vol-last-update').textContent =
           <div class="text-gray-400 text-sm py-4">
             Aucun vol AF LC actuellement dans une fenêtre de menace TAF détectée.
           </div>
+          ${lastUpdateBar()}
         `;
+        bindRefreshBtn();
         return;
       }
 
       container.innerHTML = `
-      <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-        <table class="w-full text-sm text-left text-gray-700 bg-white">
-          <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th class="py-2 px-3">Niveau</th>
-              <th class="py-2 px-3">Vol</th>
-              <th class="py-2 px-3">Immat / Type</th>
-              <th class="py-2 px-3">Destination</th>
-              <th class="py-2 px-3">Menace</th>
-              <th class="py-2 px-3">Fenêtre TAF</th>
-              <th class="py-2 px-3">ETA</th>
-            </tr>
-          </thead>
-          <tbody>${hits.map(renderTafVolRow).join('')}</tbody>
-        </table>
-      </div>
-      <div class="text-xs text-gray-400 mt-2 flex items-center gap-2">
-        <span>Mis à jour à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
-        <button id="btn-refresh-vol"
-          class="text-blue-500 hover:text-blue-700 underline text-xs">
-          ↺ Actualiser
-        </button>
-      </div>
-    `;
-    
-    // Branche le bouton après injection dans le DOM
-    document.getElementById('btn-refresh-vol')
-      ?.addEventListener('click', loadTafVolRisks);
+        <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+          <table class="w-full text-sm text-left text-gray-700 bg-white">
+            <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th class="py-2 px-3">Niveau</th>
+                <th class="py-2 px-3">Vol</th>
+                <th class="py-2 px-3">Immat / Type</th>
+                <th class="py-2 px-3">Destination</th>
+                <th class="py-2 px-3">Menace</th>
+                <th class="py-2 px-3">Fenêtre TAF</th>
+                <th class="py-2 px-3">ETA</th>
+              </tr>
+            </thead>
+            <tbody>${hits.map(renderTafVolRow).join('')}</tbody>
+          </table>
+        </div>
+        ${lastUpdateBar()}
+      `;
+      bindRefreshBtn();
 
     } catch (e) {
-      const msg = e.name === 'AbortError' ? 'Timeout — API trop lente (>15s)' : e.message;
+      const msg = e.name === 'AbortError' ? 'Timeout — API trop lente (>30s)' : e.message;
       container.innerHTML = `
         <div class="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
           ⚠️ Erreur lors du chargement AF/TAF : ${msg}
         </div>
+        ${lastUpdateBar()}
       `;
+      bindRefreshBtn();
     }
   }
 
@@ -373,10 +379,10 @@ document.getElementById('taf-vol-last-update').textContent =
   document.addEventListener('DOMContentLoaded', () => {
     loadTafRisks();
     loadTafVolRisks();
-  
+
     // ⚠️ Budget API AF : 100 req/jour → 1 refresh max toutes les 20 min
     setInterval(() => { loadTafVolRisks(); }, 20 * 60 * 1000);
-    setInterval(() => { loadTafRisks();    },  5 * 60 * 1000); // TAF = NOAA, pas limité
+    setInterval(() => { loadTafRisks();    },  5 * 60 * 1000);
   });
 
 })();

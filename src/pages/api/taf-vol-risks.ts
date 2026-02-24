@@ -83,10 +83,13 @@ export const GET: APIRoute = async () => {
     }
 
     // ── Filtrage vols invalides ───────────────────────────────────────────────
-const cleanedFlights = allFlights.filter(f => {
-  if (f.aircraftType === 'BUS') return false;          // rotations bus
-  if (!f.registration?.trim()) return false;           // vol annulé / non assigné
-  return true;
+    const now = Date.now();
+    const cleanedFlights = allFlights.filter(f => {
+    if (f.aircraftType === 'BUS') return false;          // rotations bus
+    if (!f.registration?.trim()) return false;           // vol annulé / non assigné
+    const etaIso = f.estimatedArrival ?? f.scheduledArrival;
+    if (etaIso && new Date(etaIso).getTime() < now) return false;
+    return true;
 });
 
 // ── Matching ─────────────────────────────────────────────────────────────

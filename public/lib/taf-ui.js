@@ -42,7 +42,8 @@
     return new Date(iso).toLocaleString('fr-FR', {
       day: '2-digit', month: '2-digit',
       hour: '2-digit', minute: '2-digit',
-    });
+      timeZone: 'UTC',
+    }) + 'Z';
   }
 
   function formatTta(tta) {

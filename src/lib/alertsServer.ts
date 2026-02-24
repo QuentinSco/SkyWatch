@@ -440,12 +440,12 @@ export async function fetchGDACS(): Promise<Alert[]> {
   }
   return alerts;
 }
-
 // ─── VAAC ─────────────────────────────────────────────────────────────────────
 // Volcanic Ash Advisory Centers — flux RSS ICAO
 // Couverture : Londres (EUR/AFR/ATL), Toulouse (ATL/AFR/EUR), Montréal (AMN/AMS),
 //              Anchorage (PAC/AMN), Tokyo (ASIE/PAC)
 // Note: Washington utilise désormais des fichiers IWXXM XML (voir fetchVAACWashington)
+// ✅ MODIF : Filtre "ash cloud extent" obligatoire — pas d'extent = pas d'alerte
 const VAAC_FEEDS = [
   {
     id: 'london',
@@ -476,6 +476,29 @@ const VAAC_FEEDS = [
 
 const VAAC_WASHINGTON_BASE = 'https://www.ospo.noaa.gov/products/atmosphere/vaac';
 const VAAC_WASHINGTON_ORIGIN = 'https://www.ospo.noaa.gov';
+
+// ✅ NOUVELLE FONCTION : Détecte si extent géographique présent
+function hasAshCloudExtent(text: string): boolean {
+  const extentPatterns = [
+    // Coordonnées multiples (polygon / bounding box)
+    /([NS])\s*\d+\.?\d*\s+[EW]\s*\d+\.?\d*\s+[NS]\s*\d+\.?\d*\s+[EW]\s*\d+\.?\d*/i,
+    // "extent N xx to N yy / E xx to E yy"
+    /extent.*?[0-9.-]+\s*[NS]\s+to\s+[0-9.-]+\s*[NS]/i,
+    // "NxxExx-NxxExx" compact
+    /[NS]\d{2,3}\s*[EW]\d{2,3}\s*[-–]\s*[NS]\d{2,3}\s*[EW]\d{2,3}/i,
+    // Polygon GML (IWXXM Washington)
+    /<gml:posList[^>]*>([\s\S]*?)<\/gml:posList>/i,
+    // Keywords explicites d'extent
+    /within\s+[0-9.-]+\s*km\s+of/i,
+    /bounded\s+by/i,
+    /box\s+from/i,
+    // Format IWXXM : ashCloudExtent présent
+    /ashCloudExtent/i,
+    // Coordonnées paires multiples (lat lon lat lon...)
+    /(-?\d+\.?\d+\s+-?\d+\.?\d+\s+){2,}/,
+  ];
+  return extentPatterns.some(pattern => pattern.test(text));
+}
 
 function vaacGetTag(xml: string, tag: string): string {
   const m = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
@@ -563,6 +586,12 @@ async function fetchVAACWashington(): Promise<Alert[]> {
       const res = xmlResults[i];
       if (res.status !== 'fulfilled') continue;
       const xml = res.value;
+
+      // ✅ FILTRAGE EXTENT — skip si pas d'extent géographique
+      if (!hasAshCloudExtent(xml)) {
+        console.debug('[VAAC Washington] skip (no ash cloud extent):', xmlLinks[i]);
+        continue;
+      }
 
       const volcanoRaw = iwxxmGetTag(xml, 'name');
       const volcanoName = volcanoRaw
@@ -679,6 +708,12 @@ export async function fetchVAAC(): Promise<Alert[]> {
       const link        = vaacGetTag(item, 'link') || feed.url;
       const combined    = `${title} ${description}`;
 
+      // ✅ FILTRAGE EXTENT — skip si pas d'extent géographique
+      if (!hasAshCloudExtent(combined)) {
+        console.debug(`[VAAC ${feed.id}] skip (no ash cloud extent)`);
+        continue;
+      }
+
       const volcanoMatch = combined.match(/VOLCANO[:\s]+([A-Z][A-Z\s\-']+?)(?:\s{2,}|\n|\/|PSN|FL|ERUPTION|SIGMET)/i);
       const volcanoName  = volcanoMatch ? volcanoMatch[1].trim() : 'Volcan inconnu';
 
@@ -745,6 +780,7 @@ export async function fetchVAAC(): Promise<Alert[]> {
     }
   }
 
+  console.log(`✅ VAAC avec extent : ${Array.from(deduped.values()).length} alerte(s) retenue(s)`);
   return Array.from(deduped.values());
 }
 

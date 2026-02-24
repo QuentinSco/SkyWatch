@@ -298,6 +298,19 @@
       </div>
     `;
 
+    container.insertAdjacentHTML('beforeend', `
+  <div class="text-xs text-gray-400 mt-2 flex items-center gap-2">
+    <span id="taf-vol-last-update"></span>
+    <button onclick="window._refreshVolRisks()"
+      class="text-blue-500 hover:text-blue-700 underline text-xs">
+      ↺ Actualiser
+    </button>
+  </div>
+`);
+
+document.getElementById('taf-vol-last-update').textContent =
+  `Mis à jour à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 15000);
@@ -357,6 +370,10 @@
   document.addEventListener('DOMContentLoaded', () => {
     loadTafRisks();
     loadTafVolRisks();
+  
+    // ⚠️ Budget API AF : 100 req/jour → 1 refresh max toutes les 20 min
+    setInterval(() => { loadTafVolRisks(); }, 20 * 60 * 1000);
+    setInterval(() => { loadTafRisks();    },  5 * 60 * 1000); // TAF = NOAA, pas limité
   });
 
 })();

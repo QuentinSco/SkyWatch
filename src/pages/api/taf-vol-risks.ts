@@ -19,7 +19,7 @@ export interface TafFlightHit {
   minutesBeforeThreatStart: number;
 }
 
-const CACHE_TTL = 2 * 60 * 60 * 1000;
+const CACHE_TTL = 20 * 60 * 1000;
 let cache: { ts: number; data: TafFlightHit[] } | null = null;
 
 const MAX_LEAD_MIN_BEFORE_THREAT = 120;

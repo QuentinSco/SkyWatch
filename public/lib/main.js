@@ -1,50 +1,264 @@
-import { renderRegion } from '/lib/render.js';
-import { initMap } from '/lib/map.js';
+// public/lib/main.js
 
-const REGIONS = ['AMN', 'AMS', 'EUR', 'AFR', 'ASIE'];
+// ── Constantes ─────────────────────────────────────────────────────────────────
+const SEVERITY_BADGE = {
+  red:    'bg-red-600 text-white',
+  orange: 'bg-orange-500 text-white',
+  yellow: 'bg-yellow-400 text-black',
+};
+const SEVERITY_LABEL = {
+  red:    '🔴 ROUGE',
+  orange: '🟠 ORANGE',
+  yellow: '🟡 JAUNE',
+};
+const SEVERITY_DOT = {
+  red:    '#dc2626',
+  orange: '#f97316',
+  yellow: '#eab308',
+};
+const SOURCE_ICON = {
+  GDACS:       '🌍',
+  NOAA:        '🌪',
+  MeteoAlarm:  '⚡',
+  VAAC:        '🌋',
+};
+const REGION_LABEL = {
+  EUR: 'Europe',
+  AMN: 'Amérique du Nord',
+  AMS: 'Amérique du Sud',
+  AFR: 'Afrique',
+  ASIE: 'Asie',
+  PAC: 'Pacifique',
+};
 
-document.addEventListener('click', (e) => {
-  const row = e.target.closest('tr[data-detail-id]');
-  if (!row) return;
-  const idx = row.dataset.detailId;
-  const detail = document.getElementById('detail-' + idx);
-  if (!detail) return;
-  detail.classList.toggle('hidden');
-  const chevron = row.querySelector('.chevron');
-  if (chevron) chevron.textContent = detail.classList.contains('hidden') ? '▼' : '▲';
-});
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function formatShortDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('fr-FR', {
+    day: '2-digit', month: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    timeZone: 'UTC',
+  }) + 'Z';
+}
 
-async function main() {
-  try {
-    const res = await fetch('/api/alerts');
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-    const all = await res.json();
+function timeWindowStatus(validTo) {
+  if (!validTo) return null;
+  const now  = Date.now();
+  const end  = new Date(validTo).getTime();
+  const diff = end - now;
+  if (diff < 0)          return { label: 'Expiré',       cls: 'text-gray-400' };
+  if (diff < 3600000)    return { label: '< 1h',          cls: 'text-red-500 font-bold' };
+  if (diff < 21600000)   return { label: '< 6h',          cls: 'text-orange-500 font-semibold' };
+  return null;
+}
 
-    const red    = all.filter(a => a.severity === 'red').length;
-    const orange = all.filter(a => a.severity === 'orange').length;
-    const yellow = all.filter(a => a.severity === 'yellow').length;
+function groupByRegion(alerts) {
+  return alerts.reduce((acc, a) => {
+    const r = a.region || 'AUTRE';
+    if (!acc[r]) acc[r] = [];
+    acc[r].push(a);
+    return acc;
+  }, {});
+}
 
-    document.getElementById('last-update').textContent =
-      `Dernière mise à jour : ${new Date().toLocaleString('fr-FR')}`;
+// ── Rendu ligne alerte ─────────────────────────────────────────────────────────
+function renderAlertRow(alert) {
+  const badge  = SEVERITY_BADGE[alert.severity] ?? 'bg-gray-200 text-gray-600';
+  const label  = SEVERITY_LABEL[alert.severity] ?? alert.severity.toUpperCase();
+  const status = timeWindowStatus(alert.validTo);
+  const icon   = SOURCE_ICON[alert.source] ?? '⚠️';
+  const airportsHtml = alert.airports?.length
+    ? alert.airports.map(a =>
+        `<span class="inline-block bg-blue-50 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5 text-[11px] font-mono font-semibold">${a}</span>`
+      ).join(' ')
+    : '<span class="text-gray-400">—</span>';
 
-    document.getElementById('counters').innerHTML = `
-      <span class="bg-red-500 text-white px-2 py-1 rounded-full text-xs font-semibold">${red} rouge${red > 1 ? 's' : ''}</span>
-      <span class="bg-orange-400 text-white px-2 py-1 rounded-full text-xs font-semibold">${orange} orange${orange > 1 ? 's' : ''}</span>
-      <span class="bg-yellow-400 text-gray-900 px-2 py-1 rounded-full text-xs font-semibold">${yellow} jaune${yellow > 1 ? 's' : ''}</span>
-    `;
+  return `
+    <tr class="border-b border-gray-100 hover:bg-blue-50/60 transition cursor-pointer"
+        onclick="this.nextElementSibling.classList.toggle('hidden')">
+      <td class="py-2 px-3 whitespace-nowrap">
+        <span class="${badge} inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase">
+          ${label}
+        </span>
+      </td>
+      <td class="py-2 px-3 text-sm font-medium text-gray-800">${icon} ${alert.phenomenon}</td>
+      <td class="py-2 px-3 text-sm text-gray-600">${alert.country}</td>
+      <td class="py-2 px-3">
+        <div class="flex flex-wrap gap-1">${airportsHtml}</div>
+      </td>
+      <td class="py-2 px-3 text-xs text-gray-500 whitespace-nowrap">
+        ${formatShortDate(alert.validFrom)}<br>
+        <span class="text-gray-400">→ ${formatShortDate(alert.validTo)}</span>
+        ${status ? `<span class="ml-1 ${status.cls}">${status.label}</span>` : ''}
+      </td>
+      <td class="py-2 px-3 text-xs text-gray-400 font-semibold">${alert.source}</td>
+      <td class="py-2 px-3 text-xs text-gray-600 max-w-xs truncate" title="${alert.headline}">
+        ${alert.headline.slice(0, 90)}${alert.headline.length > 90 ? '…' : ''}
+      </td>
+    </tr>
+    <tr class="hidden bg-gray-50">
+      <td colspan="7" class="px-6 py-3 text-xs text-gray-600">
+        <div class="flex flex-col gap-1">
+          ${alert.description ? `<p class="text-gray-700">${alert.description}</p>` : ''}
+          ${alert.link ? `<a href="${alert.link}" target="_blank" rel="noopener" class="text-blue-500 underline text-xs">→ Source officielle</a>` : ''}
+        </div>
+      </td>
+    </tr>
+  `;
+}
 
-    initMap(all);
+// ── Rendu section par région ───────────────────────────────────────────────────
+function renderRegionSection(region, alerts) {
+  const regionLabel = REGION_LABEL[region] ?? region;
+  const rows = alerts.map(renderAlertRow).join('');
+  return `
+    <div class="mb-8">
+      <div class="flex items-center gap-3 mb-3">
+        <h3 class="text-base font-bold text-gray-800">${regionLabel}</h3>
+        <span class="text-xs text-gray-400 font-medium">${alerts.length} alerte${alerts.length > 1 ? 's' : ''}</span>
+      </div>
+      <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+        <table class="w-full text-sm text-left text-gray-700 bg-white">
+          <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th class="py-2 px-3">Niveau</th>
+              <th class="py-2 px-3">Phénomène</th>
+              <th class="py-2 px-3">Pays / Zone</th>
+              <th class="py-2 px-3">Aéroports AF</th>
+              <th class="py-2 px-3">Fenêtre</th>
+              <th class="py-2 px-3">Source</th>
+              <th class="py-2 px-3">Résumé</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
 
-    document.getElementById('main-content').innerHTML =
-      REGIONS.map(r => renderRegion(r, all)).join('');
+// ── Carte Leaflet ──────────────────────────────────────────────────────────────
+let leafletMap = null;
+let markersLayer = null;
 
-  } catch (e) {
-    console.error('[Main]', e);
-    document.getElementById('main-content').innerHTML =
-      `<p class="text-red-500">Erreur de chargement : ${e.message}</p>`;
+function initMap() {
+  if (leafletMap) return;
+  if (!window.L) { console.warn('[main.js] Leaflet non disponible'); return; }
+  leafletMap = L.map('alert-map', { zoomControl: true }).setView([20, 10], 2);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 12,
+    attribution: '© OpenStreetMap contributors',
+  }).addTo(leafletMap);
+  markersLayer = L.layerGroup().addTo(leafletMap);
+}
+
+function updateMapMarkers(alerts) {
+  if (!leafletMap || !markersLayer) return;
+  markersLayer.clearLayers();
+  for (const alert of alerts) {
+    if (alert.lat == null || alert.lon == null) continue;
+    const color  = SEVERITY_DOT[alert.severity] ?? '#6b7280';
+    const marker = L.circleMarker([alert.lat, alert.lon], {
+      radius:      alert.severity === 'red' ? 10 : alert.severity === 'orange' ? 8 : 6,
+      color:       'white',
+      weight:      1.5,
+      fillColor:   color,
+      fillOpacity: 0.85,
+    });
+    marker.bindPopup(`
+      <div class="text-xs font-sans">
+        <div class="font-bold text-sm mb-1">${alert.phenomenon}</div>
+        <div class="text-gray-600 mb-1">${alert.country}</div>
+        <div class="font-semibold" style="color:${color}">${SEVERITY_LABEL[alert.severity] ?? alert.severity}</div>
+        <div class="text-gray-500 mt-1">${alert.headline.slice(0, 100)}${alert.headline.length > 100 ? '…' : ''}</div>
+        <div class="text-gray-400 mt-1">Source : ${alert.source}</div>
+        ${alert.airports?.length ? `<div class="mt-1">✈️ ${alert.airports.join(' · ')}</div>` : ''}
+      </div>
+    `);
+    markersLayer.addLayer(marker);
   }
 }
 
-main();
+// ── Chargement principal ───────────────────────────────────────────────────────
+async function loadAlerts() {
+  const mainEl     = document.getElementById('main-content');
+  const lastUpdate = document.getElementById('last-update');
+  const countersEl = document.getElementById('counters');
+
+  mainEl.innerHTML = `
+    <div class="flex items-center gap-3 text-gray-400 text-sm py-12 justify-center">
+      <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+      </svg>
+      Chargement des alertes mondiales…
+    </div>
+  `;
+
+  try {
+    const res = await fetch('/api/alerts');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const alerts = await res.json();
+
+    // Compteurs header
+    const redCount    = alerts.filter(a => a.severity === 'red').length;
+    const orangeCount = alerts.filter(a => a.severity === 'orange').length;
+    const yellowCount = alerts.filter(a => a.severity === 'yellow').length;
+    if (countersEl) {
+      countersEl.innerHTML = [
+        redCount    ? `<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-semibold">🔴 ${redCount}</span>` : '',
+        orangeCount ? `<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-semibold">🟠 ${orangeCount}</span>` : '',
+        yellowCount ? `<span class="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-xs font-semibold">🟡 ${yellowCount}</span>` : '',
+      ].join('');
+    }
+    if (lastUpdate) {
+      lastUpdate.textContent = 'Mis à jour : ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    // Carte
+    initMap();
+    updateMapMarkers(alerts);
+
+    // Contenu
+    if (alerts.length === 0) {
+      mainEl.innerHTML = `
+        <div class="text-center py-16 text-gray-400">
+          <div class="text-5xl mb-3">✅</div>
+          <div class="text-sm font-medium">Aucune alerte significative sur le réseau AF</div>
+        </div>
+      `;
+      return;
+    }
+
+    const byRegion = groupByRegion(alerts);
+    const regionOrder = ['EUR', 'AMN', 'AMS', 'AFR', 'ASIE', 'PAC'];
+    const ordered = [
+      ...regionOrder.filter(r => byRegion[r]),
+      ...Object.keys(byRegion).filter(r => !regionOrder.includes(r)),
+    ];
+
+    mainEl.innerHTML = `
+      <h2 class="text-xl font-bold text-gray-900 mb-6">
+        🌐 Alertes actives
+        <span class="text-sm font-normal text-gray-400 ml-2">${alerts.length} phénomène${alerts.length > 1 ? 's' : ''} détecté${alerts.length > 1 ? 's' : ''}</span>
+      </h2>
+      ${ordered.map(r => renderRegionSection(r, byRegion[r])).join('')}
+    `;
+
+  } catch (e) {
+    mainEl.innerHTML = `
+      <div class="bg-red-50 border border-red-200 rounded-xl p-5 text-red-700 text-sm">
+        ⚠️ Erreur lors du chargement des alertes : ${e.message}
+      </div>
+    `;
+    if (lastUpdate) lastUpdate.textContent = 'Erreur de chargement';
+  }
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  initMap();
+  loadAlerts();
+  // Rafraîchissement auto toutes les 5 min
+  setInterval(loadAlerts, 5 * 60 * 1000);
+});

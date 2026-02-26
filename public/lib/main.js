@@ -30,7 +30,6 @@
     PAC:  'Pacifique',
   };
 
-  // ✅ Clés alignées sur les valeurs françaises produites par le backend (alertsServer.ts)
   const PHENOMENON_EMOJI = {
     // GDACS
     'Cyclone tropical':      '🌀',
@@ -50,7 +49,7 @@
     'Froid extrême':         '❄️',
     'Inondation / Pluie':    '🌊',
     'Pluie intense':         '🌧',
-    // NOAA keywords (valeurs normalisées par alertsServer.ts)
+    // NOAA normalisés
     'Blizzard':              '❄️',
     'Hurricane':             '🌀',
     'Tornade':               '🌪',
@@ -93,15 +92,13 @@
 
   function phenomenonEmoji(phenomenon) {
     if (!phenomenon) return '⚠️';
-    // Correspondance exacte d'abord
     if (PHENOMENON_EMOJI[phenomenon]) return PHENOMENON_EMOJI[phenomenon];
-    // Sinon recherche par inclusion (ex: "Vent violent" contient "Vent")
     const match = Object.entries(PHENOMENON_EMOJI)
       .find(([k]) => phenomenon.toLowerCase().includes(k.toLowerCase()));
     return match ? match[1] : '⚠️';
   }
 
-  // ── Rendu ligne alerte ────────────────────────────────────────────────────────────
+  // ── Rendu ligne alerte ────────────────────────────────────────────────────────
   function renderAlertRow(alert) {
     const badge  = SEVERITY_BADGE[alert.severity] ?? 'bg-gray-200 text-gray-600';
     const label  = SEVERITY_LABEL[alert.severity] ?? alert.severity.toUpperCase();
@@ -147,7 +144,7 @@
     `;
   }
 
-  // ── Rendu section par région ──────────────────────────────────────────────────────
+  // ── Rendu section par région ──────────────────────────────────────────────────
   function renderRegionSection(region, alerts) {
     const regionLabel = REGION_LABEL[region] ?? region;
     const rows = alerts.map(renderAlertRow).join('');
@@ -177,7 +174,7 @@
     `;
   }
 
-  // ── Carte Leaflet ───────────────────────────────────────────────────────────────
+  // ── Carte Leaflet ─────────────────────────────────────────────────────────────
   let leafletMap    = null;
   let markersLayer  = null;
 
@@ -185,7 +182,6 @@
     if (leafletMap) return;
     if (!window.L) { console.warn('[main.js] Leaflet non disponible'); return; }
 
-    // ✅ Neutralise l'icône par défaut Leaflet (évite artefacts visuels sur divIcon)
     delete L.Icon.Default.prototype._getIconUrl;
     L.Icon.Default.mergeOptions({ iconRetinaUrl: '', iconUrl: '', shadowUrl: '' });
 
@@ -207,7 +203,6 @@
       const color = SEVERITY_DOT[alert.severity] ?? '#6b7280';
       const emoji = phenomenonEmoji(alert.phenomenon);
 
-      // Canvas → PNG → L.icon
       const canvas = document.createElement('canvas');
       canvas.width  = 36;
       canvas.height = 36;
@@ -248,7 +243,7 @@
     }
   }
 
-  // ── Chargement principal ─────────────────────────────────────────────────────────
+  // ── Chargement principal ──────────────────────────────────────────────────────
   async function loadAlerts() {
     const mainEl     = document.getElementById('main-content');
     const lastUpdate = document.getElementById('last-update');

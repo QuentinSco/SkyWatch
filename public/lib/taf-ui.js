@@ -21,10 +21,12 @@
     FUNNEL_CLOUD: '🌪',
   };
   const CI_LABEL = {
-    'TEMPO':  { text: 'TEMPO',    cls: 'bg-purple-100 text-purple-700 border border-purple-300' },
-    'BECMG':  { text: 'BECMG',    cls: 'bg-blue-100 text-blue-700 border border-blue-300' },
-    'PROB30': { text: 'PROB 30%', cls: 'bg-gray-100 text-gray-600 border border-gray-300' },
-    'PROB40': { text: 'PROB 40%', cls: 'bg-yellow-100 text-yellow-700 border border-yellow-300' },
+    'TEMPO':       { text: 'TEMPO',         cls: 'bg-purple-100 text-purple-700 border border-purple-300' },
+    'BECMG':       { text: 'BECMG',         cls: 'bg-blue-100 text-blue-700 border border-blue-300' },
+    'PROB30':      { text: 'PROB 30%',      cls: 'bg-gray-100 text-gray-600 border border-gray-300' },
+    'PROB40':      { text: 'PROB 40%',      cls: 'bg-yellow-100 text-yellow-700 border border-yellow-300' },
+    'PROB30 TEMPO':{ text: 'PROB 30% TEMPO',cls: 'bg-purple-50 text-purple-600 border border-purple-200' },
+    'PROB40 TEMPO':{ text: 'PROB 40% TEMPO',cls: 'bg-yellow-50 text-yellow-700 border border-yellow-200' },
   };
   const SEVERITY_ORDER = { red: 0, orange: 1, yellow: 2 };
 
@@ -59,18 +61,21 @@
   /**
    * Formate un TAF brut pour la lisibilité :
    * - Saut de ligne avant chaque groupe temporel : FM, TEMPO, BECMG, PROB30, PROB40, RMK
-   * - La première ligne (en-tête ICAO + validité) est conservée telle quelle
+   * - "PROB30 TEMPO" et "PROB40 TEMPO" restent sur la même ligne (traités comme un seul token)
    */
   function formatTafRaw(raw) {
     if (!raw) return '';
-    // Normalise les espaces multiples / retours existants en un seul espace
+    // 1. Normalise les espaces multiples / retours existants
     const flat = raw.trim().replace(/\s+/g, ' ');
-    // Insère \n avant chaque mot-clé de groupe temporel
-    // PROB30/PROB40 peuvent être suivis d'une fenêtre DDHH/DDHH — on les garde sur la même ligne
-    return flat.replace(
-      /\s+(FM\d{6}|TEMPO\b|BECMG\b|PROB\d{2}\b|RMK\b)/g,
-      '\n$1'
-    );
+    // 2. Insère \n avant les groupes temporels.
+    //    On traite PROB3x/PROB4x TEMPO en premier pour les coller ensemble,
+    //    puis les tokens simples restants.
+    return flat
+      // Priorité : PROB30 TEMPO et PROB40 TEMPO → un seul saut avant "PROB3x TEMPO"
+      .replace(/\s+(PROB(30|40)\s+TEMPO)\b/g, '\n$1')
+      // Ensuite : FM, BECMG, TEMPO standalone (non précédé de PROBxx),
+      //           PROB30/PROB40 standalone (non suivi de TEMPO), RMK
+      .replace(/\s+(FM\d{6}|BECMG\b|(?<!PROB(?:30|40) )TEMPO\b|PROB(30|40)(?!\s+TEMPO)\b|RMK\b)/g, '\n$1');
   }
 
   function lastUpdateBar() {

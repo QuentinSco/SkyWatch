@@ -47,7 +47,7 @@
   }
 
   function formatTta(tta) {
-    if (typeof tta !== 'number') return '—';
+    if (typeof tta !== 'number' || isNaN(tta)) return '—';
     const abs  = Math.abs(tta);
     const sign = tta > 0 ? 'T-' : 'T+';
     if (abs < 60) return sign + abs + 'min';
@@ -228,10 +228,12 @@
     const showCi = ci !== null;
     const etaIso = flight.estimatedArrival || flight.scheduledArrival;
     const etaStr = formatIsoToLocalShort(etaIso);
-    let tta = flight.timeToArrivalMinutes;
-    if (typeof tta !== 'number' && etaIso) {
-      tta = Math.round((new Date(etaIso).getTime() - Date.now()) / 60000);
-    }
+
+    // ✅ TTA toujours recalculé côté client depuis l'ETA ISO
+    // (flight.timeToArrivalMinutes est calculé au moment du fetch AF, potentiellement périmé)
+    const tta = etaIso
+      ? Math.round((new Date(etaIso).getTime() - Date.now()) / 60000)
+      : null;
     const ttaStr    = formatTta(tta);
     const windowStr = `${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}`;
 

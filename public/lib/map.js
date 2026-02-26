@@ -35,9 +35,7 @@ let mapInstance = null;
 
 function phenomenonEmoji(phenomenon) {
   if (!phenomenon) return '⚠️';
-  // Correspondance exacte d'abord
   if (PHENOMENON_EMOJI[phenomenon]) return PHENOMENON_EMOJI[phenomenon];
-  // Sinon recherche par inclusion (ex: "High Wind Warning" → 'Wind')
   const match = Object.entries(PHENOMENON_EMOJI)
     .find(([k]) => phenomenon.toLowerCase().includes(k.toLowerCase()));
   return match ? match[1] : '⚠️';
@@ -47,10 +45,10 @@ function makeCircleIcon(severity, phenomenon) {
   const color = SEVERITY_COLOR[severity] ?? '#6b7280';
   const emoji = phenomenonEmoji(phenomenon);
   return L.divIcon({
-    className:  'custom-emoji-marker',
-    iconSize:   [0, 0],   // ← conteneur Leaflet invisible = 0x0
-    iconAnchor: [0, 0],
-    popupAnchor:[0, -20],
+    className:   'custom-emoji-marker',
+    iconSize:    [0, 0],
+    iconAnchor:  [0, 0],
+    popupAnchor: [0, -20],
     html: `<div style="
       position:absolute;
       transform:translate(-50%,-50%);
@@ -66,7 +64,6 @@ function makeCircleIcon(severity, phenomenon) {
     ">${emoji}</div>`,
   });
 }
-
 
 function popupContent(a) {
   const severityLabel = { red: 'ROUGE', orange: 'ORANGE', yellow: 'JAUNE' }[a.severity] ?? a.severity;
@@ -93,6 +90,14 @@ function popupContent(a) {
 export function initMap(alerts) {
   if (!document.getElementById('alert-map')) return;
 
+  // ✅ Neutralise l'icône par défaut Leaflet (évite le "!" sur les divIcon custom)
+  delete L.Icon.Default.prototype._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: '',
+    iconUrl:       '',
+    shadowUrl:     '',
+  });
+
   if (!document.getElementById('emoji-marker-style')) {
     const style = document.createElement('style');
     style.id = 'emoji-marker-style';
@@ -106,6 +111,7 @@ export function initMap(alerts) {
     `;
     document.head.appendChild(style);
   }
+
   if (mapInstance) {
     mapInstance.remove();
     mapInstance = null;

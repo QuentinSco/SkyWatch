@@ -69,6 +69,7 @@ const AF_AIRPORTS = [
   { icao: 'KBOS', lat: 42.3656,  lon: -71.0096, iso3: 'USA', name: 'Boston' },
   { icao: 'KORD', lat: 41.9742,  lon: -87.9073, iso3: 'USA', name: 'Chicago' },
   { icao: 'KLAX', lat: 33.9425,  lon:-118.4081, iso3: 'USA', name: 'Los Angeles' },
+  { icao: 'KSFO', lat: 37.6213,  lon:-122.3790, iso3: 'USA', name: 'San Francisco' },
   { icao: 'KMIA', lat: 25.7959,  lon: -80.2870, iso3: 'USA', name: 'Miami' },
   { icao: 'KIAD', lat: 38.9531,  lon: -77.4565, iso3: 'USA', name: 'Washington Dulles' },
   { icao: 'KATL', lat: 33.6367,  lon: -84.4281, iso3: 'USA', name: 'Atlanta' },
@@ -144,6 +145,10 @@ function basinFromCoords(lat: number, lon: number): string {
 }
 
 // ─── NOAA ─────────────────────────────────────────────────────────────────────
+
+// Zones UGC → aéroports AF + coordonnées du centroïde de zone
+// Les coordonnées sont celles du centroïde géographique de chaque zone NWS,
+// ce qui permet de placer le marqueur correctement sur la carte.
 const NWS_ZONE_AIRPORTS: Record<string, string[]> = {
   NYZ063: ['KJFK', 'KEWR'], NYZ064: ['KJFK'], NYZ065: ['KJFK'],
   NYZ066: ['KJFK'], NYZ067: ['KJFK'], NYZ068: ['KJFK'],
@@ -164,9 +169,14 @@ const NWS_ZONE_AIRPORTS: Record<string, string[]> = {
   MAZ015: ['KBOS'], MAZ016: ['KBOS'],
   ILZ006: ['KORD'], ILZ012: ['KORD'], ILZ013: ['KORD'],
   ILZ014: ['KORD'], ILZ103: ['KORD'], ILZ104: ['KORD'],
-  CAZ006: ['KLAX'], CAZ041: ['KLAX'], CAZ042: ['KLAX'],
-  CAZ043: ['KLAX'], CAZ044: ['KLAX'], CAZ045: ['KLAX'],
-  CAZ087: ['KLAX'],
+  // Californie — LAX (Sud) et SFO (Nord)
+  CAZ006: ['KSFO'], CAZ007: ['KSFO'], CAZ008: ['KSFO'],
+  CAZ509: ['KSFO'], CAZ510: ['KSFO'], CAZ511: ['KSFO'],
+  CAZ512: ['KSFO'], CAZ513: ['KSFO'], CAZ514: ['KSFO'],
+  CAZ515: ['KSFO'], CAZ516: ['KSFO'], CAZ517: ['KSFO'],
+  CAZ518: ['KSFO'], CAZ519: ['KSFO'], CAZ520: ['KSFO'],
+  CAZ041: ['KLAX'], CAZ042: ['KLAX'], CAZ043: ['KLAX'],
+  CAZ044: ['KLAX'], CAZ045: ['KLAX'], CAZ087: ['KLAX'],
   FLZ063: ['KMIA'], FLZ066: ['KMIA'], FLZ068: ['KMIA'],
   FLZ069: ['KMIA'], FLZ072: ['KMIA'], FLZ073: ['KMIA'],
   FLZ074: ['KMIA'], FLZ075: ['KMIA'],
@@ -184,14 +194,31 @@ const NWS_ZONE_AIRPORTS: Record<string, string[]> = {
   ORZ006: ['KPDX'], ORZ007: ['KPDX'], ORZ008: ['KPDX'],
 };
 
-const RELEVANT_EVENTS = new Set([
-  'Blizzard Warning', 'Winter Storm Warning', 'Winter Storm Watch',
-  'Ice Storm Warning', 'Heavy Snow Warning', 'High Wind Warning', 'High Wind Watch',
-  'Hurricane Warning', 'Hurricane Watch', 'Tropical Storm Warning', 'Tropical Storm Watch',
-  'Tornado Warning', 'Tornado Watch', 'Dense Fog Advisory', 'Freezing Fog Advisory',
-  'Extreme Cold Warning', 'Wind Chill Warning', 'Dust Storm Warning',
-  'Flood Warning', 'Coastal Flood Warning',
-]);
+// Normalisation des événements NOAA en phénomènes français
+const NOAA_PHENOMENON_FR: Record<string, string> = {
+  'Blizzard Warning':           'Blizzard',
+  'Winter Storm Warning':       'Neige / Verglas',
+  'Winter Storm Watch':         'Neige / Verglas',
+  'Ice Storm Warning':          'Gel / Verglas',
+  'Heavy Snow Warning':         'Neige',
+  'High Wind Warning':          'Vent violent',
+  'High Wind Watch':            'Vent violent',
+  'Hurricane Warning':          'Hurricane',
+  'Hurricane Watch':            'Hurricane',
+  'Tropical Storm Warning':     'Cyclone tropical',
+  'Tropical Storm Watch':       'Cyclone tropical',
+  'Tornado Warning':            'Tornade',
+  'Tornado Watch':              'Tornade',
+  'Dense Fog Advisory':         'Brouillard',
+  'Freezing Fog Advisory':      'Brouillard',
+  'Extreme Cold Warning':       'Froid extrême',
+  'Wind Chill Warning':         'Froid extrême',
+  'Dust Storm Warning':         'Poussière / Sable',
+  'Flood Warning':              'Inondation',
+  'Coastal Flood Warning':      'Inondation / Pluie',
+};
+
+const RELEVANT_EVENTS = new Set(Object.keys(NOAA_PHENOMENON_FR));
 
 function noaaSeverity(event: string): Severity {
   const e = event.toLowerCase();
@@ -235,6 +262,7 @@ export async function fetchNOAA(): Promise<Alert[]> {
       const airports = [...airportSet];
       if (airports.length === 0) continue;
 
+      // Coordonnées : centroïde des aéroports impactés (plus précis que LAX par défaut)
       const airportCoords = airports
         .map(icao => AF_AIRPORTS.find(a => a.icao === icao))
         .filter((a): a is typeof AF_AIRPORTS[0] => a != null);
@@ -245,12 +273,15 @@ export async function fetchNOAA(): Promise<Alert[]> {
         ? airportCoords.reduce((s, a) => s + a.lon, 0) / airportCoords.length
         : undefined;
 
+      // Phénomène normalisé en français
+      const phenomenon = NOAA_PHENOMENON_FR[p.event] ?? p.event;
+
       raw.push({
         id: `NOAA-${p.id}`,
         source: 'NOAA',
         region: 'AMN',
         severity: noaaSeverity(p.event),
-        phenomenon: p.event,
+        phenomenon,
         country: 'United States',
         airports,
         ...(lat !== undefined ? { lat } : {}),
@@ -793,7 +824,7 @@ export async function fetchVAAC(): Promise<Alert[]> {
 
 // ─── MeteoAlarm ───────────────────────────────────────────────────────────────
 const AWT_LABEL: Record<number, string> = {
-  1: 'Vent violent', 2: 'Neige / Verglas', 3: 'Orages', 4: 'Brouillard',
+  1: 'Vent violent', 2: 'Neige / Verglas', 3: 'Orage', 4: 'Brouillard',
   5: 'Chaleur extrême', 6: 'Froid extrême', 7: 'Événement côtier',
   10: 'Pluie intense', 11: 'Inondation', 12: 'Inondation / Pluie',
 };

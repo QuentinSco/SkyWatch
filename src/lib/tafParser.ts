@@ -1,4 +1,4 @@
-// ─── TAF Parser ───────────────────────────────────────────────────────────────
+// ─── TAF Parser ─────────────────────────────────────────────────────────────────────────────────
 // Source : AviationWeather.gov API (100% gratuit, NOAA)
 import { redis } from './redis';
 
@@ -24,10 +24,7 @@ export interface TafRisk {
   threats: TafThreat[];
 }
 
-// ─── Réseau AF LC — IATA → ICAO ───────────────────────────────────────────────
-// NBJ : code IATA non résolu — exclu jusqu'à vérification
-// NLU (Felipe Ángeles) : ICAO MMSM — TAF parfois absent sur AWC
-// PIK (Glasgow Prestwick) : EGPK — vérifier si AF ou charter
+// ─── Réseau AF LC — IATA → ICAO ─────────────────────────────────────────────────────────────
 export const AF_IATA_TO_ICAO: Record<string, string> = {
   ABJ: 'DIAP', // Abidjan
   ABV: 'DNAA', // Abuja
@@ -73,7 +70,7 @@ export const AF_IATA_TO_ICAO: Record<string, string> = {
   JFK: 'KJFK', // New York JFK
   JIB: 'HDAM', // Djibouti
   JNB: 'FAOR', // Johannesburg
-  JRO: 'HTKJ', // Kilimandjaro
+  JRO: 'HTKJ', // Kilimandjarô
   KIX: 'RJBB', // Osaka Kansai
   LAS: 'KLAS', // Las Vegas
   LAX: 'KLAX', // Los Angeles
@@ -148,7 +145,7 @@ const AIRPORT_NAMES: Record<string, string> = {
   FACT: 'Le Cap',             MMUN: 'Cancún',
   VIDP: 'Delhi',              KDEN: 'Denver',
   KDFW: 'Dallas/Fort Worth',  FKKD: 'Douala',
-  GOBD: 'Dakar',              KDTW: 'Detroit',
+  GOBD: 'Dakar',              KDTW: 'Détroit',
   EIDW: 'Dublin',             OMDB: 'Dubaï',
   KEWR: 'Newark',             SAEZ: 'Buenos Aires',
   TFFF: 'Fort-de-France',     FZAA: 'Kinshasa',
@@ -159,7 +156,7 @@ const AIRPORT_NAMES: Record<string, string> = {
   KIAD: 'Washington Dulles',  KIAH: 'Houston',
   RKSI: 'Séoul Incheon',      KJFK: 'New York JFK',
   HDAM: 'Djibouti',           FAOR: 'Johannesburg',
-  HTKJ: 'Kilimandjaro',       RJBB: 'Osaka Kansai',
+  HTKJ: 'Kilimandjarô',       RJBB: 'Osaka Kansai',
   KLAS: 'Las Vegas',          KLAX: 'Los Angeles',
   FOOL: 'Libreville',         LFBT: 'Lourdes-Tarbes',
   DXXX: 'Lomé',               SPIM: 'Lima',
@@ -191,11 +188,40 @@ const AIRPORT_NAMES: Record<string, string> = {
 
 const SEVERITY_ORDER: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
 
-const SM_TO_M = 1609.344;
-function smToMeters(sm: number | string): number {
-  if (sm === '6+' || sm === 'P6SM') return 9999;
-  const raw = parseFloat(String(sm)) * SM_TO_M;
-  return Math.round(raw / 50) * 50;
+/**
+ * Converts a visibility value from the AWC JSON API to metres.
+ *
+ * AWC returns visib in two formats depending on the country :
+ *   • US TAFs  : statute miles as a decimal number or the string '6+' / 'P6SM'
+ *     e.g.  1.5  → ~2414m   |  0.25 → ~402m   |  '6+' → 9999m
+ *   • ICAO TAFs (non-US) : metres as a whole integer string
+ *     e.g.  '8000' → 8000m  |  '0200' → 200m   |  '9999' → 9999m
+ *
+ * Heuristic : if the numeric value is ≥ 800 AND there is no fractional part,
+ * treat it as metres directly.  Otherwise convert from SM.
+ *
+ * Edge-cases handled :
+ *   • '6+' / 'P6SM' (US) → 9999
+ *   • '9999' (ICAO max) → 9999
+ *   • null / undefined / '' → null  (caller must check)
+ */
+function visMtoMeters(raw: string | number | null | undefined): number | null {
+  if (raw == null || raw === '') return null;
+  const s = String(raw).trim();
+  if (s === '6+' || s.toUpperCase() === 'P6SM' || s === '9999') return 9999;
+
+  const n = parseFloat(s);
+  if (isNaN(n)) return null;
+
+  // — ICAO format (metres) : entier ≥ 800
+  // Les valeurs ICAO courantes : 0100 0200 0400 0500 0600 0800 1000 1500 2000
+  //   3000 4000 5000 6000 7000 8000 9000 9999
+  // Une valeur SM avec partie décimale ou < 10 ne peut PAS être ≥ 800 sans être en mètres.
+  if (Number.isInteger(n) && n >= 800) return n;   // déjà en mètres
+
+  // — US format (statute miles → mètres)
+  const SM_TO_M = 1609.344;
+  return Math.round((n * SM_TO_M) / 50) * 50;
 }
 
 function getAirportName(icao: string): string {
@@ -206,6 +232,21 @@ function getIata(icao: string): string {
   return ICAO_TO_IATA[icao] ?? icao;
 }
 
+/**
+ * Indique si le groupe de changement FOURNIT EXPLICITEMENT une visibilité.
+ * L'API AWC hérite parfois visib du groupe parent même quand le groupe
+ * de changement (BECMG/TEMPO) ne la mentionne pas. On vérifie donc que
+ * la valeur est bien présente dans le snippet brut du groupe.
+ */
+function groupHasExplicitVisib(fcst: any): boolean {
+  const raw: string = (fcst.rawFcst ?? fcst.fcstStr ?? '').toString();
+  if (!raw) return true; // pas de brut disponible → on fait confiance à l'API
+  // Le groupe brut doit contenir un token de visibilité :
+  // ICAO : 4 chiffres (0200, 8000, 9999) ou P6SM / 6+
+  // US   : fraction (1/4SM, 1/2SM), entier+SM (1SM, 2SM), ou P6SM
+  return /\b(\d{4}|P6SM|\d+\/\d+SM|\d+SM)\b/.test(raw);
+}
+
 function buildSnippet(fcst: any): string {
   const wdir  = fcst.wdir != null ? String(fcst.wdir).padStart(3, '0') : 'VRB';
   const wspd  = fcst.wspd != null ? String(fcst.wspd).padStart(2, '0') : null;
@@ -213,7 +254,8 @@ function buildSnippet(fcst: any): string {
   const windStr = wspd ? `${wdir}${wspd}${wgst}KT` : '';
   const wxStr   = fcst.wxString ?? '';
   const visRaw  = fcst.visib;
-  const visStr  = visRaw && visRaw !== '6+' ? `VIS ${smToMeters(visRaw)}m` : '';
+  const visM    = visMtoMeters(visRaw);
+  const visStr  = (visM !== null && visM !== 9999) ? `VIS ${visM}m` : '';
   const cbStr   = fcst.clouds
     ?.filter((c: any) => c.type === 'CB' || c.type === 'TCU')
     .map((c: any) => `${c.cover}${c.base}${c.type}`)
@@ -232,6 +274,7 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
   const snippet = buildSnippet(fcst);
   const ci = formatChangeIndicator(changeIndicator);
 
+  // ── Orage
   if (wxString && /\bTSRA*/.test(wxString)) {
     threats.push({
       type: 'THUNDERSTORM', label: 'Orage', value: wxString,
@@ -240,6 +283,7 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
     });
   }
 
+  // ── Trombe
   if (wxString && /\bFC\b/.test(wxString)) {
     threats.push({
       type: 'FUNNEL_CLOUD', label: 'Trombe / Tornade', value: 'FC',
@@ -248,6 +292,7 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
     });
   }
 
+  // ── Neige
   if (wxString && /\bSN\b|\bBLSN\b|\bSNGR\b/.test(wxString)) {
     const heavy = /\+SN|\+RASN|BLSN/.test(wxString);
     threats.push({
@@ -257,6 +302,7 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
     });
   }
 
+  // ── Précip. verlaçantes
   if (wxString && /\bFZRA\b|\bFZDZ\b|\bFZFG\b/.test(wxString)) {
     threats.push({
       type: 'FREEZING', label: 'Précip. verglaçantes', value: wxString,
@@ -265,6 +311,7 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
     });
   }
 
+  // ── Grêle
   if (wxString && /\bGR\b|\bGS\b/.test(wxString)) {
     threats.push({
       type: 'HAIL', label: 'Grêle', value: wxString,
@@ -273,6 +320,7 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
     });
   }
 
+  // ── Vent fort
   if (wspd != null || wgst != null) {
     const maxWind = Math.max(wspd ?? 0, wgst ?? 0);
     if (maxWind >= 30) {
@@ -288,10 +336,15 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
     }
   }
 
-  // ✅ Visibilité en mètres — ORANGE < 1000m / RED < 400m
+  // ── Visibilité réduite — ORANGE < 1000m / RED < 400m
+  //
+  // Garde-fous :
+  //   1. visMtoMeters() distingue mètres ICAO (valeur entière ≥ 800) et SM (US)
+  //   2. groupHasExplicitVisib() évite de déclencher une alerte sur une visib
+  //      héritée d'un groupe parent quand le groupe courant ne la mentionne pas
   if (visib != null && visib !== '6+') {
-    const visM = smToMeters(visib);
-    if (visM < 1000) {
+    const visM = visMtoMeters(visib);
+    if (visM !== null && visM < 1000 && groupHasExplicitVisib(fcst)) {
       threats.push({
         type: 'LOW_VIS',
         label: `Visibilité ${visM}m`,
@@ -303,7 +356,7 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
     }
   }
 
-  // ✅ CB / TCU base < 200ft uniquement
+  // ── CB / TCU base < 200ft uniquement
   if (Array.isArray(clouds)) {
     for (const cloud of clouds) {
       if ((cloud.type === 'CB' || cloud.type === 'TCU') && cloud.base != null && cloud.base < 200) {
@@ -356,12 +409,12 @@ export function parseTafToRisks(tafData: any[]): TafRisk[] {
   return risks.sort((a, b) => SEVERITY_ORDER[a.worstSeverity] - SEVERITY_ORDER[b.worstSeverity]);
 }
 
-// ─── Cache Redis ──────────────────────────────────────────────────────────────
+// ─── Cache Redis ─────────────────────────────────────────────────────────────────────────────────
 const KV_KEY_TAF     = 'taf_risks_cache';
 const KV_TTL_TAF_SEC = 30 * 60; // 30 min — TAF valide ~6h, refresh 30 min suffisant
 
 export async function fetchTafRisks(): Promise<TafRisk[]> {
-  // ── 1. Cache Redis — hit → retour immédiat, 0 requête AWC ─────────────────
+  // ── 1. Cache Redis — hit → retour immédiat ────────────────────────────────────────
   if (redis) {
     try {
       const cached = await redis.get<TafRisk[]>(KV_KEY_TAF);
@@ -374,7 +427,7 @@ export async function fetchTafRisks(): Promise<TafRisk[]> {
     }
   }
 
-  // ── 2. Fetch AWC en chunks de 20 ──────────────────────────────────────────
+  // ── 2. Fetch AWC en chunks de 20 ─────────────────────────────────────────────────
   const CHUNK_SIZE = 20;
   const chunks: string[][] = [];
   for (let i = 0; i < AF_AIRPORT_ICAOS.length; i += CHUNK_SIZE) {
@@ -409,7 +462,7 @@ export async function fetchTafRisks(): Promise<TafRisk[]> {
 
   const risks = parseTafToRisks(allTafs);
 
-  // ── 3. Stockage Redis ─────────────────────────────────────────────────────
+  // ── 3. Stockage Redis ──────────────────────────────────────────────────────────────
   if (redis && risks.length > 0) {
     try {
       await redis.set(KV_KEY_TAF, risks, { ex: KV_TTL_TAF_SEC });

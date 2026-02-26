@@ -1,5 +1,6 @@
 // ─── TAF Parser ───────────────────────────────────────────────────────────────
 // Source : AviationWeather.gov API (100% gratuit, NOAA)
+import { redis } from './redis';
 
 export type ThreatSeverity = 'red' | 'orange' | 'yellow';
 
@@ -162,7 +163,7 @@ const AIRPORT_NAMES: Record<string, string> = {
   KLAS: 'Las Vegas',          KLAX: 'Los Angeles',
   FOOL: 'Libreville',         LFBT: 'Lourdes-Tarbes',
   DXXX: 'Lomé',               SPIM: 'Lima',
-  FNBJ: 'Lunada',
+  FNBJ: 'Luanda',
   DNMM: 'Lagos',              KMCO: 'Orlando',
   MMMX: 'Mexico City (MEX)',  KMIA: 'Miami',
   RPLL: 'Manille',            FIMP: 'Maurice',
@@ -355,7 +356,25 @@ export function parseTafToRisks(tafData: any[]): TafRisk[] {
   return risks.sort((a, b) => SEVERITY_ORDER[a.worstSeverity] - SEVERITY_ORDER[b.worstSeverity]);
 }
 
+// ─── Cache Redis ──────────────────────────────────────────────────────────────
+const KV_KEY_TAF     = 'taf_risks_cache';
+const KV_TTL_TAF_SEC = 30 * 60; // 30 min — TAF valide ~6h, refresh 30 min suffisant
+
 export async function fetchTafRisks(): Promise<TafRisk[]> {
+  // ── 1. Cache Redis — hit → retour immédiat, 0 requête AWC ─────────────────
+  if (redis) {
+    try {
+      const cached = await redis.get<TafRisk[]>(KV_KEY_TAF);
+      if (cached && cached.length > 0) {
+        console.log(`[TAF] Cache KV HIT — ${cached.length} aéroports avec risques`);
+        return cached;
+      }
+    } catch (e) {
+      console.warn('[TAF] KV read error:', e);
+    }
+  }
+
+  // ── 2. Fetch AWC en chunks de 20 ──────────────────────────────────────────
   const CHUNK_SIZE = 20;
   const chunks: string[][] = [];
   for (let i = 0; i < AF_AIRPORT_ICAOS.length; i += CHUNK_SIZE) {
@@ -387,5 +406,18 @@ export async function fetchTafRisks(): Promise<TafRisk[]> {
   }
 
   console.log(`[TAF] ${allTafs.length} TAFs récupérés sur ${AF_AIRPORT_ICAOS.length} demandés`);
-  return parseTafToRisks(allTafs);
+
+  const risks = parseTafToRisks(allTafs);
+
+  // ── 3. Stockage Redis ─────────────────────────────────────────────────────
+  if (redis && risks.length > 0) {
+    try {
+      await redis.set(KV_KEY_TAF, risks, { ex: KV_TTL_TAF_SEC });
+      console.log(`[TAF] ${risks.length} risques stockés en KV (TTL ${KV_TTL_TAF_SEC}s)`);
+    } catch (e) {
+      console.warn('[TAF] KV write error:', e);
+    }
+  }
+
+  return risks;
 }

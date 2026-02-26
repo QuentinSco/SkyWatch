@@ -56,6 +56,23 @@
     return sign + h + 'h' + (min > 0 ? String(min).padStart(2, '0') + 'min' : '');
   }
 
+  /**
+   * Formate un TAF brut pour la lisibilité :
+   * - Saut de ligne avant chaque groupe temporel : FM, TEMPO, BECMG, PROB30, PROB40, RMK
+   * - La première ligne (en-tête ICAO + validité) est conservée telle quelle
+   */
+  function formatTafRaw(raw) {
+    if (!raw) return '';
+    // Normalise les espaces multiples / retours existants en un seul espace
+    const flat = raw.trim().replace(/\s+/g, ' ');
+    // Insère \n avant chaque mot-clé de groupe temporel
+    // PROB30/PROB40 peuvent être suivis d'une fenêtre DDHH/DDHH — on les garde sur la même ligne
+    return flat.replace(
+      /\s+(FM\d{6}|TEMPO\b|BECMG\b|PROB\d{2}\b|RMK\b)/g,
+      '\n$1'
+    );
+  }
+
   function lastUpdateBar() {
     return `
       <div class="text-xs text-gray-400 mt-2 flex items-center gap-2">
@@ -71,7 +88,7 @@
       ?.addEventListener('click', loadTafVolRisks);
   }
 
-  // ── TAF : badge menace ───────────────────────────────────────────────────────────
+  // ── TAF : badge menace ────────────────────────────────────────────────────────
   function renderThreatBadge(threat) {
     const icon   = THREAT_ICONS[threat.type] ?? '⚠️';
     const badge  = SEVERITY_BADGE[threat.severity];
@@ -90,7 +107,7 @@
       </div>`;
   }
 
-  // ── TAF : ligne tableau ─────────────────────────────────────────────────────
+  // ── TAF : ligne tableau ───────────────────────────────────────────────────────
   function renderTafRiskCard(risk) {
     const badgeCls    = SEVERITY_BADGE[risk.worstSeverity];
     const threatsHtml = risk.threats.map(t => `
@@ -126,12 +143,12 @@
         <td colspan="5" class="px-6 py-3">
           <div class="text-xs font-semibold text-gray-500 uppercase mb-2">Détail des menaces</div>
           ${threatsHtml}
-          <div class="mt-3 font-mono text-xs bg-white border border-gray-200 rounded px-2 py-1 text-gray-600" style="white-space:pre">${risk.rawTaf.trim()}</div>
+          <div class="mt-3 font-mono text-xs bg-white border border-gray-200 rounded px-2 py-1 text-gray-600" style="white-space:pre-wrap;word-break:break-word">${formatTafRaw(risk.rawTaf)}</div>
         </td>
       </tr>`;
   }
 
-  // ── TAF : chargement section ─────────────────────────────────────────────────────
+  // ── TAF : chargement section ──────────────────────────────────────────────────
   async function loadTafRisks() {
     const container  = document.getElementById('taf-main');
     const countersEl = document.getElementById('taf-counters');
@@ -199,8 +216,7 @@
     }
   }
 
-  // ── Vols AF : rendu détail expandé ───────────────────────────────────────────────
-  // Identifiant unique par ligne pour les toggles
+  // ── Vols AF : rendu ligne ─────────────────────────────────────────────────────
   let _rowIdx = 0;
 
   function renderTafVolRow(hit) {
@@ -218,7 +234,6 @@
 
     const rowId = 'vol-row-' + (_rowIdx++);
 
-    // Autres menaces TAF (hors la menace principale du vol)
     const otherThreats = taf.threats.filter(t =>
       !(t.type === threat.type &&
         t.periodStart === threat.periodStart &&
@@ -299,7 +314,7 @@
                 })(this); event.stopPropagation();">
                 ▶ Afficher TAF complet
               </button>
-              <div class="taf-raw-block hidden mt-2 font-mono bg-white border border-gray-200 rounded-lg px-2 py-1 text-gray-600 text-[11px]" style="white-space:pre">${taf.rawTaf.trim()}</div>
+              <div class="taf-raw-block hidden mt-2 font-mono bg-white border border-gray-200 rounded-lg px-2 py-1 text-gray-600 text-[11px]" style="white-space:pre-wrap;word-break:break-word">${formatTafRaw(taf.rawTaf)}</div>
             </div>
 
           </div>
@@ -307,9 +322,9 @@
       </tr>`;
   }
 
-  // ── Vols AF : chargement section ─────────────────────────────────────────────────
+  // ── Vols AF : chargement section ──────────────────────────────────────────────
   async function loadTafVolRisks() {
-    _rowIdx = 0; // reset idx à chaque reload
+    _rowIdx = 0;
     const container  = document.getElementById('taf-vol-main');
     const countersEl = document.getElementById('taf-vol-counters');
     if (!container) { console.error('[taf-ui] #taf-vol-main introuvable'); return; }
@@ -382,7 +397,7 @@
     }
   }
 
-  // ── Init ─────────────────────────────────────────────────────────────────────
+  // ── Init ──────────────────────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
     loadTafRisks();
     loadTafVolRisks();

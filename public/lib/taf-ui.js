@@ -63,8 +63,7 @@
         <button id="btn-refresh-vol" class="text-blue-500 hover:text-blue-700 underline text-xs">
           ↺ Actualiser
         </button>
-      </div>
-    `;
+      </div>`;
   }
 
   function bindRefreshBtn() {
@@ -72,44 +71,36 @@
       ?.addEventListener('click', loadTafVolRisks);
   }
 
-  // ── TAF : badge menace ────────────────────────────────────────────────────────
+  // ── TAF : badge menace ───────────────────────────────────────────────────────────
   function renderThreatBadge(threat) {
     const icon   = THREAT_ICONS[threat.type] ?? '⚠️';
     const badge  = SEVERITY_BADGE[threat.severity];
     const ci     = CI_LABEL[threat.changeIndicator] ?? null;
-    const showCi = ci !== null;
     return `
       <div class="flex flex-col gap-1 text-xs">
-        <div class="flex items-center gap-2 font-mono font-semibold bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-1 w-fit text-xs">
+        <div class="flex items-center gap-2 font-mono font-semibold bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-1 w-fit">
           🕐 ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
-          ${showCi ? `<span class="${ci.cls} px-1.5 py-0.5 rounded font-semibold">${ci.text}</span>` : ''}
+          ${ci ? `<span class="${ci.cls} px-1.5 py-0.5 rounded font-semibold">${ci.text}</span>` : ''}
         </div>
         <div class="flex items-center flex-wrap gap-2">
           <span class="${badge} px-2 py-0.5 rounded font-bold whitespace-nowrap">${icon} ${threat.label}</span>
           <span class="text-gray-500 font-mono">${threat.value ?? ''}</span>
         </div>
-        <div class="font-mono bg-white border border-gray-100 rounded px-2 py-1 text-gray-600 truncate" title="${threat.snippet}">
-          ${threat.snippet}
-        </div>
-      </div>
-    `;
+        <div class="font-mono bg-white border border-gray-100 rounded px-2 py-1 text-gray-600">${threat.snippet.trim()}</div>
+      </div>`;
   }
 
-  // ── TAF : ligne tableau ───────────────────────────────────────────────────────
+  // ── TAF : ligne tableau ─────────────────────────────────────────────────────
   function renderTafRiskCard(risk) {
     const badgeCls    = SEVERITY_BADGE[risk.worstSeverity];
     const threatsHtml = risk.threats.map(t => `
-      <div class="mb-2 pb-2 border-b border-gray-100 last:border-0">
-        ${renderThreatBadge(t)}
-      </div>
-    `).join('');
+      <div class="mb-2 pb-2 border-b border-gray-100 last:border-0">${renderThreatBadge(t)}</div>`
+    ).join('');
     return `
       <tr class="border-b border-gray-100 hover:bg-blue-50 transition cursor-pointer"
           onclick="this.nextElementSibling.classList.toggle('hidden')">
         <td class="py-2 px-4">
-          <span class="${badgeCls} inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase">
-            ${SEVERITY_LABEL[risk.worstSeverity]}
-          </span>
+          <span class="${badgeCls} inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase">${SEVERITY_LABEL[risk.worstSeverity]}</span>
         </td>
         <td class="py-2 px-4 font-mono font-bold text-gray-800">${risk.icao}</td>
         <td class="py-2 px-4 text-gray-600">${risk.name}</td>
@@ -117,9 +108,7 @@
           <div class="flex flex-wrap gap-1">
             ${Object.values(
               risk.threats.reduce((acc, t) => {
-                if (!acc[t.type] || SEVERITY_ORDER[t.severity] < SEVERITY_ORDER[acc[t.type].severity]) {
-                  acc[t.type] = t;
-                }
+                if (!acc[t.type] || SEVERITY_ORDER[t.severity] < SEVERITY_ORDER[acc[t.type].severity]) acc[t.type] = t;
                 return acc;
               }, {})
             ).map(t => {
@@ -137,15 +126,12 @@
         <td colspan="5" class="px-6 py-3">
           <div class="text-xs font-semibold text-gray-500 uppercase mb-2">Détail des menaces</div>
           ${threatsHtml}
-          <div class="mt-3 font-mono text-xs bg-white border border-gray-200 rounded p-2 text-gray-600 whitespace-pre-wrap break-all">
-            ${risk.rawTaf}
-          </div>
+          <div class="mt-3 font-mono text-xs bg-white border border-gray-200 rounded px-2 py-1 text-gray-600" style="white-space:pre">${risk.rawTaf.trim()}</div>
         </td>
-      </tr>
-    `;
+      </tr>`;
   }
 
-  // ── TAF : chargement section ──────────────────────────────────────────────────
+  // ── TAF : chargement section ─────────────────────────────────────────────────────
   async function loadTafRisks() {
     const container  = document.getElementById('taf-main');
     const countersEl = document.getElementById('taf-counters');
@@ -158,8 +144,7 @@
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
         </svg>
         Chargement des TAFs sur le réseau AF…
-      </div>
-    `;
+      </div>`;
 
     try {
       const controller = new AbortController();
@@ -183,8 +168,7 @@
           <div class="text-center py-12 text-gray-400">
             <div class="text-4xl mb-2">✅</div>
             <div class="text-sm font-medium">Aucun phénomène significatif sur le réseau AF</div>
-          </div>
-        `;
+          </div>`;
         return;
       }
 
@@ -205,19 +189,20 @@
             </thead>
             <tbody>${risks.map(renderTafRiskCard).join('')}</tbody>
           </table>
-        </div>
-      `;
+        </div>`;
     } catch (e) {
       const msg = e.name === 'AbortError' ? 'Timeout — API trop lente (>15s)' : e.message;
       container.innerHTML = `
         <div class="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
           ⚠️ Erreur lors du chargement des TAFs : ${msg}
-        </div>
-      `;
+        </div>`;
     }
   }
 
-  // ── Vols AF : rendu ligne ─────────────────────────────────────────────────────
+  // ── Vols AF : rendu détail expandé ───────────────────────────────────────────────
+  // Identifiant unique par ligne pour les toggles
+  let _rowIdx = 0;
+
   function renderTafVolRow(hit) {
     const threat = hit.threat;
     const flight = hit.flight;
@@ -225,83 +210,106 @@
     const icon   = THREAT_ICONS[threat.type] ?? '⚠️';
     const badge  = SEVERITY_BADGE[threat.severity];
     const ci     = CI_LABEL[threat.changeIndicator] ?? null;
-    const showCi = ci !== null;
     const etaIso = flight.estimatedArrival || flight.scheduledArrival;
     const etaStr = formatIsoToLocalShort(etaIso);
-
-    // ✅ TTA toujours recalculé côté client depuis l'ETA ISO
-    // (flight.timeToArrivalMinutes est calculé au moment du fetch AF, potentiellement périmé)
-    const tta = etaIso
-      ? Math.round((new Date(etaIso).getTime() - Date.now()) / 60000)
-      : null;
-    const ttaStr    = formatTta(tta);
+    const tta    = etaIso ? Math.round((new Date(etaIso).getTime() - Date.now()) / 60000) : null;
+    const ttaStr = formatTta(tta);
     const windowStr = `${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}`;
 
-    const threatsHtml = taf.threats.map(t => `
-      <div class="mb-2 pb-2 border-b border-gray-100 last:border-0">
-        ${renderThreatBadge(t)}
-      </div>
-    `).join('');
+    const rowId = 'vol-row-' + (_rowIdx++);
+
+    // Autres menaces TAF (hors la menace principale du vol)
+    const otherThreats = taf.threats.filter(t =>
+      !(t.type === threat.type &&
+        t.periodStart === threat.periodStart &&
+        t.periodEnd   === threat.periodEnd)
+    );
+    const otherThreatsHtml = otherThreats.length
+      ? otherThreats.map(t => `<div class="mb-2 pb-2 border-b border-gray-100 last:border-0">${renderThreatBadge(t)}</div>`).join('')
+      : '<span class="text-gray-400">Aucune autre menace détectée sur ce TAF.</span>';
 
     return `
       <tr class="border-b border-gray-100 hover:bg-blue-50/70 transition cursor-pointer"
-          onclick="this.nextElementSibling.classList.toggle('hidden')">
+          onclick="document.getElementById('${rowId}').classList.toggle('hidden')">
         <td class="py-2 px-3">
-          <span class="${badge} px-2 py-0.5 rounded text-xs font-bold uppercase">
-            ${SEVERITY_LABEL[threat.severity]}
-          </span>
+          <span class="${badge} px-2 py-0.5 rounded text-xs font-bold uppercase">${SEVERITY_LABEL[threat.severity]}</span>
         </td>
         <td class="py-2 px-3 font-mono font-semibold text-gray-800">AF${flight.flightNumber}</td>
         <td class="py-2 px-3 text-xs text-gray-500">
           ${flight.registration ?? '—'}
           <span class="ml-1 text-gray-400">${flight.aircraftType ?? ''}</span>
         </td>
-        <td class="py-2 px-3 text-sm text-gray-800">
-          ${taf.iata} (${taf.icao}) — ${taf.name}
-        </td>
+        <td class="py-2 px-3 text-sm text-gray-800">${taf.iata} (${taf.icao}) — ${taf.name}</td>
         <td class="py-2 px-3 text-xs text-gray-700">${icon} ${threat.label}</td>
         <td class="py-2 px-3 text-xs font-mono text-gray-700 whitespace-nowrap">
           <div class="font-semibold text-gray-800">${windowStr}</div>
-          ${showCi ? `<span class="${ci.cls} inline-block mt-1 px-1.5 py-0.5 rounded text-[11px] font-semibold">${ci.text}</span>` : ''}
+          ${ci ? `<span class="${ci.cls} inline-block mt-1 px-1.5 py-0.5 rounded text-[11px] font-semibold">${ci.text}</span>` : ''}
         </td>
         <td class="py-2 px-3 text-xs text-gray-500 whitespace-nowrap">
           ${etaStr}
           <div class="text-[10px] text-gray-400">${ttaStr}</div>
         </td>
       </tr>
-      <tr class="hidden bg-gray-50">
-        <td colspan="7" class="px-6 py-3">
-          <div class="flex flex-col gap-2 text-xs">
-            <div>
-              <div class="font-semibold text-gray-600 mb-1">Groupe TAF concerné</div>
-              <div class="flex items-center gap-2 mb-1">
+      <tr id="${rowId}" class="hidden bg-gray-50">
+        <td colspan="7" class="px-5 py-3">
+          <div class="flex flex-col gap-3 text-xs">
+
+            <!-- ✅ PRIORITÉ : Fenêtre d'arrivée du vol -->
+            <div class="bg-white border border-gray-200 rounded-lg px-3 py-2">
+              <div class="flex items-center gap-3 flex-wrap mb-2">
+                <span class="${badge} px-2 py-0.5 rounded font-bold text-xs">${icon} ${threat.label}</span>
                 <span class="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 font-mono font-semibold text-xs px-2 py-1 rounded">
-                  🕐 ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
+                  🕐 ${windowStr}
+                  ${ci ? `<span class="${ci.cls} ml-1 px-1.5 py-0.5 rounded font-semibold">${ci.text}</span>` : ''}
                 </span>
-                ${showCi ? `<span class="${ci.cls} px-1.5 py-0.5 rounded text-[11px] font-semibold">${ci.text}</span>` : ''}
+                <span class="text-gray-500">ETA <strong>${etaStr}</strong></span>
+                <span class="font-semibold ${tta !== null && tta > 0 ? 'text-orange-600' : 'text-green-600'}">${ttaStr}</span>
               </div>
-              <div class="font-mono bg-white border border-gray-200 rounded px-2 py-1 text-gray-700 whitespace-pre-wrap">
-                ${threat.snippet}
-              </div>
+              <div class="font-mono bg-gray-50 border border-gray-100 rounded px-2 py-1 text-gray-700">${threat.snippet.trim()}</div>
             </div>
+
+            <!-- Autres menaces : toggle -->
             <div>
-              <div class="font-semibold text-gray-600 mb-1">Toutes les menaces sur ${taf.iata}</div>
-              ${threatsHtml}
-            </div>
-            <div>
-              <div class="font-semibold text-gray-600 mb-1">TAF complet</div>
-              <div class="font-mono bg-white border border-gray-200 rounded px-2 py-1 text-gray-600 text-[11px] whitespace-pre-wrap break-all">
-                ${taf.rawTaf}
+              <button
+                class="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1"
+                onclick="(function(btn){
+                  var el = btn.closest('.flex.flex-col').querySelector('.other-threats-block');
+                  el.classList.toggle('hidden');
+                  btn.textContent = el.classList.contains('hidden')
+                    ? '▶ Autres menaces sur ${taf.iata} (${otherThreats.length})'
+                    : '▼ Masquer les autres menaces';
+                })(this); event.stopPropagation();">
+                ▶ Autres menaces sur ${taf.iata} (${otherThreats.length})
+              </button>
+              <div class="other-threats-block hidden mt-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                ${otherThreatsHtml}
               </div>
             </div>
+
+            <!-- TAF complet : toggle -->
+            <div>
+              <button
+                class="text-xs text-gray-500 hover:text-gray-700 font-semibold flex items-center gap-1"
+                onclick="(function(btn){
+                  var el = btn.closest('.flex.flex-col').querySelector('.taf-raw-block');
+                  el.classList.toggle('hidden');
+                  btn.textContent = el.classList.contains('hidden')
+                    ? '▶ Afficher TAF complet'
+                    : '▼ Masquer TAF complet';
+                })(this); event.stopPropagation();">
+                ▶ Afficher TAF complet
+              </button>
+              <div class="taf-raw-block hidden mt-2 font-mono bg-white border border-gray-200 rounded-lg px-2 py-1 text-gray-600 text-[11px]" style="white-space:pre">${taf.rawTaf.trim()}</div>
+            </div>
+
           </div>
         </td>
-      </tr>
-    `;
+      </tr>`;
   }
 
-  // ── Vols AF : chargement section ──────────────────────────────────────────────
+  // ── Vols AF : chargement section ─────────────────────────────────────────────────
   async function loadTafVolRisks() {
+    _rowIdx = 0; // reset idx à chaque reload
     const container  = document.getElementById('taf-vol-main');
     const countersEl = document.getElementById('taf-vol-counters');
     if (!container) { console.error('[taf-ui] #taf-vol-main introuvable'); return; }
@@ -313,8 +321,7 @@
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
         </svg>
         Analyse des vols AF vs menaces TAF…
-      </div>
-    `;
+      </div>`;
 
     try {
       const controller = new AbortController();
@@ -339,8 +346,7 @@
           <div class="text-gray-400 text-sm py-4">
             Aucun vol AF LC actuellement dans une fenêtre de menace TAF détectée.
           </div>
-          ${lastUpdateBar()}
-        `;
+          ${lastUpdateBar()}`;
         bindRefreshBtn();
         return;
       }
@@ -362,8 +368,7 @@
             <tbody>${hits.map(renderTafVolRow).join('')}</tbody>
           </table>
         </div>
-        ${lastUpdateBar()}
-      `;
+        ${lastUpdateBar()}`;
       bindRefreshBtn();
 
     } catch (e) {
@@ -372,18 +377,15 @@
         <div class="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
           ⚠️ Erreur lors du chargement AF/TAF : ${msg}
         </div>
-        ${lastUpdateBar()}
-      `;
+        ${lastUpdateBar()}`;
       bindRefreshBtn();
     }
   }
 
-  // ── Init ──────────────────────────────────────────────────────────────────────
+  // ── Init ─────────────────────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
     loadTafRisks();
     loadTafVolRisks();
-
-    // ⚠️ Budget API AF : 100 req/jour → 1 refresh max toutes les 20 min
     setInterval(() => { loadTafVolRisks(); }, 20 * 60 * 1000);
     setInterval(() => { loadTafRisks();    },  5 * 60 * 1000);
   });

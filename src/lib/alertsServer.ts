@@ -20,9 +20,12 @@ interface Alert {
   magnitude?: number;
   basin?: string;
   eventType?: string;
+  // Enrichissement TC : lien bulletin officiel NHC/RSMC/JTWC
+  tcBulletinLabel?: string;
+  tcBulletinUrl?: string;
 }
 
-// ─── AF Airports ─────────────────────────────────────────────────────────────
+// ─── AF Airports ───────────────────────────────────────────────────────────────────────────────
 const AF_AIRPORTS = [
   { icao: 'LFPG', lat: 49.0128,  lon:   2.5500, iso3: 'FRA', name: 'Paris CDG' },
   { icao: 'LFPO', lat: 48.7233,  lon:   2.3794, iso3: 'FRA', name: 'Paris Orly' },
@@ -144,11 +147,34 @@ function basinFromCoords(lat: number, lon: number): string {
   return 'Océan Indien';
 }
 
-// ─── NOAA ─────────────────────────────────────────────────────────────────────
+// ─── Lien bulletin officiel NHC / RSMC / JTWC selon le basin ───────────────────────────
+function tcBulletinLink(lat: number, lon: number): { label: string; url: string } {
+  if (lon >= 20 && lon < 90 && lat < 30) {
+    return {
+      label: 'Bulletin RSMC La Réunion',
+      url:   'https://www.meteo.fr/temps/domtom/La_Reunion/webcmrs9.0/anglais/activitedevstop/rsmc/',
+    };
+  }
+  if (lon >= 90) {
+    return {
+      label: 'Bulletin JTWC',
+      url:   'https://www.metoc.navy.mil/jtwc/jtwc.html',
+    };
+  }
+  if (lon <= -100) {
+    return {
+      label: 'Bulletin NHC — Pac. Est',
+      url:   'https://www.nhc.noaa.gov/?epac',
+    };
+  }
+  return {
+    label: 'Bulletin NHC — Atlantique',
+    url:   'https://www.nhc.noaa.gov/?atlc',
+  };
+}
 
-// Zones UGC → aéroports AF + coordonnées du centroïde de zone
-// Les coordonnées sont celles du centroïde géographique de chaque zone NWS,
-// ce qui permet de placer le marqueur correctement sur la carte.
+// ─── NOAA ────────────────────────────────────────────────────────────────────────────────────
+
 const NWS_ZONE_AIRPORTS: Record<string, string[]> = {
   NYZ063: ['KJFK', 'KEWR'], NYZ064: ['KJFK'], NYZ065: ['KJFK'],
   NYZ066: ['KJFK'], NYZ067: ['KJFK'], NYZ068: ['KJFK'],
@@ -169,7 +195,6 @@ const NWS_ZONE_AIRPORTS: Record<string, string[]> = {
   MAZ015: ['KBOS'], MAZ016: ['KBOS'],
   ILZ006: ['KORD'], ILZ012: ['KORD'], ILZ013: ['KORD'],
   ILZ014: ['KORD'], ILZ103: ['KORD'], ILZ104: ['KORD'],
-  // Californie — LAX (Sud) et SFO (Nord)
   CAZ006: ['KSFO'], CAZ007: ['KSFO'], CAZ008: ['KSFO'],
   CAZ509: ['KSFO'], CAZ510: ['KSFO'], CAZ511: ['KSFO'],
   CAZ512: ['KSFO'], CAZ513: ['KSFO'], CAZ514: ['KSFO'],
@@ -194,7 +219,6 @@ const NWS_ZONE_AIRPORTS: Record<string, string[]> = {
   ORZ006: ['KPDX'], ORZ007: ['KPDX'], ORZ008: ['KPDX'],
 };
 
-// Normalisation des événements NOAA en phénomènes français
 const NOAA_PHENOMENON_FR: Record<string, string> = {
   'Blizzard Warning':           'Blizzard',
   'Winter Storm Warning':       'Neige / Verglas',
@@ -262,7 +286,6 @@ export async function fetchNOAA(): Promise<Alert[]> {
       const airports = [...airportSet];
       if (airports.length === 0) continue;
 
-      // Coordonnées : centroïde des aéroports impactés (plus précis que LAX par défaut)
       const airportCoords = airports
         .map(icao => AF_AIRPORTS.find(a => a.icao === icao))
         .filter((a): a is typeof AF_AIRPORTS[0] => a != null);
@@ -273,7 +296,6 @@ export async function fetchNOAA(): Promise<Alert[]> {
         ? airportCoords.reduce((s, a) => s + a.lon, 0) / airportCoords.length
         : undefined;
 
-      // Phénomène normalisé en français
       const phenomenon = NOAA_PHENOMENON_FR[p.event] ?? p.event;
 
       raw.push({
@@ -324,7 +346,7 @@ export async function fetchNOAA(): Promise<Alert[]> {
   return alerts;
 }
 
-// ─── GDACS ────────────────────────────────────────────────────────────────────
+// ─── GDACS ────────────────────────────────────────────────────────────────────────────────────
 const GDACS_TYPE_LABELS: Record<string, string> = {
   EQ: 'Tremblement de terre',
   TC: 'Cyclone tropical',
@@ -436,9 +458,13 @@ export async function fetchGDACS(): Promise<Alert[]> {
       else if (level === 2) severity = 'orange';
       else if (windKmh !== null && windKmh >= 180) severity = 'red';
       else severity = 'orange';
+
       const label = GDACS_TYPE_LABELS[eventType] ?? 'Événement';
       const magStr = windKmh ? ` ${windKmh} km/h` : magnitude ? ` M${magnitude}` : '';
       const tcName = eventType === 'TC' && eventName ? ` (${eventName})` : '';
+
+      // ─── Enrichissement TC : lien bulletin officiel NHC / RSMC / JTWC ──────────────────
+      const tcBulletin = eventType === 'TC' ? tcBulletinLink(lat, lon) : undefined;
 
       alerts.push({
         id: `gdacs-${eventId}`,
@@ -458,6 +484,7 @@ export async function fetchGDACS(): Promise<Alert[]> {
         link,
         ...(basin ? { basin } : {}),
         ...(magnitude ? { magnitude } : {}),
+        ...(tcBulletin ? { tcBulletinLabel: tcBulletin.label, tcBulletinUrl: tcBulletin.url } : {}),
       });
     }
 
@@ -471,7 +498,7 @@ export async function fetchGDACS(): Promise<Alert[]> {
   }
   return alerts;
 }
-// ─── VAAC — tous les 9 centres mondiaux ───────────────────────────────────────
+// ─── VAAC — tous les 9 centres mondiaux ──────────────────────────────────────────────────────
 
 function hasAshCloudExtent(text: string): boolean {
   const extentPatterns = [
@@ -527,7 +554,6 @@ function iwxxmGetTag(xml: string, tag: string): string {
   return m ? m[1].replace(/<[^>]+>/g, '').trim() : '';
 }
 
-// ── Parser bloc VAA texte brut (HTML scrapers) ────────────────────────────────
 function parseVaaTextBlock(block: string, sourceName: string, region: string, sourceUrl: string): Alert | null {
   try {
     const clean = block.replace(/<[^>]*>/g, ' ').replace(/&[a-z]+;/gi, ' ');
@@ -544,7 +570,6 @@ function parseVaaTextBlock(block: string, sourceName: string, region: string, so
     const coords  = vaacParseVolcanoCoords(psn || clean);
     const severity = vaacSeverity(flLevel);
 
-    // PSN degrés/minutes format : N1428 W09053 → lat/lon
     let lat = coords?.lat;
     let lon = coords?.lon;
     if (!coords) {
@@ -576,7 +601,6 @@ function parseVaaTextBlock(block: string, sourceName: string, region: string, so
   }
 }
 
-// ── Parser item RSS (Toulouse / Montréal / Anchorage) ─────────────────────────
 function parseVAACRssItem(item: string, sourceName: string, region: string): Alert | null {
   try {
     const title       = vaacGetTag(item, 'title');
@@ -616,7 +640,6 @@ function parseVAACRssItem(item: string, sourceName: string, region: string): Ale
   }
 }
 
-// ── Fetch RSS générique ───────────────────────────────────────────────────────
 async function fetchVAACRss(
   sourceName: string,
   url: string,
@@ -651,7 +674,6 @@ async function fetchVAACRss(
   }
   return alerts;
 }
-
 
 async function fetchVAACHtml(
   sourceName: string,
@@ -691,7 +713,7 @@ async function fetchVAACHtml(
 
 const VAAC_WASHINGTON_BASE   = 'https://www.ospo.noaa.gov/products/atmosphere/vaac';
 const VAAC_WASHINGTON_ORIGIN = 'https://www.ospo.noaa.gov';
-// ── VAAC Washington (IWXXM XML — inchangé) ────────────────────────────────────
+
 async function fetchVAACWashington(): Promise<Alert[]> {
   const alerts: Alert[] = [];
   try {
@@ -727,7 +749,6 @@ async function fetchVAACWashington(): Promise<Alert[]> {
 
       const hasIwxxmExtent =
         /<(?:[^:>]+:)?posList[^>]*>[^<]{10,}<\/(?:[^:>]+:)?posList>/i.test(xml) ||
-
         /<(?:[^:>]+:)?ashCloud[^/][^>]*>[\s\S]{20,}<\/(?:[^:>]+:)?ashCloud>/i.test(xml);
 
       if (!hasIwxxmExtent) {
@@ -782,13 +803,13 @@ async function fetchVAACWashington(): Promise<Alert[]> {
         lat, lon,
         validFrom:   issueTimeRaw,
         validTo:     nextAdvisoryTimeStr,
-        headline:    `Avis cendres volcaniques : ${volcanoName}${flStr}${motionStr} (VAAC Washington)`,
+        headline:    `Avis cendres volcaniques : ${volcanoName}${flStr}${motionStr} (VAAC Washington)`,
         description: [
           advisoryNumber  ? `Advisory ${advisoryNumber}` : '',
           eruptionDetails,
-          flLevel         ? `Niveau : ${flLevel}` : '',
-          direction !== null ? `Direction : ${direction}°` : '',
-          speedKt   !== null ? `Vitesse : ${speedKt} kt` : '',
+          flLevel         ? `Niveau : ${flLevel}` : '',
+          direction !== null ? `Direction : ${direction}°` : '',
+          speedKt   !== null ? `Vitesse : ${speedKt} kt` : '',
         ].filter(Boolean).join(' — ').slice(0, 500),
         link:        xmlLinks[i],
         eventType:   'VAAC',
@@ -800,20 +821,14 @@ async function fetchVAACWashington(): Promise<Alert[]> {
   return alerts;
 }
 
-// ── fetchVAAC — orchestrateur des 9 centres ───────────────────────────────────
 export async function fetchVAAC(): Promise<Alert[]> {
   const results = await Promise.allSettled([
-
-    // ── Americas ────────────────────────────────────────────────────────────
-    fetchVAACWashington(),                                          // XML IWXXM
+    fetchVAACWashington(),
     fetchVAACHtml('Anchorage', 'https://www.weather.gov/vaac/VA_advisories', 'AMN'),
     fetchVAACHtml('Montreal', 'https://weather.gc.ca/eer/vaac/index_e.html', 'AMN'),
     fetchVAACHtml('Buenos Aires', 'https://www.ssd.noaa.gov/VAAC/OTH/BA/messages.html', 'AMS'),
-    // ── Europe & Africa ─────────────────────────────────────────────────────
     fetchVAACHtml('London',   'https://www.ssd.noaa.gov/VAAC/OTH/UK/messages.html',             'EUR'),
     fetchVAACRss('Toulouse',  'https://vaac.meteo.fr/rss/vaac_feed.rss',                         'EUR'),
-
-    // ── Asia & Oceania ───────────────────────────────────────────────────────
     fetchVAACHtml('Tokyo',    'https://ds.data.jma.go.jp/svd/vaac/data/vaac_list.html',         'ASIE'),
     fetchVAACHtml('Darwin',   'http://www.bom.gov.au/aviation/volcanic-ash/',                    'ASIE'),
     fetchVAACHtml('Wellington','http://vaac.metservice.com/',                                    'PAC'),
@@ -822,7 +837,7 @@ export async function fetchVAAC(): Promise<Alert[]> {
   return results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
 }
 
-// ─── MeteoAlarm ───────────────────────────────────────────────────────────────
+// ─── MeteoAlarm ───────────────────────────────────────────────────────────────────────────────────
 const AWT_LABEL: Record<number, string> = {
   1: 'Vent violent', 2: 'Neige / Verglas', 3: 'Orage', 4: 'Brouillard',
   5: 'Chaleur extrême', 6: 'Froid extrême', 7: 'Événement côtier',

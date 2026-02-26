@@ -38,22 +38,6 @@ import '../styles/global.css';
     <div id="alert-map" style="height: 420px; width: 100%;"></div>
   </div>
 
-  <!-- 🌀 CYCLONES — section prioritaire en haut -->
-  <section class="mt-4 mb-10">
-    <div class="flex items-center justify-between mb-3">
-      <div>
-        <h2 class="text-xl font-bold text-gray-900">🌀 Bulletins cycloniques</h2>
-        <p class="text-gray-500 text-sm mt-0.5">
-          Systèmes actifs J/J+3 — Sources&nbsp;: NHC (NOAA) · RSMC La Réunion (Météo-France) · JTWC (US Navy)
-        </p>
-      </div>
-      <div id="cyclone-counter" class="flex gap-2 text-xs"></div>
-    </div>
-    <div id="cyclone-main">
-      <div class="text-gray-400 text-sm italic">Chargement des bulletins…</div>
-    </div>
-  </section>
-
   <main id="main-content">
     <div class="text-gray-400 text-sm italic">Chargement des alertes...</div>
   </main>
@@ -87,13 +71,12 @@ import '../styles/global.css';
   </section>
 
   <footer class="mt-12 pt-6 border-t border-gray-200 text-xs text-gray-400 flex flex-wrap gap-4 justify-between">
-    <span>Sources&nbsp;: GDACS (UN/CE) · NOAA/NWS · MeteoAlarm (EUMETNET) · AviationWeather.gov (TAF) · NHC (NOAA) · RSMC La Réunion · JTWC</span>
+    <span>Sources : GDACS (UN/CE) · NOAA/NWS · MeteoAlarm (EUMETNET) · AviationWeather.gov (TAF) · NHC (NOAA) · RSMC La Réunion (Météo-France) · JTWC</span>
     <span>SkyWatch POC v0.1 — Open source uniquement</span>
   </footer>
 
   <script is:inline src="/lib/main.js"></script>
   <script is:inline src="/lib/taf-ui.js"></script>
-  <script is:inline src="/lib/cyclone-ui.js"></script>
 
 </body>
 </html>

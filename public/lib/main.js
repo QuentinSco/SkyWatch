@@ -29,6 +29,8 @@
     ASIE: 'Asie',
     PAC:  'Pacifique',
   };
+
+  // ✅ Clés alignées sur les valeurs françaises produites par le backend (alertsServer.ts)
   const PHENOMENON_EMOJI = {
     // GDACS
     'Cyclone tropical':      '🌀',
@@ -48,16 +50,15 @@
     'Froid extrême':         '❄️',
     'Inondation / Pluie':    '🌊',
     'Pluie intense':         '🌧',
-    // NOAA keywords
+    // NOAA keywords (valeurs normalisées par alertsServer.ts)
     'Blizzard':              '❄️',
     'Hurricane':             '🌀',
-    'Tornado':               '🌪',
-    'Fog':                   '🌫',
-    'Wind':                  '💨',
-    'Snow':                  '🌨',
-    'Flood':                 '🌊',
-    'Dust':                  '🏜',
-    'Freezing':              '🧊',
+    'Tornade':               '🌪',
+    'Brume':                 '🌫',
+    'Vent':                  '💨',
+    'Neige':                 '🌨',
+    'Poussière / Sable':     '🏜',
+    'Gel / Verglas':         '🧊',
   };
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -91,28 +92,16 @@
   }
 
   function phenomenonEmoji(phenomenon) {
-    const map = {
-      'Thunderstorm':        '⛈️',
-      'Rain':                '🌧️',
-      'Snow':                '❄️',
-      'Wind':                '💨',
-      'Fog':                 '🌫️',
-      'Ice':                 '🧊',
-      'Flood':               '🌊',
-      'Avalanche':           '🏔️',
-      'Coastal Event':       '🌊',
-      'Forest Fire':         '🔥',
-      'High Temperature':    '🌡️',
-      'Low Temperature':     '🥶',
-      'Dust/Sand':           '🌪️',
-      'Tornado':             '🌪️',
-      'Hurricane':           '🌀',
-    };
-    return map[phenomenon] ?? '⚠️';
+    if (!phenomenon) return '⚠️';
+    // Correspondance exacte d'abord
+    if (PHENOMENON_EMOJI[phenomenon]) return PHENOMENON_EMOJI[phenomenon];
+    // Sinon recherche par inclusion (ex: "Vent violent" contient "Vent")
+    const match = Object.entries(PHENOMENON_EMOJI)
+      .find(([k]) => phenomenon.toLowerCase().includes(k.toLowerCase()));
+    return match ? match[1] : '⚠️';
   }
-  
 
-  // ── Rendu ligne alerte ────────────────────────────────────────────────────────
+  // ── Rendu ligne alerte ────────────────────────────────────────────────────────────
   function renderAlertRow(alert) {
     const badge  = SEVERITY_BADGE[alert.severity] ?? 'bg-gray-200 text-gray-600';
     const label  = SEVERITY_LABEL[alert.severity] ?? alert.severity.toUpperCase();
@@ -158,7 +147,7 @@
     `;
   }
 
-  // ── Rendu section par région ──────────────────────────────────────────────────
+  // ── Rendu section par région ──────────────────────────────────────────────────────
   function renderRegionSection(region, alerts) {
     const regionLabel = REGION_LABEL[region] ?? region;
     const rows = alerts.map(renderAlertRow).join('');
@@ -188,13 +177,18 @@
     `;
   }
 
-  // ── Carte Leaflet ─────────────────────────────────────────────────────────────
+  // ── Carte Leaflet ───────────────────────────────────────────────────────────────
   let leafletMap    = null;
   let markersLayer  = null;
 
   function initMap() {
     if (leafletMap) return;
     if (!window.L) { console.warn('[main.js] Leaflet non disponible'); return; }
+
+    // ✅ Neutralise l'icône par défaut Leaflet (évite artefacts visuels sur divIcon)
+    delete L.Icon.Default.prototype._getIconUrl;
+    L.Icon.Default.mergeOptions({ iconRetinaUrl: '', iconUrl: '', shadowUrl: '' });
+
     leafletMap = L.map('alert-map', { zoomControl: true }).setView([20, 10], 2);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 12,
@@ -206,19 +200,19 @@
   function updateMapMarkers(alerts) {
     if (!leafletMap || !markersLayer) return;
     markersLayer.clearLayers();
-  
+
     for (const alert of alerts) {
       if (alert.lat == null || alert.lon == null) continue;
-  
+
       const color = SEVERITY_DOT[alert.severity] ?? '#6b7280';
       const emoji = phenomenonEmoji(alert.phenomenon);
-  
+
       // Canvas → PNG → L.icon
       const canvas = document.createElement('canvas');
       canvas.width  = 36;
       canvas.height = 36;
       const ctx = canvas.getContext('2d');
-  
+
       ctx.beginPath();
       ctx.arc(18, 18, 16, 0, Math.PI * 2);
       ctx.fillStyle = 'white';
@@ -226,36 +220,35 @@
       ctx.strokeStyle = color;
       ctx.lineWidth = 2.5;
       ctx.stroke();
-  
+
       ctx.font = '18px serif';
       ctx.textAlign    = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(emoji, 18, 19);
-  
+
       const icon = L.icon({
         iconUrl:     canvas.toDataURL('image/png'),
         iconSize:    [36, 36],
         iconAnchor:  [18, 18],
         popupAnchor: [0, -20],
       });
-  
+
       const marker = L.marker([alert.lat, alert.lon], { icon });
       marker.bindPopup(`
         <div class="text-xs font-sans">
-          <div class="font-bold text-sm mb-1">${alert.phenomenon}</div>
+          <div class="font-bold text-sm mb-1">${emoji} ${alert.phenomenon}</div>
           <div class="text-gray-600 mb-1">${alert.country}</div>
           <div class="font-semibold" style="color:${color}">${SEVERITY_LABEL[alert.severity] ?? alert.severity}</div>
           <div class="text-gray-500 mt-1">${alert.headline.slice(0, 100)}${alert.headline.length > 100 ? '…' : ''}</div>
           <div class="text-gray-400 mt-1">Source : ${alert.source}</div>
-          ${alert.alerts?.length ? `<div class="mt-1">✈️ ${alert.airports.join(' · ')}</div>` : ''}
+          ${alert.airports?.length ? `<div class="mt-1">✈️ ${alert.airports.join(' · ')}</div>` : ''}
         </div>
       `);
       markersLayer.addLayer(marker);
     }
   }
-  
 
-  // ── Chargement principal ──────────────────────────────────────────────────────
+  // ── Chargement principal ─────────────────────────────────────────────────────────
   async function loadAlerts() {
     const mainEl     = document.getElementById('main-content');
     const lastUpdate = document.getElementById('last-update');

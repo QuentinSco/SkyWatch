@@ -19,8 +19,16 @@ export interface TafFlightHit {
   minutesBeforeThreatStart: number;
 }
 
+export interface TafVolRisksResponse {
+  hits:     TafFlightHit[];
+  baseHits: TafFlightHit[];
+}
+
 const CACHE_TTL = 20 * 60 * 1000;
-let cache: { ts: number; data: TafFlightHit[] } | null = null;
+let cache: { ts: number; data: TafVolRisksResponse } | null = null;
+
+// Bases home — exclues de la section "Vols LC impactés", affichées dans leur propre section
+const HOME_BASES = new Set(['LFPG', 'LFPO']); // CDG, ORY
 
 const MAX_LEAD_MIN_BEFORE_THREAT = 120;
 
@@ -58,20 +66,20 @@ export const GET: APIRoute = async () => {
       getCachedAfArrivals(),
     ]);
 
-    // ── Diagnostics généraux ─────────────────────────────────────────────────
+    // ── Diagnostics généraux ────────────────────────────────────────────────────
     dbg(`TAF risques : ${tafRisks.length} aéroports`);
     dbg(`TAF ICAO concernés : ${tafRisks.map(t => t.icao).join(', ')}`);
     dbg(`Vols chargés total : ${allFlights.length}`);
     dbg(`Vols ICAO uniques  : ${[...new Set(allFlights.map(f => f.icao))].join(', ')}`);
 
-    // ── Exemple vol brut ─────────────────────────────────────────────────────
+    // ── Exemple vol brut ────────────────────────────────────────────────────
     if (allFlights.length > 0) {
       dbg('Sample vol[0] :', JSON.stringify(allFlights[0], null, 2));
     } else {
       dbg('⚠️ allFlights est VIDE — vérifier AF_API_KEY et pageSize');
     }
 
-    // ── Exemple menace brute ─────────────────────────────────────────────────
+    // ── Exemple menace brute ────────────────────────────────────────────────────
     if (tafRisks.length > 0 && tafRisks[0].threats.length > 0) {
       const t = tafRisks[0].threats[0];
       dbg(`Sample threat[0] : type=${t.type} severity=${t.severity}`);
@@ -82,7 +90,7 @@ export const GET: APIRoute = async () => {
       dbg('⚠️ Aucun TAF avec menace détectée');
     }
 
-    // ── Filtrage vols invalides ───────────────────────────────────────────────
+    // ── Filtrage vols invalides ────────────────────────────────────────────────────
     const now = Date.now();
     const cleanedFlights = allFlights.filter(f => {
     if (f.aircraftType === 'BUS') return false;          // rotations bus
@@ -92,7 +100,7 @@ export const GET: APIRoute = async () => {
     return true;
 });
 
-// ── Matching ─────────────────────────────────────────────────────────────
+// ── Matching ────────────────────────────────────────────────────────────────────
 const hits: TafFlightHit[] = [];
 let totalFlightsChecked = 0;
 let rejectedNoIcaoMatch = 0;
@@ -142,7 +150,7 @@ for (const taf of tafRisks) {
   }
 }
 
-// ── Résumé matching ───────────────────────────────────────────────────────
+// ── Résumé matching ────────────────────────────────────────────────────────────────────
 dbg(`Matching terminé :`);
 dbg(`  Vols bruts         : ${allFlights.length}`);
 dbg(`  Vols après filtre  : ${cleanedFlights.length}`);
@@ -151,8 +159,15 @@ dbg(`  Rejetés (no ICAO)  : ${rejectedNoIcaoMatch}`);
 dbg(`  Rejetés (fenêtre)  : ${rejectedTimeWindow}`);
 dbg(`  Hits               : ${hits.length}`);
 
-    // ── Tri ──────────────────────────────────────────────────────────────────
-    hits.sort((a, b) => {
+    // ── Séparation vols LC (hors base) vs base CDG/ORY ──────────────────────────────────────
+    const filteredHits = hits.filter(h => !HOME_BASES.has(h.taf.icao));
+    const baseHits     = hits.filter(h =>  HOME_BASES.has(h.taf.icao));
+
+    dbg(`  Vols LC (hors CDG/ORY) : ${filteredHits.length}`);
+    dbg(`  Vols base CDG/ORY      : ${baseHits.length}`);
+
+    // ── Tri ────────────────────────────────────────────────────────────────────────
+    const sortHits = (arr: TafFlightHit[]) => arr.sort((a, b) => {
       const sev: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
       if (sev[a.threat.severity] !== sev[b.threat.severity])
         return sev[a.threat.severity] - sev[b.threat.severity];
@@ -160,15 +175,19 @@ dbg(`  Hits               : ${hits.length}`);
              new Date(b.flight.estimatedArrival ?? b.flight.scheduledArrival).getTime();
     });
 
-    cache = { ts: Date.now(), data: hits };
+    sortHits(filteredHits);
+    sortHits(baseHits);
 
-    return new Response(JSON.stringify(hits), {
+    const response: TafVolRisksResponse = { hits: filteredHits, baseHits };
+    cache = { ts: Date.now(), data: response };
+
+    return new Response(JSON.stringify(response), {
       headers: { 'Content-Type': 'application/json', 'X-Cache': 'MISS' },
     });
 
   } catch (e) {
     console.error('[API /taf-vol-risks]', e);
-    return new Response(JSON.stringify({ error: String(e), hits: [] }), {
+    return new Response(JSON.stringify({ error: String(e), hits: [], baseHits: [] }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

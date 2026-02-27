@@ -20,6 +20,7 @@ interface Alert {
   magnitude?: number;
   basin?: string;
   eventType?: string;
+  volcanoName?: string;   // ← champ dédié, plus fiable que parser le headline
   // Enrichissement TC : lien bulletin officiel NHC/RSMC/JTWC
   tcBulletinLabel?: string;
   tcBulletinUrl?: string;
@@ -563,7 +564,8 @@ function parseVaaTextBlock(block: string, sourceName: string, region: string, so
     const get = (tag: string) =>
       clean.match(new RegExp(`${tag}[:\\s]+([^\\n\\r]{2,60})`, 'i'))?.[1]?.trim() ?? '';
 
-    const volcano = get('VOLCANO') || 'Inconnu';
+    const volcanoRaw = get('VOLCANO') || 'Inconnu';
+    const volcano = volcanoRaw !== 'Inconnu' ? volcanoRaw : null;
     const dtg     = get('DTG');
     const psn     = get('PSN');
     const flLevel = vaacParseFlLevel(clean);
@@ -580,8 +582,9 @@ function parseVaaTextBlock(block: string, sourceName: string, region: string, so
       }
     }
 
+    const volcanoDisplay = volcano ?? 'Volcan';
     return {
-      id:         `VAAC-${sourceName}-${volcano.replace(/\s+/g, '_')}-${dtg || Date.now()}`,
+      id:         `VAAC-${sourceName}-${volcanoDisplay.replace(/\s+/g, '_')}-${dtg || Date.now()}`,
       source:     'VAAC',
       region,
       severity,
@@ -591,10 +594,11 @@ function parseVaaTextBlock(block: string, sourceName: string, region: string, so
       ...(lat != null && lon != null ? { lat, lon } : {}),
       validFrom:  new Date().toISOString(),
       validTo:    null,
-      headline:   `Cendres volcaniques — ${volcano}${flLevel ? ' ' + flLevel : ''} (VAAC ${sourceName})`,
+      headline:   `Cendres volcaniques — ${volcanoDisplay}${flLevel ? ' ' + flLevel : ''} (VAAC ${sourceName})`,
       description: clean.slice(0, 400).trim(),
       link:       sourceUrl,
       eventType:  'VAAC',
+      ...(volcano ? { volcanoName: volcano } : {}),
     };
   } catch {
     return null;
@@ -615,12 +619,13 @@ function parseVAACRssItem(item: string, sourceName: string, region: string): Ale
     const coords   = vaacParseVolcanoCoords(text);
     const severity = vaacSeverity(flLevel);
 
-    const volcano  = title.match(/VOLCANO:\s*([^\n/|,]+)/i)?.[1]?.trim()
+    const volcanoRaw = title.match(/VOLCANO:\s*([^\n/|,]+)/i)?.[1]?.trim()
       || title.match(/^([A-Z\s]+(?:VOLCANO)?)\s/i)?.[1]?.trim()
-      || 'Inconnu';
+      || null;
+    const volcano = volcanoRaw && volcanoRaw !== 'Inconnu' ? volcanoRaw : null;
 
     return {
-      id:         `VAAC-${sourceName}-${volcano.replace(/\s+/g, '_')}-${pubDate}`,
+      id:         `VAAC-${sourceName}-${(volcano ?? 'unknown').replace(/\s+/g, '_')}-${pubDate}`,
       source:     'VAAC',
       region,
       severity,
@@ -630,10 +635,11 @@ function parseVAACRssItem(item: string, sourceName: string, region: string): Ale
       ...(coords ? { lat: coords.lat, lon: coords.lon } : {}),
       validFrom:  pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
       validTo:    null,
-      headline:   `Cendres volcaniques — ${volcano}${flLevel ? ' ' + flLevel : ''} (VAAC ${sourceName})`,
+      headline:   `Cendres volcaniques — ${volcano ?? 'Volcan'}${flLevel ? ' ' + flLevel : ''} (VAAC ${sourceName})`,
       description: description.slice(0, 400),
       link,
       eventType:  'VAAC',
+      ...(volcano ? { volcanoName: volcano } : {}),
     };
   } catch {
     return null;
@@ -757,7 +763,7 @@ async function fetchVAACWashington(): Promise<Alert[]> {
       }
 
       const volcanoRaw  = iwxxmGetTag(xml, 'name');
-      const volcanoName = volcanoRaw ? volcanoRaw.replace(/\s+\d+$/, '').trim() : 'Volcan inconnu';
+      const volcanoName = volcanoRaw ? volcanoRaw.replace(/\s+\d+$/, '').trim() : null;
       const posTag      = xml.match(/<gml:pos[^>]*>([\s\S]*?)<\/gml:pos>/i);
       if (!posTag) continue;
       const parts = posTag[1].trim().split(/\s+/);
@@ -789,11 +795,12 @@ async function fetchVAACWashington(): Promise<Alert[]> {
       if (noFurtherAdvisory) continue;
       if (nextAdvisoryTimeStr && new Date(nextAdvisoryTimeStr) < new Date()) continue;
 
+      const volcanoDisplay = volcanoName ?? 'Volcan inconnu';
       const flStr    = flLevel ? ` — Cendres ${flLevel}` : '';
       const motionStr = direction !== null && speedKt !== null ? ` | ${direction}° / ${speedKt} kt` : '';
 
       alerts.push({
-        id:          `vaac-washington-${volcanoName.replace(/\s/g, '')}-${issueTimeRaw}`,
+        id:          `vaac-washington-${volcanoDisplay.replace(/\s/g, '')}-${issueTimeRaw}`,
         source:      'VAAC',
         region:      regionFromCoords(lat, lon),
         severity:    vaacSeverity(flLevel),
@@ -803,16 +810,17 @@ async function fetchVAACWashington(): Promise<Alert[]> {
         lat, lon,
         validFrom:   issueTimeRaw,
         validTo:     nextAdvisoryTimeStr,
-        headline:    `Avis cendres volcaniques : ${volcanoName}${flStr}${motionStr} (VAAC Washington)`,
+        headline:    `Avis cendres volcaniques : ${volcanoDisplay}${flStr}${motionStr} (VAAC Washington)`,
         description: [
           advisoryNumber  ? `Advisory ${advisoryNumber}` : '',
           eruptionDetails,
-          flLevel         ? `Niveau : ${flLevel}` : '',
-          direction !== null ? `Direction : ${direction}°` : '',
-          speedKt   !== null ? `Vitesse : ${speedKt} kt` : '',
+          flLevel         ? `Niveau : ${flLevel}` : '',
+          direction !== null ? `Direction : ${direction}°` : '',
+          speedKt   !== null ? `Vitesse : ${speedKt} kt` : '',
         ].filter(Boolean).join(' — ').slice(0, 500),
         link:        xmlLinks[i],
         eventType:   'VAAC',
+        ...(volcanoName ? { volcanoName } : {}),
       });
     }
   } catch (e) {

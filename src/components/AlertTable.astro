@@ -46,34 +46,36 @@ function timeWindowStatus(validTo: string | undefined): { label: string; cls: st
 }
 
 /**
- * Extrait le nom du volcan depuis le headline d'une alerte VAAC.
- *
- * Le headline produit par alertsServer.ts a exactement ces formats :
- *
- * VAAC Washington :
- *   "Avis cendres volcaniques : POPOCATEPETL — Cendres FL200 | 270° / 15 kt (VAAC Washington)"
- *
- * Autres VAAC (parseVAATextBlock / parseVAACRssItem) :
- *   "Cendres volcaniques — MERAPI FL180 (VAAC Tokyo)"
- *   "Cendres volcaniques — Inconnu FL100 (VAAC Toulouse)"
- *
- * FIX : on extrait directement depuis les formats produits par le serveur,
- * en se basant sur les séparateurs connus et le token FL qui suit le nom.
+ * Résolution du nom du volcan.
+ * Priorité : champ volcanoName exposé par le serveur (source de vérité)
+ * Fallback  : parsing du headline comme filet de sécurité
  */
-function extractVolcanoName(alert: WeatherAlert): string | null {
-  if (alert.source !== 'VAAC' && alert.eventType !== 'VAAC') return null;
+function getVolcanoName(alert: WeatherAlert): string | null {
+  if (alert.source !== 'VAAC' && (alert as any).eventType !== 'VAAC') return null;
+
+  // 1. Champ dédié injecté côté serveur — fiable à 100%
+  const direct = (alert as any).volcanoName as string | undefined;
+  if (direct && direct.trim() && direct.trim() !== 'Inconnu' && direct.trim() !== 'Volcan inconnu') {
+    return direct.trim();
+  }
+
+  // 2. Fallback : parse headline
   const h = alert.headline;
   if (!h) return null;
 
-  // Format VAAC Washington : "Avis cendres volcaniques : NOM — Cendres FL..."
-  // ou                       "Avis cendres volcaniques : NOM FL..."
-  const m1 = h.match(/Avis cendres volcaniques\s*:\s*([\w][\w .,\u2019'-]{0,50}?)\s*(?:—|FL\d|\(VAAC)/);
-  if (m1) return m1[1].trim();
+  // "Avis cendres volcaniques : NOM ..."
+  const m1 = h.match(/Avis cendres volcaniques\s*:\s*([\w][\w .,'\u00C0-\u017E-]{0,60}?)\s*(?:—|\s*FL|\s*\()/);
+  if (m1) {
+    const v = m1[1].trim();
+    if (v && v !== 'Inconnu' && v !== 'Volcan inconnu') return v;
+  }
 
-  // Format autres VAAC : "Cendres volcaniques — NOM FL..."
-  // ou                   "Cendres volcaniques — NOM (VAAC ...)"
-  const m2 = h.match(/Cendres volcaniques\s*[—\-–]\s*([\w][\w .,\u2019'-]{0,50}?)\s*(?:FL\d|\(VAAC|—|$)/);
-  if (m2 && m2[1].trim() !== 'Inconnu') return m2[1].trim();
+  // "Cendres volcaniques — NOM ..."
+  const m2 = h.match(/Cendres volcaniques\s*[—\-–]\s*([\w][\w .,'\u00C0-\u017E-]{0,60}?)\s*(?:FL|\(VAAC|—|$)/);
+  if (m2) {
+    const v = m2[1].trim();
+    if (v && v !== 'Inconnu' && v !== 'Volcan' && v !== 'Volcan inconnu') return v;
+  }
 
   return null;
 }
@@ -111,7 +113,7 @@ const borderColor = filtered.some(a => a.severity === 'red')
         </thead>
         <tbody>
           {filtered.map((alert, i) => {
-            const volcanoName = extractVolcanoName(alert);
+            const volcanoName = getVolcanoName(alert);
             return (
             <tr class={`border-b border-gray-100 hover:bg-blue-50 transition ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
 

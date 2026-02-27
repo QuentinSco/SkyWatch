@@ -172,6 +172,19 @@ function tcBulletinLink(lat: number, lon: number): { label: string; url: string 
   };
 }
 
+/** Supprime les wrappers CDATA d'une chaîne XML : <!\[CDATA\[...\]\]> → contenu brut */
+function stripCdata(s: string): string {
+  let result = s;
+  let start = result.indexOf('<![CDATA[');
+  while (start !== -1) {
+    const end = result.indexOf(']]>', start);
+    if (end === -1) break;
+    result = result.slice(0, start) + result.slice(start + 9, end) + result.slice(end + 3);
+    start = result.indexOf('<![CDATA[', start);
+  }
+  return result;
+}
+
 // ─── NOAA ────────────────────────────────────────────────────────────────────────────────────
 
 const NWS_ZONE_AIRPORTS: Record<string, string[]> = {
@@ -363,7 +376,7 @@ const GDACS_RELEVANT_TYPES = new Set(['EQ', 'TC', 'FL', 'VO', 'TS']);
 
 function gdacsGetTag(item: string, tag: string): string {
   const m = item.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
-  return m ? m[1].replace(/<![CDATA[(\s\S]*?)]]/g, '$1').trim() : '';
+  return m ? stripCdata(m[1]).trim() : '';
 }
 
 function gdacsParseLevel(item: string): number {
@@ -515,7 +528,7 @@ function hasAshCloudExtent(text: string): boolean {
 
 function vaacGetTag(xml: string, tag: string): string {
   const m = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
-  return m ? m[1].replace(/<![CDATA[(\s\S]*?)]]/g, '$1').trim() : '';
+  return m ? stripCdata(m[1]).trim() : '';
 }
 
 function vaacParseVolcanoCoords(text: string): { lat: number; lon: number } | null {
@@ -1109,7 +1122,7 @@ export async function fetchMeteoAlarm(): Promise<Alert[]> {
     for (const item of xml.split('<item>').slice(1)) {
       const getTag = (tag: string) => {
         const m = item.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
-        return m ? m[1].replace(/<![CDATA[(\s\S]*?)]]/g, '$1').trim() : '';
+        return m ? stripCdata(m[1]).trim() : '';
       };
 
       const title = getTag('title');

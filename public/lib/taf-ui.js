@@ -30,7 +30,7 @@
   };
   const SEVERITY_ORDER = { red: 0, orange: 1, yellow: 2 };
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────
+  // ── Helpers ────────────────────────────────────────────────────────────────────────
   function formatUTC(ts) {
     return new Date(ts * 1000).toLocaleString('fr-FR', {
       day: '2-digit', month: '2-digit',
@@ -93,7 +93,7 @@
       ?.addEventListener('click', loadTafVolRisks);
   }
 
-  // ── TAF : badge menace ────────────────────────────────────────────────────────
+  // ── TAF : badge menace ──────────────────────────────────────────────────────────────────
   function renderThreatBadge(threat) {
     const icon   = THREAT_ICONS[threat.type] ?? '⚠️';
     const badge  = SEVERITY_BADGE[threat.severity];
@@ -112,7 +112,7 @@
       </div>`;
   }
 
-  // ── TAF : ligne tableau ───────────────────────────────────────────────────────
+  // ── TAF : ligne tableau ───────────────────────────────────────────────────────────────
   function renderTafRiskCard(risk) {
     const badgeCls    = SEVERITY_BADGE[risk.worstSeverity];
     const threatsHtml = risk.threats.map(t => `
@@ -153,7 +153,7 @@
       </tr>`;
   }
 
-  // ── TAF : chargement section ──────────────────────────────────────────────────
+  // ── TAF : chargement section ───────────────────────────────────────────────────────────────
   async function loadTafRisks() {
     const container  = document.getElementById('taf-main');
     const countersEl = document.getElementById('taf-counters');
@@ -221,7 +221,7 @@
     }
   }
 
-  // ── Vols AF : rendu ligne ─────────────────────────────────────────────────────
+  // ── Vols AF : rendu ligne ───────────────────────────────────────────────────────────────
   let _rowIdx = 0;
 
   function renderTafVolRow(hit) {
@@ -327,7 +327,80 @@
       </tr>`;
   }
 
-  // ── Vols AF : chargement section ──────────────────────────────────────────────
+  // ── Section CDG/ORY ─────────────────────────────────────────────────────────────────────────
+  function renderBaseSection(baseHits) {
+    if (!baseHits || baseHits.length === 0) {
+      return `
+        <section class="mt-8 pt-6 border-t border-gray-200">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h2 class="text-xl font-bold text-gray-900">🏠 État base CDG / ORY</h2>
+              <p class="text-gray-500 text-sm mt-0.5">Phénomènes TAF actifs sur notre base — Hors croisement vols LC.</p>
+            </div>
+          </div>
+          <div class="text-center py-8 text-gray-400">
+            <div class="text-3xl mb-2">✅</div>
+            <div class="text-sm">Aucun phénomène significatif sur CDG ou ORY.</div>
+          </div>
+        </section>`;
+    }
+
+    // Regrouper par aéroport (IATA)
+    const byAirport = baseHits.reduce((acc, h) => {
+      const key = h.taf.iata;
+      if (!acc[key]) acc[key] = { taf: h.taf, threats: [] };
+      // Dé-doublonner les menaces par type+période
+      const exists = acc[key].threats.some(t =>
+        t.type === h.threat.type &&
+        t.periodStart === h.threat.periodStart &&
+        t.periodEnd   === h.threat.periodEnd
+      );
+      if (!exists) acc[key].threats.push(h.threat);
+      return acc;
+    }, {});
+
+    const airportCards = Object.entries(byAirport).map(([iata, { taf, threats }]) => {
+      const worstSev = threats.reduce((w, t) =>
+        SEVERITY_ORDER[t.severity] < SEVERITY_ORDER[w] ? t.severity : w
+      , 'yellow');
+      const badge = SEVERITY_BADGE[worstSev];
+      const label = SEVERITY_LABEL[worstSev];
+
+      return `
+        <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+          <div class="flex items-center gap-3 mb-3 flex-wrap">
+            <span class="${badge} px-2 py-0.5 rounded text-xs font-bold">${label}</span>
+            <span class="font-mono font-bold text-gray-800 text-base">${iata}</span>
+            <span class="text-gray-400 font-mono text-sm">${taf.icao}</span>
+            <span class="text-gray-600 text-sm">${taf.name}</span>
+          </div>
+          <div class="flex flex-col gap-3">
+            ${threats.map(t => renderThreatBadge(t)).join('')}
+          </div>
+        </div>`;
+    }).join('');
+
+    const totalThreats = Object.values(byAirport).reduce((s, { threats }) => s + threats.length, 0);
+    const redCount    = baseHits.filter(h => h.threat.severity === 'red').length;
+    const orangeCount = baseHits.filter(h => h.threat.severity === 'orange').length;
+
+    return `
+      <section class="mt-8 pt-6 border-t border-gray-200">
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-4">
+          <div>
+            <h2 class="text-xl font-bold text-gray-900">🏠 État base CDG / ORY</h2>
+            <p class="text-gray-500 text-sm mt-0.5">Phénomènes TAF actifs sur notre base — Hors croisement vols LC.</p>
+          </div>
+          <div class="flex gap-2 text-xs">
+            ${redCount    ? `<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full font-semibold">🔴 ${redCount}</span>` : ''}
+            ${orangeCount ? `<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full font-semibold">🟠 ${orangeCount}</span>` : ''}
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">${airportCards}</div>
+      </section>`;
+  }
+
+  // ── Vols AF : chargement section ────────────────────────────────────────────────────────────────
   async function loadTafVolRisks() {
     _rowIdx = 0;
     const container  = document.getElementById('taf-vol-main');
@@ -349,7 +422,9 @@
       const res = await fetch('/api/taf-vol-risks', { signal: controller.signal });
       clearTimeout(timer);
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      const hits = await res.json();
+
+      // L'API retourne désormais { hits, baseHits }
+      const { hits, baseHits } = await res.json();
 
       const red    = hits.filter(h => h.threat.severity === 'red').length;
       const orange = hits.filter(h => h.threat.severity === 'orange').length;
@@ -361,34 +436,33 @@
         ].join('');
       }
 
+      let mainHtml;
       if (hits.length === 0) {
-        container.innerHTML = `
+        mainHtml = `
           <div class="text-gray-400 text-sm py-4">
             Aucun vol AF LC actuellement dans une fenêtre de menace TAF détectée.
-          </div>
-          ${lastUpdateBar()}`;
-        bindRefreshBtn();
-        return;
+          </div>`;
+      } else {
+        mainHtml = `
+          <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+            <table class="w-full text-sm text-left text-gray-700 bg-white">
+              <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th class="py-2 px-3">Niveau</th>
+                  <th class="py-2 px-3">Vol</th>
+                  <th class="py-2 px-3">Immat / Type</th>
+                  <th class="py-2 px-3">Destination</th>
+                  <th class="py-2 px-3">Menace</th>
+                  <th class="py-2 px-3">Fenêtre TAF</th>
+                  <th class="py-2 px-3">ETA</th>
+                </tr>
+              </thead>
+              <tbody>${hits.map(renderTafVolRow).join('')}</tbody>
+            </table>
+          </div>`;
       }
 
-      container.innerHTML = `
-        <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-          <table class="w-full text-sm text-left text-gray-700 bg-white">
-            <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th class="py-2 px-3">Niveau</th>
-                <th class="py-2 px-3">Vol</th>
-                <th class="py-2 px-3">Immat / Type</th>
-                <th class="py-2 px-3">Destination</th>
-                <th class="py-2 px-3">Menace</th>
-                <th class="py-2 px-3">Fenêtre TAF</th>
-                <th class="py-2 px-3">ETA</th>
-              </tr>
-            </thead>
-            <tbody>${hits.map(renderTafVolRow).join('')}</tbody>
-          </table>
-        </div>
-        ${lastUpdateBar()}`;
+      container.innerHTML = mainHtml + renderBaseSection(baseHits) + lastUpdateBar();
       bindRefreshBtn();
 
     } catch (e) {
@@ -402,7 +476,7 @@
     }
   }
 
-  // ── Init ──────────────────────────────────────────────────────────────────────
+  // ── Init ───────────────────────────────────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
     loadTafRisks();
     loadTafVolRisks();

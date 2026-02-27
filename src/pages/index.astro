@@ -34,10 +34,10 @@ import '../styles/global.css';
         flex-direction: column;
         gap: 1.5rem;
       }
-      /* Hauteur de carte plus généreuse sur grand écran */
+      /* Hauteur de carte bornée — ni trop petite ni trop haute */
       #alert-map {
-        height: calc(100vh - 10rem) !important;
-        min-height: 500px;
+        height: clamp(420px, 55vh, 620px) !important;
+        min-height: 420px;
       }
       /* La colonne droite scroll indépendamment */
       .col-alerts {
@@ -51,6 +51,16 @@ import '../styles/global.css';
     .col-alerts::-webkit-scrollbar { width: 4px; }
     .col-alerts::-webkit-scrollbar-track { background: transparent; }
     .col-alerts::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+
+    /* Slot état base — masqué par défaut, visible seulement sur grand écran */
+    #base-status-slot {
+      display: none;
+    }
+    @media (min-width: 1280px) {
+      #base-status-slot {
+        display: block;
+      }
+    }
   </style>
 </head>
 
@@ -130,6 +140,8 @@ import '../styles/global.css';
 
         <!-- Colonne gauche : Carte (sticky sur grand écran) -->
         <div class="col-map">
+
+          <!-- Carte -->
           <section id="section-carte" class="scroll-mt-6">
             <div class="rounded-xl overflow-hidden border border-gray-200 shadow-sm">
               <div class="bg-gray-50 border-b border-gray-200 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
@@ -138,7 +150,19 @@ import '../styles/global.css';
               <div id="alert-map" style="height: 420px; width: 100%;"></div>
             </div>
           </section>
+
+          <!-- Slot État base CDG / ORY (widescreen uniquement) -->
+          <div id="base-status-slot" class="rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-white">
+            <div class="bg-gray-50 border-b border-gray-200 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              🛫 État base CDG / ORY
+            </div>
+            <div id="base-status-body" class="text-sm text-gray-400 italic px-4 py-3">
+              Chargement…
+            </div>
+          </div>
+
         </div>
+        <!-- /col-map -->
 
         <!-- Colonne droite : Alertes + Vols + TAF -->
         <div class="col-alerts">
@@ -196,6 +220,43 @@ import '../styles/global.css';
 
   <script is:inline src="/lib/main.js"></script>
   <script is:inline src="/lib/taf-ui.js"></script>
+
+  <!-- Déplace le bloc État base CDG/ORY dans le slot gauche sur grand écran -->
+  <script is:inline>
+    (function () {
+      if (!window.matchMedia('(min-width: 1280px)').matches) return;
+
+      const slot = document.getElementById('base-status-body');
+      if (!slot) return;
+
+      function findBaseSection() {
+        // taf-ui.js rend un <section> ou <div> contenant un <h2>/<h3> "État base CDG / ORY"
+        const headings = Array.from(document.querySelectorAll('h2, h3'));
+        const h = headings.find(el =>
+          /[Ée]tat\s+base/i.test(el.textContent || '') &&
+          /(CDG|ORY)/i.test(el.textContent || '')
+        );
+        if (!h) return null;
+        return h.closest('section') || h.closest('[class]') || h.parentElement;
+      }
+
+      function tryMove() {
+        const block = findBaseSection();
+        if (!block) return false;
+        slot.innerHTML = '';
+        slot.classList.remove('text-gray-400', 'italic');
+        slot.appendChild(block);
+        return true;
+      }
+
+      if (tryMove()) return;
+
+      const obs = new MutationObserver(() => {
+        if (tryMove()) obs.disconnect();
+      });
+      obs.observe(document.body, { childList: true, subtree: true });
+    })();
+  </script>
 
   <!-- Sidebar : highlight section active au scroll -->
   <script is:inline>

@@ -369,6 +369,10 @@
   /**
    * Construit la frise temporelle SVG/HTML pour un baseTaf.
    * Fenêtre = maintenant → maintenant + 24h (ou fin du TAF si plus tôt).
+   *
+   * FIX: le tooltip est positionné intelligemment (gauche ou droite selon
+   * la position du segment dans la frise) pour éviter le débordement.
+   * Un seul tooltip est visible à la fois — les autres sont fermés au clic.
    */
   function renderTafTimeline(baseTaf) {
     const fcsts    = baseTaf.fcsts   || [];
@@ -414,22 +418,38 @@
       ticks.push({ pct, label });
     }
 
+    // Identifiant unique pour ce groupe de tooltips (pour fermeture mutuelle)
+    const groupId = 'taf-grp-' + baseTaf.icao;
+
     const segmentsHtml = segments.map((s, i) => {
-      const color  = PERIOD_BG[s.sev] ?? '#22c55e';
-      const textCl = s.sev === 'yellow' ? 'text-black' : 'text-white';
+      const color     = PERIOD_BG[s.sev] ?? '#22c55e';
+      const textCl    = s.sev === 'yellow' ? 'text-black' : 'text-white';
       const tooltipId = `taf-seg-${baseTaf.icao}-${i}`;
+
+      // FIX: positionne le tooltip à droite du segment si celui-ci est dans
+      // la première moitié de la frise, à gauche sinon — évite tout débordement.
+      const anchorRight = s.left + s.width / 2 > 50;
+      const tooltipPos  = anchorRight
+        ? `right:${(100 - s.left - s.width).toFixed(2)}%;left:auto`
+        : `left:${s.left.toFixed(2)}%;right:auto`;
+
       return `
         <div
-          class="absolute top-0 h-full rounded transition-opacity hover:opacity-80 cursor-pointer group"
+          class="absolute top-0 h-full rounded transition-opacity hover:opacity-80 cursor-pointer"
           style="left:${s.left.toFixed(2)}%;width:${s.width.toFixed(2)}%;background:${color}"
-          onclick="document.getElementById('${tooltipId}').classList.toggle('hidden'); event.stopPropagation();"
+          onclick="(function(el){
+            var g = document.querySelectorAll('[data-taf-group=${groupId}]');
+            g.forEach(function(t){ if(t.id !== '${tooltipId}') t.classList.add('hidden'); });
+            el.classList.toggle('hidden');
+          })(document.getElementById('${tooltipId}')); event.stopPropagation();"
         >
           <!-- Label interne si segment assez large -->
           ${s.width > 12 ? `<span class="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-[10px] font-semibold ${textCl} truncate px-1 pointer-events-none leading-tight">${s.label}</span>` : ''}
         </div>
         <!-- Tooltip détail -->
-        <div id="${tooltipId}" class="hidden absolute z-20 bg-white border border-gray-200 rounded-xl shadow-lg p-3 text-xs w-56"
-             style="left:${Math.min(s.left, 70).toFixed(2)}%;top:calc(100% + 8px)">
+        <div id="${tooltipId}" data-taf-group="${groupId}"
+             class="hidden absolute z-20 bg-white border border-gray-200 rounded-xl shadow-lg p-3 text-xs w-56"
+             style="${tooltipPos};top:calc(100% + 8px)">
           <div class="font-semibold text-gray-700 mb-1">${formatHHMM(s.segStart)} → ${formatHHMM(s.segEnd)}</div>
           <div class="mb-1">${s.label}</div>
           ${s.ci ? `<div class="text-gray-400">${s.ci}</div>` : ''}
@@ -445,7 +465,6 @@
     ).join('');
 
     // Curseur "maintenant"
-    const nowPct = 0; // maintenant = bord gauche
     const nowHtml = `
       <div class="absolute top-0 h-full border-l-2 border-blue-500 pointer-events-none z-10"
            style="left:0%">

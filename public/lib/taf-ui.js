@@ -396,16 +396,11 @@
     const totalSec = tEnd - tStart;
 
     // ── Étape 1 : résolution des périodes en slots de 30 min sans chevauchement ────────
-    // AWC retourne des couches qui se superposent (période de base + TEMPO + BECMG).
-    // On évalue la sévérité de chaque slot en prenant le pire de toutes les couches.
-    const SLOT = 30 * 60; // 30 min en secondes
+    const SLOT = 30 * 60;
     const nSlots = Math.ceil((tEnd - tStart) / SLOT);
-    // Pour chaque slot : sévérité pire + référence au fcst le plus prioritaire
     const slotSev   = new Array(nSlots).fill('none');
     const slotFcst  = new Array(nSlots).fill(null);
 
-    // Tri des fcsts par priorité : TEMPO > BECMG > FM/BASE
-    // On les traite dans l’ordre inverse (les couches supérieures écrasent)
     const CI_PRIORITY = { TEMPO: 3, 'PROB30 TEMPO': 3, 'PROB40 TEMPO': 3, BECMG: 2, PROB30: 1, PROB40: 1 };
     const sortedFcsts = [...fcsts].sort((a, b) =>
       (CI_PRIORITY[a.changeIndicator] ?? 0) - (CI_PRIORITY[b.changeIndicator] ?? 0)
@@ -422,11 +417,9 @@
       const eSlot = Math.ceil( (fEnd   - tStart) / SLOT);
 
       for (let s = iSlot; s < eSlot && s < nSlots; s++) {
-        // La couche la plus prioritaire (TEMPO > BECMG > base) écrase le slot
         const curPriority = slotFcst[s] ? (CI_PRIORITY[slotFcst[s].changeIndicator] ?? 0) : -1;
         const newPriority = CI_PRIORITY[f.changeIndicator] ?? 0;
         if (newPriority >= curPriority) {
-          // Prend la sévérité pire entre la couche prioritaire et l’existante
           if (slotSev[s] === 'none' || SEVERITY_ORDER[sev] < SEVERITY_ORDER[slotSev[s]]) {
             slotSev[s]  = sev;
           }
@@ -435,14 +428,13 @@
       }
     }
 
-    // ── Étape 2 : fusion des slots consécutifs de même sévérité + même fcst en segments ──
+    // ── Étape 2 : fusion des slots consécutifs de même sévérité en segments ──
     const segments = [];
     let i = 0;
     while (i < nSlots) {
       const sev   = slotSev[i];
       const fcst  = slotFcst[i];
       let j = i + 1;
-      // Fusionne les slots consécutifs de même sévérité
       while (j < nSlots && slotSev[j] === sev) j++;
 
       const segStart = tStart + i * SLOT;
@@ -470,7 +462,6 @@
 
     const groupId = 'taf-grp-' + baseTaf.icao;
 
-    // Barres colorées
     const barsHtml = segments.map((s, i) => {
       const color  = PERIOD_BG[s.sev] ?? '#22c55e';
       const textCl = s.sev === 'yellow' ? 'text-black' : 'text-white';
@@ -488,7 +479,6 @@
         >${s.width > 12 ? `<span class="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-[10px] font-semibold ${textCl} truncate px-1 pointer-events-none leading-tight">${s.label}</span>` : ''}</div>`;
     }).join('');
 
-    // Tooltips frères (left/right = % de la barre entière)
     const tipsHtml = segments.map((s, i) => {
       const tipId  = `taf-seg-${baseTaf.icao}-${i}`;
       const center = s.left + s.width / 2;
@@ -686,7 +676,19 @@
           </div>`;
       }
 
-      container.innerHTML = mainHtml + renderBaseSection(baseHits, baseTafs) + lastUpdateBar();
+      // FIX : sur grand écran, la section CDG/ORY est injectée directement dans
+      // le slot gauche (#base-status-body) pour éviter le doublon au refresh.
+      // Sur mobile (< 1280px), le slot est masqué → on garde l'affichage inline.
+      const baseSectionHtml = renderBaseSection(baseHits, baseTafs);
+      const isWide = window.matchMedia('(min-width: 1280px)').matches;
+      const baseBodyEl = document.getElementById('base-status-body');
+
+      if (isWide && baseBodyEl) {
+        container.innerHTML = mainHtml + lastUpdateBar();
+        baseBodyEl.innerHTML = baseSectionHtml;
+      } else {
+        container.innerHTML = mainHtml + baseSectionHtml + lastUpdateBar();
+      }
       bindRefreshBtn();
 
     } catch (e) {

@@ -4,11 +4,13 @@
     red:    'bg-red-600 text-white',
     orange: 'bg-orange-500 text-white',
     yellow: 'bg-yellow-400 text-black',
+    none:   'bg-green-500 text-white',
   };
   const SEVERITY_LABEL = {
     red:    '🔴 ROUGE',
     orange: '🟠 ORANGE',
     yellow: '🟡 JAUNE',
+    none:   '✅ DÉGAGÉ',
   };
   const THREAT_ICONS = {
     THUNDERSTORM: '⛈',
@@ -28,12 +30,27 @@
     'PROB30 TEMPO':{ text: 'PROB 30% TEMPO',cls: 'bg-purple-50 text-purple-600 border border-purple-200' },
     'PROB40 TEMPO':{ text: 'PROB 40% TEMPO',cls: 'bg-yellow-50 text-yellow-700 border border-yellow-200' },
   };
-  const SEVERITY_ORDER = { red: 0, orange: 1, yellow: 2 };
+  const SEVERITY_ORDER = { red: 0, orange: 1, yellow: 2, none: 3 };
+
+  // Couleur de fond des barres de la frise temporelle
+  const PERIOD_BG = {
+    red:    '#ef4444',
+    orange: '#f97316',
+    yellow: '#facc15',
+    none:   '#22c55e',
+  };
 
   // ── Helpers ────────────────────────────────────────────────────────────────────────
   function formatUTC(ts) {
     return new Date(ts * 1000).toLocaleString('fr-FR', {
       day: '2-digit', month: '2-digit',
+      hour: '2-digit', minute: '2-digit',
+      timeZone: 'UTC',
+    }) + 'Z';
+  }
+
+  function formatHHMM(ts) {
+    return new Date(ts * 1000).toLocaleString('fr-FR', {
       hour: '2-digit', minute: '2-digit',
       timeZone: 'UTC',
     }) + 'Z';
@@ -58,23 +75,11 @@
     return sign + h + 'h' + (min > 0 ? String(min).padStart(2, '0') + 'min' : '');
   }
 
-  /**
-   * Formate un TAF brut pour la lisibilité :
-   * - Saut de ligne avant chaque groupe temporel : FM, TEMPO, BECMG, PROB30, PROB40, RMK
-   * - "PROB30 TEMPO" et "PROB40 TEMPO" restent sur la même ligne (traités comme un seul token)
-   */
   function formatTafRaw(raw) {
     if (!raw) return '';
-    // 1. Normalise les espaces multiples / retours existants
     const flat = raw.trim().replace(/\s+/g, ' ');
-    // 2. Insère \n avant les groupes temporels.
-    //    On traite PROB3x/PROB4x TEMPO en premier pour les coller ensemble,
-    //    puis les tokens simples restants.
     return flat
-      // Priorité : PROB30 TEMPO et PROB40 TEMPO → un seul saut avant "PROB3x TEMPO"
       .replace(/\s+(PROB(30|40)\s+TEMPO)\b/g, '\n$1')
-      // Ensuite : FM, BECMG, TEMPO standalone (non précédé de PROBxx),
-      //           PROB30/PROB40 standalone (non suivi de TEMPO), RMK
       .replace(/\s+(FM\d{6}|BECMG\b|(?<!PROB(?:30|40) )TEMPO\b|PROB(30|40)(?!\s+TEMPO)\b|RMK\b)/g, '\n$1');
   }
 
@@ -327,76 +332,262 @@
       </tr>`;
   }
 
-  // ── Section CDG/ORY ─────────────────────────────────────────────────────────────────────────
-  function renderBaseSection(baseHits) {
-    if (!baseHits || baseHits.length === 0) {
+  // ─────────────────────────────────────────────────────────────────────────────────────────
+  // ██████████████████████  FRISE TEMPORELLE TAF BASE  ██████████████████████████████████████
+  // ─────────────────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Déduit la sévérité d'une période TAF (fcst) en fonction des menaces connues qui la chevauchent.
+   * Retourne 'none' si aucune menace ne couvre cette période.
+   */
+  function periodSeverity(fcst, threats) {
+    if (!threats || threats.length === 0) return 'none';
+    let best = 'none';
+    for (const t of threats) {
+      const overlap = t.periodStart < fcst.timeTo && t.periodEnd > fcst.timeFrom;
+      if (!overlap) continue;
+      if (SEVERITY_ORDER[t.severity] < SEVERITY_ORDER[best === 'none' ? 'none' : best]) {
+        best = t.severity;
+      } else if (best === 'none') {
+        best = t.severity;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Retourne le label court d'une période (première menace ou état dégagé).
+   */
+  function periodLabel(fcst, threats) {
+    const matching = (threats || []).filter(t =>
+      t.periodStart < fcst.timeTo && t.periodEnd > fcst.timeFrom
+    );
+    if (matching.length === 0) return 'Dégagé';
+    return matching.map(t => (THREAT_ICONS[t.type] ?? '⚠️') + ' ' + t.label).join(' · ');
+  }
+
+  /**
+   * Construit la frise temporelle SVG/HTML pour un baseTaf.
+   * Fenêtre = maintenant → maintenant + 24h (ou fin du TAF si plus tôt).
+   */
+  function renderTafTimeline(baseTaf) {
+    const fcsts    = baseTaf.fcsts   || [];
+    const threats  = baseTaf.threats || [];
+    const nowSec   = Math.floor(Date.now() / 1000);
+    const windowSec = 24 * 3600;
+
+    // Borne de la fenêtre
+    const tStart = nowSec;
+    const tEnd   = fcsts.length > 0
+      ? Math.min(tStart + windowSec, Math.max(...fcsts.map(f => f.timeTo ?? f.timeFrom)))
+      : tStart + windowSec;
+
+    if (fcsts.length === 0 || tEnd <= tStart) {
+      return `<div class="text-xs text-gray-400 italic">TAF non disponible</div>`;
+    }
+
+    const totalSec = tEnd - tStart;
+
+    // Construire les segments à afficher
+    const segments = fcsts
+      .filter(f => f.timeTo > tStart && f.timeFrom < tEnd)
+      .map(f => {
+        const segStart = Math.max(f.timeFrom, tStart);
+        const segEnd   = Math.min(f.timeTo, tEnd);
+        const left     = ((segStart - tStart) / totalSec) * 100;
+        const width    = ((segEnd   - segStart) / totalSec) * 100;
+        const sev      = periodSeverity(f, threats);
+        const label    = periodLabel(f, threats);
+        const ci       = f.changeIndicator ?? '';
+        const snippet  = buildFcstSnippet(f);
+        return { left, width, sev, label, ci, segStart, segEnd, snippet };
+      });
+
+    // Graduations toutes les 3h
+    const ticks = [];
+    const firstTickSec = tStart + (3600 - (tStart % 3600)) % 3600; // prochain heure ronde
+    for (let t = firstTickSec; t < tEnd; t += 3 * 3600) {
+      const pct = ((t - tStart) / totalSec) * 100;
+      const label = new Date(t * 1000).toLocaleString('fr-FR', {
+        hour: '2-digit', minute: '2-digit', timeZone: 'UTC',
+      }) + 'Z';
+      ticks.push({ pct, label });
+    }
+
+    const segmentsHtml = segments.map((s, i) => {
+      const color  = PERIOD_BG[s.sev] ?? '#22c55e';
+      const textCl = s.sev === 'yellow' ? 'text-black' : 'text-white';
+      const tooltipId = `taf-seg-${baseTaf.icao}-${i}`;
+      return `
+        <div
+          class="absolute top-0 h-full rounded transition-opacity hover:opacity-80 cursor-pointer group"
+          style="left:${s.left.toFixed(2)}%;width:${s.width.toFixed(2)}%;background:${color}"
+          onclick="document.getElementById('${tooltipId}').classList.toggle('hidden'); event.stopPropagation();"
+        >
+          <!-- Label interne si segment assez large -->
+          ${s.width > 12 ? `<span class="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-[10px] font-semibold ${textCl} truncate px-1 pointer-events-none leading-tight">${s.label}</span>` : ''}
+        </div>
+        <!-- Tooltip détail -->
+        <div id="${tooltipId}" class="hidden absolute z-20 bg-white border border-gray-200 rounded-xl shadow-lg p-3 text-xs w-56"
+             style="left:${Math.min(s.left, 70).toFixed(2)}%;top:calc(100% + 8px)">
+          <div class="font-semibold text-gray-700 mb-1">${formatHHMM(s.segStart)} → ${formatHHMM(s.segEnd)}</div>
+          <div class="mb-1">${s.label}</div>
+          ${s.ci ? `<div class="text-gray-400">${s.ci}</div>` : ''}
+          ${s.snippet ? `<div class="font-mono text-gray-600 mt-1 bg-gray-50 rounded px-1 py-0.5">${s.snippet}</div>` : ''}
+        </div>`;
+    }).join('');
+
+    const ticksHtml = ticks.map(t => `
+      <div class="absolute top-0 h-full border-l border-white/40 pointer-events-none"
+           style="left:${t.pct.toFixed(2)}%">
+        <span class="absolute -bottom-5 text-[9px] text-gray-400 -translate-x-1/2 whitespace-nowrap">${t.label}</span>
+      </div>`
+    ).join('');
+
+    // Curseur "maintenant"
+    const nowPct = 0; // maintenant = bord gauche
+    const nowHtml = `
+      <div class="absolute top-0 h-full border-l-2 border-blue-500 pointer-events-none z-10"
+           style="left:0%">
+        <span class="absolute -top-5 text-[10px] text-blue-600 font-semibold -translate-x-1/2">NOW</span>
+      </div>`;
+
+    return `
+      <div class="relative mt-8 mb-6 select-none" onclick="void(0)">
+        <!-- Barre principale -->
+        <div class="relative h-8 rounded-lg overflow-visible bg-gray-100 border border-gray-200">
+          ${segmentsHtml}
+          ${ticksHtml}
+          ${nowHtml}
+        </div>
+        <!-- Axe graduations -->
+        <div class="relative h-5"></div>
+        <!-- Légende sévérités -->
+        <div class="flex gap-3 mt-2 flex-wrap text-xs">
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-green-500"></span>Dégagé</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-yellow-400"></span>Jaune</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-orange-500"></span>Orange</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-red-600"></span>Rouge</span>
+        </div>
+      </div>`;
+  }
+
+  /**
+   * Construit un snippet lisible à partir d'un objet fcst brut AWC.
+   */
+  function buildFcstSnippet(fcst) {
+    const parts = [];
+    if (fcst.wdir != null && fcst.wspd != null) {
+      const dir = String(fcst.wdir).padStart(3, '0');
+      const spd = String(fcst.wspd).padStart(2, '0');
+      const gst = fcst.wgst ? `G${String(fcst.wgst).padStart(2, '0')}` : '';
+      parts.push(`${dir}${spd}${gst}KT`);
+    }
+    if (fcst.wxString) parts.push(fcst.wxString);
+    if (fcst.visib && fcst.visib !== '9999' && fcst.visib !== '6+') {
+      parts.push(`VIS ${fcst.visib}`);
+    }
+    const cbs = (fcst.clouds || []).filter(c => c.type === 'CB' || c.type === 'TCU');
+    if (cbs.length) parts.push(cbs.map(c => `${c.cover}${c.base}${c.type}`).join(' '));
+    return parts.join(' ');
+  }
+
+  // ── Section CDG/ORY — rendu graphique toujours visible ─────────────────────────────────────
+  function renderBaseSection(baseHits, baseTafs) {
+    // baseTafs = [{icao, iata, name, rawTaf, worstSeverity, threats, fcsts}]
+    const tafsToRender = (baseTafs && baseTafs.length > 0)
+      ? baseTafs
+      : (baseHits && baseHits.length > 0)
+        ? Object.values(baseHits.reduce((acc, h) => {
+            const key = h.taf.icao;
+            if (!acc[key]) acc[key] = { ...h.taf, threats: [], fcsts: [] };
+            const dup = acc[key].threats.some(t =>
+              t.type === h.threat.type && t.periodStart === h.threat.periodStart);
+            if (!dup) acc[key].threats.push(h.threat);
+            return acc;
+          }, {}))
+        : [];
+
+    if (tafsToRender.length === 0) {
       return `
         <section class="mt-8 pt-6 border-t border-gray-200">
-          <div class="flex items-center justify-between mb-3">
-            <div>
-              <h2 class="text-xl font-bold text-gray-900">🏠 État base CDG / ORY</h2>
-              <p class="text-gray-500 text-sm mt-0.5">Phénomènes TAF actifs sur notre base — Hors croisement vols LC.</p>
-            </div>
-          </div>
+          <h2 class="text-xl font-bold text-gray-900 mb-1">🏠 État base CDG / ORY</h2>
+          <p class="text-gray-500 text-sm mb-4">TAF actifs sur notre base — Hors croisement vols LC.</p>
           <div class="text-center py-8 text-gray-400">
-            <div class="text-3xl mb-2">✅</div>
-            <div class="text-sm">Aucun phénomène significatif sur CDG ou ORY.</div>
+            <div class="text-3xl mb-2">⏳</div>
+            <div class="text-sm">TAF en cours de chargement…</div>
           </div>
         </section>`;
     }
 
-    // Regrouper par aéroport (IATA)
-    const byAirport = baseHits.reduce((acc, h) => {
-      const key = h.taf.iata;
-      if (!acc[key]) acc[key] = { taf: h.taf, threats: [] };
-      // Dé-doublonner les menaces par type+période
-      const exists = acc[key].threats.some(t =>
-        t.type === h.threat.type &&
-        t.periodStart === h.threat.periodStart &&
-        t.periodEnd   === h.threat.periodEnd
-      );
-      if (!exists) acc[key].threats.push(h.threat);
-      return acc;
-    }, {});
+    const cards = tafsToRender.map(taf => {
+      const sev   = taf.worstSeverity ?? 'none';
+      const badge = SEVERITY_BADGE[sev];
+      const label = SEVERITY_LABEL[sev];
 
-    const airportCards = Object.entries(byAirport).map(([iata, { taf, threats }]) => {
-      const worstSev = threats.reduce((w, t) =>
-        SEVERITY_ORDER[t.severity] < SEVERITY_ORDER[w] ? t.severity : w
-      , 'yellow');
-      const badge = SEVERITY_BADGE[worstSev];
-      const label = SEVERITY_LABEL[worstSev];
+      const threatsList = taf.threats.length > 0
+        ? taf.threats.map(t => `
+          <div class="mb-2 pb-2 border-b border-gray-100 last:border-0">${renderThreatBadge(t)}</div>`
+          ).join('')
+        : `<div class="text-xs text-green-600 font-medium py-1">✅ Aucun phénomène significatif sur ce TAF</div>`;
+
+      const tafId = 'base-taf-raw-' + taf.icao;
 
       return `
-        <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-          <div class="flex items-center gap-3 mb-3 flex-wrap">
+        <div class="bg-white border ${sev === 'none' ? 'border-green-200' : sev === 'red' ? 'border-red-300' : 'border-orange-200'} rounded-xl p-4 shadow-sm">
+          <!-- Header -->
+          <div class="flex items-center gap-3 mb-2 flex-wrap">
             <span class="${badge} px-2 py-0.5 rounded text-xs font-bold">${label}</span>
-            <span class="font-mono font-bold text-gray-800 text-base">${iata}</span>
+            <span class="font-mono font-bold text-gray-800 text-base">${taf.iata}</span>
             <span class="text-gray-400 font-mono text-sm">${taf.icao}</span>
             <span class="text-gray-600 text-sm">${taf.name}</span>
           </div>
-          <div class="flex flex-col gap-3">
-            ${threats.map(t => renderThreatBadge(t)).join('')}
+
+          <!-- Frise temporelle -->
+          ${renderTafTimeline(taf)}
+
+          <!-- Menaces détaillées -->
+          <div class="mt-2">
+            ${threatsList}
+          </div>
+
+          <!-- TAF brut toggle -->
+          <div class="mt-3">
+            <button
+              class="text-xs text-gray-400 hover:text-gray-600 font-semibold flex items-center gap-1"
+              onclick="(function(btn){
+                var el = document.getElementById('${tafId}');
+                el.classList.toggle('hidden');
+                btn.innerHTML = el.classList.contains('hidden')
+                  ? '▶ Afficher TAF brut'
+                  : '▼ Masquer TAF brut';
+              })(this)">
+              ▶ Afficher TAF brut
+            </button>
+            <div id="${tafId}" class="hidden mt-2 font-mono text-[11px] bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-600" style="white-space:pre-wrap;word-break:break-word">${formatTafRaw(taf.rawTaf)}</div>
           </div>
         </div>`;
     }).join('');
 
-    const totalThreats = Object.values(byAirport).reduce((s, { threats }) => s + threats.length, 0);
-    const redCount    = baseHits.filter(h => h.threat.severity === 'red').length;
-    const orangeCount = baseHits.filter(h => h.threat.severity === 'orange').length;
+    // Counters globaux
+    const allThreats = tafsToRender.flatMap(t => t.threats);
+    const redCount    = allThreats.filter(t => t.severity === 'red').length;
+    const orangeCount = allThreats.filter(t => t.severity === 'orange').length;
 
     return `
       <section class="mt-8 pt-6 border-t border-gray-200">
         <div class="flex items-center justify-between mb-3 flex-wrap gap-4">
           <div>
             <h2 class="text-xl font-bold text-gray-900">🏠 État base CDG / ORY</h2>
-            <p class="text-gray-500 text-sm mt-0.5">Phénomènes TAF actifs sur notre base — Hors croisement vols LC.</p>
+            <p class="text-gray-500 text-sm mt-0.5">TAF actifs sur notre base — frise 24h. Hors croisement vols LC.</p>
           </div>
           <div class="flex gap-2 text-xs">
-            ${redCount    ? `<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full font-semibold">🔴 ${redCount}</span>` : ''}
-            ${orangeCount ? `<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full font-semibold">🟠 ${orangeCount}</span>` : ''}
+            ${redCount    ? `<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full font-semibold">🔴 ${redCount} menace${redCount > 1 ? 's' : ''}</span>` : ''}
+            ${orangeCount ? `<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full font-semibold">🟠 ${orangeCount} menace${orangeCount > 1 ? 's' : ''}</span>` : ''}
+            ${allThreats.length === 0 ? '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full font-semibold">✅ Aucune menace</span>' : ''}
           </div>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">${airportCards}</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">${cards}</div>
       </section>`;
   }
 
@@ -423,8 +614,7 @@
       clearTimeout(timer);
       if (!res.ok) throw new Error('HTTP ' + res.status);
 
-      // L'API retourne désormais { hits, baseHits }
-      const { hits, baseHits } = await res.json();
+      const { hits, baseHits, baseTafs } = await res.json();
 
       const red    = hits.filter(h => h.threat.severity === 'red').length;
       const orange = hits.filter(h => h.threat.severity === 'orange').length;
@@ -462,7 +652,7 @@
           </div>`;
       }
 
-      container.innerHTML = mainHtml + renderBaseSection(baseHits) + lastUpdateBar();
+      container.innerHTML = mainHtml + renderBaseSection(baseHits, baseTafs) + lastUpdateBar();
       bindRefreshBtn();
 
     } catch (e) {

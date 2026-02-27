@@ -2,7 +2,7 @@
 import type { APIRoute } from 'astro';
 import type { TafRisk, TafThreat } from '../../lib/tafParser';
 import type { AfFlightArrival } from '../../lib/afFlights';
-import { fetchTafRisks } from '../../lib/tafParser';
+import { fetchTafRisks, AF_AIRPORT_ICAOS } from '../../lib/tafParser';
 import { getCachedAfArrivals } from '../../lib/afFlights';
 
 // ✅ Mode debug — passe à true pour voir les logs détaillés dans Vercel Functions
@@ -19,9 +19,21 @@ export interface TafFlightHit {
   minutesBeforeThreatStart: number;
 }
 
+// TAF complet d'un aéroport base (CDG/ORY), même sans menace
+export interface BaseTaf {
+  icao: string;
+  iata: string;
+  name: string;
+  rawTaf: string;
+  worstSeverity: TafRisk['worstSeverity'] | 'none';
+  threats: TafThreat[];
+  fcsts: any[];  // périodes brutes pour la frise temporelle
+}
+
 export interface TafVolRisksResponse {
   hits:     TafFlightHit[];
   baseHits: TafFlightHit[];
+  baseTafs: BaseTaf[];   // ← toujours présent, même si vide de menaces
 }
 
 const CACHE_TTL = 20 * 60 * 1000;
@@ -61,9 +73,19 @@ export const GET: APIRoute = async () => {
   }
 
   try {
-    const [tafRisks, allFlights] = await Promise.all([
+    // Fetch TAF bruts (tous aéroports AF) + vols en parallèle
+    // On a besoin des TAF bruts pour CDG/ORY même si parseTafToRisks ne les retourne pas
+    // (car pas de menace). On les fetch directement via l'AWC API.
+    const [tafRisks, allFlights, rawBaseTafsResult] = await Promise.all([
       fetchTafRisks(),
       getCachedAfArrivals(),
+      fetch(
+        `https://aviationweather.gov/api/data/taf?ids=LFPG,LFPO&format=json&metar=false`,
+        {
+          headers: { 'User-Agent': 'SkyWatch/1.0 dispatch-tool' },
+          signal: AbortSignal.timeout(12000),
+        }
+      ).then(r => r.ok ? r.json() : Promise.resolve([])).catch(() => []),
     ]);
 
     // ── Diagnostics généraux ────────────────────────────────────────────────────
@@ -93,71 +115,70 @@ export const GET: APIRoute = async () => {
     // ── Filtrage vols invalides ────────────────────────────────────────────────────
     const now = Date.now();
     const cleanedFlights = allFlights.filter(f => {
-    if (f.aircraftType === 'BUS') return false;          // rotations bus
-    if (!f.registration?.trim()) return false;           // vol annulé / non assigné
-    const etaIso = f.estimatedArrival ?? f.scheduledArrival;
-    if (etaIso && new Date(etaIso).getTime() < now) return false;
-    return true;
-});
+      if (f.aircraftType === 'BUS') return false;
+      if (!f.registration?.trim()) return false;
+      const etaIso = f.estimatedArrival ?? f.scheduledArrival;
+      if (etaIso && new Date(etaIso).getTime() < now) return false;
+      return true;
+    });
 
-// ── Matching ────────────────────────────────────────────────────────────────────
-const hits: TafFlightHit[] = [];
-let totalFlightsChecked = 0;
-let rejectedNoIcaoMatch = 0;
-let rejectedTimeWindow  = 0;
+    // ── Matching ────────────────────────────────────────────────────────────────────
+    const hits: TafFlightHit[] = [];
+    let totalFlightsChecked = 0;
+    let rejectedNoIcaoMatch = 0;
+    let rejectedTimeWindow  = 0;
 
-for (const taf of tafRisks) {
-  if (!taf.icao) continue;
+    for (const taf of tafRisks) {
+      if (!taf.icao) continue;
 
-  // ← cleanedFlights au lieu de allFlights
-  const flights = cleanedFlights.filter(f => f.icao === taf.icao);
+      const flights = cleanedFlights.filter(f => f.icao === taf.icao);
 
-  dbg(`  ${taf.icao} (${taf.iata}) → ${taf.threats.length} menaces, ${flights.length} vols AF trouvés`);
+      dbg(`  ${taf.icao} (${taf.iata}) → ${taf.threats.length} menaces, ${flights.length} vols AF trouvés`);
 
-  if (!flights.length) {
-    rejectedNoIcaoMatch += 1;
-    continue;
-  }
-
-  for (const threat of taf.threats) {
-    for (const flight of flights) {
-      totalFlightsChecked++;
-      const etaIso = flight.estimatedArrival ?? flight.scheduledArrival;
-      if (!etaIso) continue;
-
-      const etaMs = new Date(etaIso).getTime();
-      const { ok, minutesBefore } = overlapsThreatWindow(etaMs, threat);
-
-      if (!ok) {
-        rejectedTimeWindow++;
-        dbg(
-          `    ✗ AF${flight.flightNumber} ETA=${new Date(etaMs).toISOString()}` +
-          ` vs menace [${new Date(threat.periodStart * 1000).toISOString()} →` +
-          ` ${new Date(threat.periodEnd * 1000).toISOString()}]` +
-          ` | minutesBefore=${minutesBefore}`
-        );
+      if (!flights.length) {
+        rejectedNoIcaoMatch += 1;
         continue;
       }
 
-      dbg(
-        `    ✅ MATCH AF${flight.flightNumber} ETA=${new Date(etaMs).toISOString()}` +
-        ` | menace ${threat.type} ${threat.severity}` +
-        ` | minutesBefore=${minutesBefore}`
-      );
+      for (const threat of taf.threats) {
+        for (const flight of flights) {
+          totalFlightsChecked++;
+          const etaIso = flight.estimatedArrival ?? flight.scheduledArrival;
+          if (!etaIso) continue;
 
-      hits.push({ taf, threat, flight, minutesBeforeThreatStart: minutesBefore });
+          const etaMs = new Date(etaIso).getTime();
+          const { ok, minutesBefore } = overlapsThreatWindow(etaMs, threat);
+
+          if (!ok) {
+            rejectedTimeWindow++;
+            dbg(
+              `    ✗ AF${flight.flightNumber} ETA=${new Date(etaMs).toISOString()}` +
+              ` vs menace [${new Date(threat.periodStart * 1000).toISOString()} →` +
+              ` ${new Date(threat.periodEnd * 1000).toISOString()}]` +
+              ` | minutesBefore=${minutesBefore}`
+            );
+            continue;
+          }
+
+          dbg(
+            `    ✅ MATCH AF${flight.flightNumber} ETA=${new Date(etaMs).toISOString()}` +
+            ` | menace ${threat.type} ${threat.severity}` +
+            ` | minutesBefore=${minutesBefore}`
+          );
+
+          hits.push({ taf, threat, flight, minutesBeforeThreatStart: minutesBefore });
+        }
+      }
     }
-  }
-}
 
-// ── Résumé matching ────────────────────────────────────────────────────────────────────
-dbg(`Matching terminé :`);
-dbg(`  Vols bruts         : ${allFlights.length}`);
-dbg(`  Vols après filtre  : ${cleanedFlights.length}`);
-dbg(`  Vols vérifiés      : ${totalFlightsChecked}`);
-dbg(`  Rejetés (no ICAO)  : ${rejectedNoIcaoMatch}`);
-dbg(`  Rejetés (fenêtre)  : ${rejectedTimeWindow}`);
-dbg(`  Hits               : ${hits.length}`);
+    // ── Résumé matching ────────────────────────────────────────────────────────────────────
+    dbg(`Matching terminé :`);
+    dbg(`  Vols bruts         : ${allFlights.length}`);
+    dbg(`  Vols après filtre  : ${cleanedFlights.length}`);
+    dbg(`  Vols vérifiés      : ${totalFlightsChecked}`);
+    dbg(`  Rejetés (no ICAO)  : ${rejectedNoIcaoMatch}`);
+    dbg(`  Rejetés (fenêtre)  : ${rejectedTimeWindow}`);
+    dbg(`  Hits               : ${hits.length}`);
 
     // ── Séparation vols LC (hors base) vs base CDG/ORY ──────────────────────────────────────
     const filteredHits = hits.filter(h => !HOME_BASES.has(h.taf.icao));
@@ -165,6 +186,30 @@ dbg(`  Hits               : ${hits.length}`);
 
     dbg(`  Vols LC (hors CDG/ORY) : ${filteredHits.length}`);
     dbg(`  Vols base CDG/ORY      : ${baseHits.length}`);
+
+    // ── Construction baseTafs (CDG + ORY toujours présents) ─────────────────────────────────
+    const IATA_MAP: Record<string, string> = { LFPG: 'CDG', LFPO: 'ORY' };
+    const NAME_MAP: Record<string, string> = { LFPG: 'Paris CDG', LFPO: 'Paris Orly' };
+
+    const rawBaseTafs: any[] = Array.isArray(rawBaseTafsResult) ? rawBaseTafsResult : [];
+    dbg(`  TAF bruts CDG/ORY : ${rawBaseTafs.length}`);
+
+    const baseTafs: BaseTaf[] = ['LFPG', 'LFPO'].map(icao => {
+      // Cherche dans les risques parsés (si menace détectée)
+      const riskEntry = tafRisks.find(r => r.icao === icao);
+      // Cherche le TAF brut AWC
+      const rawEntry  = rawBaseTafs.find((t: any) => (t.icaoId ?? t.stationId) === icao);
+
+      return {
+        icao,
+        iata: IATA_MAP[icao],
+        name: NAME_MAP[icao],
+        rawTaf:        riskEntry?.rawTaf ?? rawEntry?.rawTAF ?? '',
+        worstSeverity: riskEntry?.worstSeverity ?? 'none',
+        threats:       riskEntry?.threats ?? [],
+        fcsts:         rawEntry?.fcsts ?? [],
+      };
+    });
 
     // ── Tri ────────────────────────────────────────────────────────────────────────
     const sortHits = (arr: TafFlightHit[]) => arr.sort((a, b) => {
@@ -178,7 +223,7 @@ dbg(`  Hits               : ${hits.length}`);
     sortHits(filteredHits);
     sortHits(baseHits);
 
-    const response: TafVolRisksResponse = { hits: filteredHits, baseHits };
+    const response: TafVolRisksResponse = { hits: filteredHits, baseHits, baseTafs };
     cache = { ts: Date.now(), data: response };
 
     return new Response(JSON.stringify(response), {
@@ -187,7 +232,7 @@ dbg(`  Hits               : ${hits.length}`);
 
   } catch (e) {
     console.error('[API /taf-vol-risks]', e);
-    return new Response(JSON.stringify({ error: String(e), hits: [], baseHits: [] }), {
+    return new Response(JSON.stringify({ error: String(e), hits: [], baseHits: [], baseTafs: [] }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

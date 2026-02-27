@@ -47,17 +47,28 @@ function timeWindowStatus(validTo: string | undefined): { label: string; cls: st
 
 /**
  * Extrait le nom du volcan depuis le headline d'une alerte VAAC.
- * Format attendu : "Avis cendres volcaniques : NOM_VOLCAN FL200 ..."
- * ou              "Cendres volcaniques — NOM_VOLCAN FL200 ..."
+ *
+ * Formats gérés :
+ *   "Avis cendres volcaniques : LOPEVI — Cendres FL200 ... (VAAC Washington)"
+ *   "Cendres volcaniques — MERAPI FL180 (VAAC Tokyo)"
+ *   "VOLCANO: POPOCATEPETL ..."
+ *
+ * FIX : le séparateur après le nom peut être un espace suivi de FL, de (VAAC,
+ * d'un tiret (—, -, –) ou simplement la fin de chaîne. La regex accepte aussi
+ * les noms minuscules/mixtes et les accents (ex: "Etna", "Fournaise").
  */
 function extractVolcanoName(alert: WeatherAlert): string | null {
   if (alert.source !== 'VAAC' && alert.eventType !== 'VAAC') return null;
-  // Format VAAC Washington : "Avis cendres volcaniques : LOPEVI — Cendres FL200 ..."
-  const m1 = alert.headline.match(/(?:Avis cendres volcaniques\s*:\s*|Cendres volcaniques\s*[—-]\s*)([A-Z][A-Z0-9 _-]+?)(?:\s*(?:—|FL|\(VAAC))/i);
+  const h = alert.headline;
+  // Format 1 — "Avis cendres volcaniques : NOM ..."
+  const m1 = h.match(/Avis cendres volcaniques\s*:\s*([\w][\w .,'-]{1,40}?)\s*(?:—|-–|FL|\(VAAC|$)/i);
   if (m1) return m1[1].trim();
-  // Format texte brut : "... VOLCANO: NOM ..."
-  const m2 = alert.headline.match(/VOLCANO[:\s]+([A-Z][A-Z0-9 _-]+?)(?:\s|$)/i);
+  // Format 2 — "Cendres volcaniques — NOM ..."
+  const m2 = h.match(/Cendres volcaniques\s*[—\-–]\s*([\w][\w .,'-]{1,40}?)\s*(?:FL|\(VAAC|—|-–|$)/i);
   if (m2) return m2[1].trim();
+  // Format 3 — "VOLCANO: NOM"
+  const m3 = h.match(/VOLCANO[:\s]+([\w][\w .,'-]{1,40}?)(?:\s|$)/i);
+  if (m3) return m3[1].trim();
   return null;
 }
 

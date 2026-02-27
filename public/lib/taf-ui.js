@@ -32,7 +32,6 @@
   };
   const SEVERITY_ORDER = { red: 0, orange: 1, yellow: 2, none: 3 };
 
-  // Couleur de fond des barres de la frise temporelle
   const PERIOD_BG = {
     red:    '#ef4444',
     orange: '#f97316',
@@ -278,8 +277,6 @@
       <tr id="${rowId}" class="hidden bg-gray-50">
         <td colspan="7" class="px-5 py-3">
           <div class="flex flex-col gap-3 text-xs">
-
-            <!-- ✅ PRIORITÉ : Fenêtre d'arrivée du vol -->
             <div class="bg-white border border-gray-200 rounded-lg px-3 py-2">
               <div class="flex items-center gap-3 flex-wrap mb-2">
                 <span class="${badge} px-2 py-0.5 rounded font-bold text-xs">${icon} ${threat.label}</span>
@@ -292,8 +289,6 @@
               </div>
               <div class="font-mono bg-gray-50 border border-gray-100 rounded px-2 py-1 text-gray-700">${threat.snippet.trim()}</div>
             </div>
-
-            <!-- Autres menaces : toggle -->
             <div>
               <button
                 class="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1"
@@ -310,8 +305,6 @@
                 ${otherThreatsHtml}
               </div>
             </div>
-
-            <!-- TAF complet : toggle -->
             <div>
               <button
                 class="text-xs text-gray-500 hover:text-gray-700 font-semibold flex items-center gap-1"
@@ -326,7 +319,6 @@
               </button>
               <div class="taf-raw-block hidden mt-2 font-mono bg-white border border-gray-200 rounded-lg px-2 py-1 text-gray-600 text-[11px]" style="white-space:pre-wrap;word-break:break-word">${formatTafRaw(taf.rawTaf)}</div>
             </div>
-
           </div>
         </td>
       </tr>`;
@@ -336,28 +328,19 @@
   // ██████████████████████  FRISE TEMPORELLE TAF BASE  ██████████████████████████████████████
   // ─────────────────────────────────────────────────────────────────────────────────────────
 
-  /**
-   * Déduit la sévérité d'une période TAF (fcst) en fonction des menaces connues qui la chevauchent.
-   * Retourne 'none' si aucune menace ne couvre cette période.
-   */
   function periodSeverity(fcst, threats) {
     if (!threats || threats.length === 0) return 'none';
     let best = 'none';
     for (const t of threats) {
       const overlap = t.periodStart < fcst.timeTo && t.periodEnd > fcst.timeFrom;
       if (!overlap) continue;
-      if (SEVERITY_ORDER[t.severity] < SEVERITY_ORDER[best === 'none' ? 'none' : best]) {
-        best = t.severity;
-      } else if (best === 'none') {
+      if (best === 'none' || SEVERITY_ORDER[t.severity] < SEVERITY_ORDER[best]) {
         best = t.severity;
       }
     }
     return best;
   }
 
-  /**
-   * Retourne le label court d'une période (première menace ou état dégagé).
-   */
   function periodLabel(fcst, threats) {
     const matching = (threats || []).filter(t =>
       t.periodStart < fcst.timeTo && t.periodEnd > fcst.timeFrom
@@ -366,134 +349,6 @@
     return matching.map(t => (THREAT_ICONS[t.type] ?? '⚠️') + ' ' + t.label).join(' · ');
   }
 
-  /**
-   * Construit la frise temporelle SVG/HTML pour un baseTaf.
-   * Fenêtre = maintenant → maintenant + 24h (ou fin du TAF si plus tôt).
-   *
-   * FIX: le tooltip est positionné intelligemment (gauche ou droite selon
-   * la position du segment dans la frise) pour éviter le débordement.
-   * Un seul tooltip est visible à la fois — les autres sont fermés au clic.
-   */
-  function renderTafTimeline(baseTaf) {
-    const fcsts    = baseTaf.fcsts   || [];
-    const threats  = baseTaf.threats || [];
-    const nowSec   = Math.floor(Date.now() / 1000);
-    const windowSec = 24 * 3600;
-
-    // Borne de la fenêtre
-    const tStart = nowSec;
-    const tEnd   = fcsts.length > 0
-      ? Math.min(tStart + windowSec, Math.max(...fcsts.map(f => f.timeTo ?? f.timeFrom)))
-      : tStart + windowSec;
-
-    if (fcsts.length === 0 || tEnd <= tStart) {
-      return `<div class="text-xs text-gray-400 italic">TAF non disponible</div>`;
-    }
-
-    const totalSec = tEnd - tStart;
-
-    // Construire les segments à afficher
-    const segments = fcsts
-      .filter(f => f.timeTo > tStart && f.timeFrom < tEnd)
-      .map(f => {
-        const segStart = Math.max(f.timeFrom, tStart);
-        const segEnd   = Math.min(f.timeTo, tEnd);
-        const left     = ((segStart - tStart) / totalSec) * 100;
-        const width    = ((segEnd   - segStart) / totalSec) * 100;
-        const sev      = periodSeverity(f, threats);
-        const label    = periodLabel(f, threats);
-        const ci       = f.changeIndicator ?? '';
-        const snippet  = buildFcstSnippet(f);
-        return { left, width, sev, label, ci, segStart, segEnd, snippet };
-      });
-
-    // Graduations toutes les 3h
-    const ticks = [];
-    const firstTickSec = tStart + (3600 - (tStart % 3600)) % 3600; // prochain heure ronde
-    for (let t = firstTickSec; t < tEnd; t += 3 * 3600) {
-      const pct = ((t - tStart) / totalSec) * 100;
-      const label = new Date(t * 1000).toLocaleString('fr-FR', {
-        hour: '2-digit', minute: '2-digit', timeZone: 'UTC',
-      }) + 'Z';
-      ticks.push({ pct, label });
-    }
-
-    // Identifiant unique pour ce groupe de tooltips (pour fermeture mutuelle)
-    const groupId = 'taf-grp-' + baseTaf.icao;
-
-    const segmentsHtml = segments.map((s, i) => {
-      const color     = PERIOD_BG[s.sev] ?? '#22c55e';
-      const textCl    = s.sev === 'yellow' ? 'text-black' : 'text-white';
-      const tooltipId = `taf-seg-${baseTaf.icao}-${i}`;
-
-      // FIX: positionne le tooltip à droite du segment si celui-ci est dans
-      // la première moitié de la frise, à gauche sinon — évite tout débordement.
-      const anchorRight = s.left + s.width / 2 > 50;
-      const tooltipPos  = anchorRight
-        ? `right:${(100 - s.left - s.width).toFixed(2)}%;left:auto`
-        : `left:${s.left.toFixed(2)}%;right:auto`;
-
-      return `
-        <div
-          class="absolute top-0 h-full rounded transition-opacity hover:opacity-80 cursor-pointer"
-          style="left:${s.left.toFixed(2)}%;width:${s.width.toFixed(2)}%;background:${color}"
-          onclick="(function(el){
-            var g = document.querySelectorAll('[data-taf-group=${groupId}]');
-            g.forEach(function(t){ if(t.id !== '${tooltipId}') t.classList.add('hidden'); });
-            el.classList.toggle('hidden');
-          })(document.getElementById('${tooltipId}')); event.stopPropagation();"
-        >
-          <!-- Label interne si segment assez large -->
-          ${s.width > 12 ? `<span class="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-[10px] font-semibold ${textCl} truncate px-1 pointer-events-none leading-tight">${s.label}</span>` : ''}
-        </div>
-        <!-- Tooltip détail -->
-        <div id="${tooltipId}" data-taf-group="${groupId}"
-             class="hidden absolute z-20 bg-white border border-gray-200 rounded-xl shadow-lg p-3 text-xs w-56"
-             style="${tooltipPos};top:calc(100% + 8px)">
-          <div class="font-semibold text-gray-700 mb-1">${formatHHMM(s.segStart)} → ${formatHHMM(s.segEnd)}</div>
-          <div class="mb-1">${s.label}</div>
-          ${s.ci ? `<div class="text-gray-400">${s.ci}</div>` : ''}
-          ${s.snippet ? `<div class="font-mono text-gray-600 mt-1 bg-gray-50 rounded px-1 py-0.5">${s.snippet}</div>` : ''}
-        </div>`;
-    }).join('');
-
-    const ticksHtml = ticks.map(t => `
-      <div class="absolute top-0 h-full border-l border-white/40 pointer-events-none"
-           style="left:${t.pct.toFixed(2)}%">
-        <span class="absolute -bottom-5 text-[9px] text-gray-400 -translate-x-1/2 whitespace-nowrap">${t.label}</span>
-      </div>`
-    ).join('');
-
-    // Curseur "maintenant"
-    const nowHtml = `
-      <div class="absolute top-0 h-full border-l-2 border-blue-500 pointer-events-none z-10"
-           style="left:0%">
-        <span class="absolute -top-5 text-[10px] text-blue-600 font-semibold -translate-x-1/2">NOW</span>
-      </div>`;
-
-    return `
-      <div class="relative mt-8 mb-6 select-none" onclick="void(0)">
-        <!-- Barre principale -->
-        <div class="relative h-8 rounded-lg overflow-visible bg-gray-100 border border-gray-200">
-          ${segmentsHtml}
-          ${ticksHtml}
-          ${nowHtml}
-        </div>
-        <!-- Axe graduations -->
-        <div class="relative h-5"></div>
-        <!-- Légende sévérités -->
-        <div class="flex gap-3 mt-2 flex-wrap text-xs">
-          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-green-500"></span>Dégagé</span>
-          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-yellow-400"></span>Jaune</span>
-          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-orange-500"></span>Orange</span>
-          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-red-600"></span>Rouge</span>
-        </div>
-      </div>`;
-  }
-
-  /**
-   * Construit un snippet lisible à partir d'un objet fcst brut AWC.
-   */
   function buildFcstSnippet(fcst) {
     const parts = [];
     if (fcst.wdir != null && fcst.wspd != null) {
@@ -511,9 +366,132 @@
     return parts.join(' ');
   }
 
-  // ── Section CDG/ORY — rendu graphique toujours visible ─────────────────────────────────────
+  /**
+   * Frise temporelle TAF pour CDG/ORY.
+   *
+   * FIX TOOLTIP : le tooltip est rendu en dehors du div segment (au même niveau
+   * que lui, enfant direct de la barre container). Ainsi left/right sont des %
+   * de la barre entière, pas du segment, ce qui évite tout débordement.
+   * Le positionnement gauche/droite dépend du centre du segment dans la frise.
+   */
+  function renderTafTimeline(baseTaf) {
+    const fcsts     = baseTaf.fcsts   || [];
+    const threats   = baseTaf.threats || [];
+    const nowSec    = Math.floor(Date.now() / 1000);
+    const windowSec = 24 * 3600;
+
+    const tStart = nowSec;
+    const tEnd   = fcsts.length > 0
+      ? Math.min(tStart + windowSec, Math.max(...fcsts.map(f => f.timeTo ?? f.timeFrom)))
+      : tStart + windowSec;
+
+    if (fcsts.length === 0 || tEnd <= tStart) {
+      return `<div class="text-xs text-gray-400 italic">TAF non disponible</div>`;
+    }
+
+    const totalSec = tEnd - tStart;
+
+    const segments = fcsts
+      .filter(f => f.timeTo > tStart && f.timeFrom < tEnd)
+      .map(f => {
+        const segStart = Math.max(f.timeFrom, tStart);
+        const segEnd   = Math.min(f.timeTo, tEnd);
+        const left     = ((segStart - tStart) / totalSec) * 100;
+        const width    = ((segEnd   - segStart) / totalSec) * 100;
+        const sev      = periodSeverity(f, threats);
+        const label    = periodLabel(f, threats);
+        const ci       = f.changeIndicator ?? '';
+        const snippet  = buildFcstSnippet(f);
+        return { left, width, sev, label, ci, segStart, segEnd, snippet };
+      });
+
+    // Graduations toutes les 3h
+    const ticks = [];
+    const firstTickSec = tStart + (3600 - (tStart % 3600)) % 3600;
+    for (let t = firstTickSec; t < tEnd; t += 3 * 3600) {
+      const pct   = ((t - tStart) / totalSec) * 100;
+      const label = new Date(t * 1000).toLocaleString('fr-FR', {
+        hour: '2-digit', minute: '2-digit', timeZone: 'UTC',
+      }) + 'Z';
+      ticks.push({ pct, label });
+    }
+
+    const groupId = 'taf-grp-' + baseTaf.icao;
+
+    // ── Segments (barres colorées uniquement, sans tooltip imbriqué) ──────────────
+    const barsHtml = segments.map((s, i) => {
+      const color   = PERIOD_BG[s.sev] ?? '#22c55e';
+      const textCl  = s.sev === 'yellow' ? 'text-black' : 'text-white';
+      const tipId   = `taf-seg-${baseTaf.icao}-${i}`;
+      return `
+        <div
+          class="absolute top-0 h-full rounded transition-opacity hover:opacity-80 cursor-pointer"
+          style="left:${s.left.toFixed(2)}%;width:${s.width.toFixed(2)}%;background:${color}"
+          onclick="(function(){
+            var g=document.querySelectorAll('[data-taf-group=&quot;${groupId}&quot;]');
+            g.forEach(function(el){ if(el.id!=='${tipId}') el.classList.add('hidden'); });
+            var tip=document.getElementById('${tipId}');
+            if(tip) tip.classList.toggle('hidden');
+          })(); event.stopPropagation();"
+        >${s.width > 12 ? `<span class="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-[10px] font-semibold ${textCl} truncate px-1 pointer-events-none leading-tight">${s.label}</span>` : ''}</div>`;
+    }).join('');
+
+    // ── Tooltips (frères des barres, positionnés en % de la barre container) ─────
+    // FIX : en dehors du div segment → left/right = % de la barre entière
+    const tipsHtml = segments.map((s, i) => {
+      const tipId = `taf-seg-${baseTaf.icao}-${i}`;
+      // Centre du segment en % de la barre
+      const center = s.left + s.width / 2;
+      // Si centre > 50% → ancre à droite (right = distance depuis le bord droit)
+      // Sinon → ancre à gauche (left = début du segment)
+      const posStyle = center > 50
+        ? `right:${(100 - s.left - s.width).toFixed(2)}%;left:auto;`
+        : `left:${s.left.toFixed(2)}%;right:auto;`;
+      return `
+        <div id="${tipId}" data-taf-group="${groupId}"
+             class="hidden absolute z-30 bg-white border border-gray-200 rounded-xl shadow-xl p-3 text-xs w-56 pointer-events-none"
+             style="${posStyle}top:calc(100% + 6px)">
+          <div class="font-semibold text-gray-700 mb-1">${formatHHMM(s.segStart)} → ${formatHHMM(s.segEnd)}</div>
+          <div class="mb-1">${s.label}</div>
+          ${s.ci ? `<div class="text-gray-400 text-[10px]">${s.ci}</div>` : ''}
+          ${s.snippet ? `<div class="font-mono text-gray-600 mt-1 bg-gray-50 rounded px-1 py-0.5">${s.snippet}</div>` : ''}
+        </div>`;
+    }).join('');
+
+    const ticksHtml = ticks.map(t => `
+      <div class="absolute top-0 h-full border-l border-white/40 pointer-events-none"
+           style="left:${t.pct.toFixed(2)}%">
+        <span class="absolute -bottom-5 text-[9px] text-gray-400 -translate-x-1/2 whitespace-nowrap">${t.label}</span>
+      </div>`
+    ).join('');
+
+    const nowHtml = `
+      <div class="absolute top-0 h-full border-l-2 border-blue-500 pointer-events-none z-10"
+           style="left:0%">
+        <span class="absolute -top-5 text-[10px] text-blue-600 font-semibold -translate-x-1/2">NOW</span>
+      </div>`;
+
+    return `
+      <div class="relative mt-8 mb-6 select-none" onclick="void(0)">
+        <!-- Barre principale : position:relative pour ancrer les tooltips -->
+        <div class="relative h-8 rounded-lg bg-gray-100 border border-gray-200" style="overflow:visible">
+          ${barsHtml}
+          ${tipsHtml}
+          ${ticksHtml}
+          ${nowHtml}
+        </div>
+        <div class="relative h-5"></div>
+        <div class="flex gap-3 mt-2 flex-wrap text-xs">
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-green-500"></span>Dégagé</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-yellow-400"></span>Jaune</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-orange-500"></span>Orange</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-red-600"></span>Rouge</span>
+        </div>
+      </div>`;
+  }
+
+  // ── Section CDG/ORY ─────────────────────────────────────────────────────────────
   function renderBaseSection(baseHits, baseTafs) {
-    // baseTafs = [{icao, iata, name, rawTaf, worstSeverity, threats, fcsts}]
     const tafsToRender = (baseTafs && baseTafs.length > 0)
       ? baseTafs
       : (baseHits && baseHits.length > 0)
@@ -554,23 +532,14 @@
 
       return `
         <div class="bg-white border ${sev === 'none' ? 'border-green-200' : sev === 'red' ? 'border-red-300' : 'border-orange-200'} rounded-xl p-4 shadow-sm">
-          <!-- Header -->
           <div class="flex items-center gap-3 mb-2 flex-wrap">
             <span class="${badge} px-2 py-0.5 rounded text-xs font-bold">${label}</span>
             <span class="font-mono font-bold text-gray-800 text-base">${taf.iata}</span>
             <span class="text-gray-400 font-mono text-sm">${taf.icao}</span>
             <span class="text-gray-600 text-sm">${taf.name}</span>
           </div>
-
-          <!-- Frise temporelle -->
           ${renderTafTimeline(taf)}
-
-          <!-- Menaces détaillées -->
-          <div class="mt-2">
-            ${threatsList}
-          </div>
-
-          <!-- TAF brut toggle -->
+          <div class="mt-2">${threatsList}</div>
           <div class="mt-3">
             <button
               class="text-xs text-gray-400 hover:text-gray-600 font-semibold flex items-center gap-1"
@@ -588,8 +557,7 @@
         </div>`;
     }).join('');
 
-    // Counters globaux
-    const allThreats = tafsToRender.flatMap(t => t.threats);
+    const allThreats  = tafsToRender.flatMap(t => t.threats);
     const redCount    = allThreats.filter(t => t.severity === 'red').length;
     const orangeCount = allThreats.filter(t => t.severity === 'orange').length;
 
@@ -610,7 +578,7 @@
       </section>`;
   }
 
-  // ── Vols AF : chargement section ────────────────────────────────────────────────────────────────
+  // ── Vols AF : chargement section ────────────────────────────────────────────────
   async function loadTafVolRisks() {
     _rowIdx = 0;
     const container  = document.getElementById('taf-vol-main');
@@ -685,7 +653,7 @@
     }
   }
 
-  // ── Init ───────────────────────────────────────────────────────────────────────────────────
+  // ── Init ────────────────────────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
     loadTafRisks();
     loadTafVolRisks();

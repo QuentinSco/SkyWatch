@@ -1,6 +1,11 @@
 export type Severity = 'red' | 'orange' | 'yellow';
 export type Region = 'AMN' | 'AMS' | 'EUR' | 'ASIE' | 'AMO';
 
+export interface SourceLink {
+  label: string;
+  url: string;
+}
+
 export interface WeatherAlert {
   id: string;
   source: 'GDACS' | 'NOAA' | 'MeteoAlarm' | 'VAAC';
@@ -12,4 +17,5 @@ export interface WeatherAlert {
   validFrom: string;    // ISO string
   validTo: string;
   headline: string;
+  sourceLinks?: SourceLink[];  // liens vers les sources de suivi (TC, etc.)
 }

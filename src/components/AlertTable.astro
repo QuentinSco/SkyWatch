@@ -163,9 +163,33 @@ const borderColor = filtered.some(a => a.severity === 'red')
               </td>
 
               <td class="py-2 px-4">
-                <span class="text-xs bg-gray-100 text-gray-600 rounded px-2 py-0.5 border border-gray-200">
-                  {alert.source}
-                </span>
+                {(() => {
+                  const links = (alert as any).sourceLinks as Array<{ label: string; url: string }> | undefined;
+                  if (links && links.length > 0) {
+                    return (
+                      <div class="flex flex-col gap-1">
+                        <span class="text-[10px] text-gray-400 uppercase tracking-wide font-medium">{alert.source}</span>
+                        <div class="flex flex-col gap-0.5">
+                          {links.map((l: { label: string; url: string }) => (
+                            <a
+                              href={l.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              class="text-xs bg-blue-50 text-blue-700 rounded px-1.5 py-0.5 border border-blue-200 hover:bg-blue-100 transition whitespace-nowrap"
+                            >
+                              {l.label} ↗
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <span class="text-xs bg-gray-100 text-gray-600 rounded px-2 py-0.5 border border-gray-200">
+                      {alert.source}
+                    </span>
+                  );
+                })()}
               </td>
 
               <td class="py-2 px-4 text-gray-500 text-xs max-w-xs truncate" title={alert.headline}>

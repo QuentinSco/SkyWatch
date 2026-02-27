@@ -31,16 +31,13 @@
   };
 
   const PHENOMENON_EMOJI = {
-    // GDACS
     'Cyclone tropical':      '🌀',
     'Tremblement de terre':  '🫨',
     'Éruption volcanique':   '🌋',
     'Inondation':            '🌊',
     'Tsunami':               '🌊',
     'Incendie':              '🔥',
-    // VAAC
     'Cendres volcaniques':   '🌋',
-    // MeteoAlarm / NOAA
     'Orage':                 '⛈',
     'Vent violent':          '💨',
     'Neige / Verglas':       '🌨',
@@ -49,7 +46,6 @@
     'Froid extrême':         '❄️',
     'Inondation / Pluie':    '🌊',
     'Pluie intense':         '🌧',
-    // NOAA normalisés
     'Blizzard':              '❄️',
     'Hurricane':             '🌀',
     'Tornade':               '🌪',
@@ -60,7 +56,6 @@
     'Gel / Verglas':         '🧊',
   };
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────
   function formatShortDate(iso) {
     if (!iso) return '—';
     return new Date(iso).toLocaleString('fr-FR', {
@@ -98,7 +93,6 @@
     return match ? match[1] : '⚠️';
   }
 
-  // ── Rendu ligne alerte ────────────────────────────────────────────────────────
   function renderAlertRow(alert) {
     const badge  = SEVERITY_BADGE[alert.severity] ?? 'bg-gray-200 text-gray-600';
     const label  = SEVERITY_LABEL[alert.severity] ?? alert.severity.toUpperCase();
@@ -114,15 +108,11 @@
       <tr class="border-b border-gray-100 hover:bg-blue-50/60 transition cursor-pointer"
           onclick="this.nextElementSibling.classList.toggle('hidden')">
         <td class="py-2 px-3 whitespace-nowrap">
-          <span class="${badge} inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase">
-            ${label}
-          </span>
+          <span class="${badge} inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase">${label}</span>
         </td>
         <td class="py-2 px-3 text-sm font-medium text-gray-800">${icon} ${alert.phenomenon}</td>
         <td class="py-2 px-3 text-sm text-gray-600">${alert.country}</td>
-        <td class="py-2 px-3">
-          <div class="flex flex-wrap gap-1">${airportsHtml}</div>
-        </td>
+        <td class="py-2 px-3"><div class="flex flex-wrap gap-1">${airportsHtml}</div></td>
         <td class="py-2 px-3 text-xs text-gray-500 whitespace-nowrap">
           ${formatShortDate(alert.validFrom)}<br>
           <span class="text-gray-400">→ ${formatShortDate(alert.validTo)}</span>
@@ -144,12 +134,11 @@
     `;
   }
 
-  // ── Rendu section par région ──────────────────────────────────────────────────
   function renderRegionSection(region, alerts) {
     const regionLabel = REGION_LABEL[region] ?? region;
     const rows = alerts.map(renderAlertRow).join('');
     return `
-      <div>
+      <div class="mb-8">
         <div class="flex items-center gap-3 mb-3">
           <h3 class="text-base font-bold text-gray-800">${regionLabel}</h3>
           <span class="text-xs text-gray-400 font-medium">${alerts.length} alerte${alerts.length > 1 ? 's' : ''}</span>
@@ -174,17 +163,14 @@
     `;
   }
 
-  // ── Carte Leaflet ─────────────────────────────────────────────────────────────
-  let leafletMap    = null;
-  let markersLayer  = null;
+  let leafletMap   = null;
+  let markersLayer = null;
 
   function initMap() {
     if (leafletMap) return;
     if (!window.L) { console.warn('[main.js] Leaflet non disponible'); return; }
-
     delete L.Icon.Default.prototype._getIconUrl;
     L.Icon.Default.mergeOptions({ iconRetinaUrl: '', iconUrl: '', shadowUrl: '' });
-
     leafletMap = L.map('alert-map', { zoomControl: true }).setView([20, 10], 2);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 12,
@@ -196,60 +182,39 @@
   function updateMapMarkers(alerts) {
     if (!leafletMap || !markersLayer) return;
     markersLayer.clearLayers();
-
     for (const alert of alerts) {
       if (alert.lat == null || alert.lon == null) continue;
-
       const color = SEVERITY_DOT[alert.severity] ?? '#6b7280';
       const emoji = phenomenonEmoji(alert.phenomenon);
-
       const canvas = document.createElement('canvas');
-      canvas.width  = 36;
-      canvas.height = 36;
+      canvas.width = canvas.height = 36;
       const ctx = canvas.getContext('2d');
-
       ctx.beginPath();
       ctx.arc(18, 18, 16, 0, Math.PI * 2);
-      ctx.fillStyle = 'white';
-      ctx.fill();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2.5;
-      ctx.stroke();
-
-      ctx.font = '18px serif';
-      ctx.textAlign    = 'center';
-      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'white'; ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.stroke();
+      ctx.font = '18px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(emoji, 18, 19);
-
-      const icon = L.icon({
-        iconUrl:     canvas.toDataURL('image/png'),
-        iconSize:    [36, 36],
-        iconAnchor:  [18, 18],
-        popupAnchor: [0, -20],
-      });
-
+      const icon = L.icon({ iconUrl: canvas.toDataURL('image/png'), iconSize: [36,36], iconAnchor: [18,18], popupAnchor: [0,-20] });
       const marker = L.marker([alert.lat, alert.lon], { icon });
       marker.bindPopup(`
         <div class="text-xs font-sans">
           <div class="font-bold text-sm mb-1">${emoji} ${alert.phenomenon}</div>
           <div class="text-gray-600 mb-1">${alert.country}</div>
           <div class="font-semibold" style="color:${color}">${SEVERITY_LABEL[alert.severity] ?? alert.severity}</div>
-          <div class="text-gray-500 mt-1">${alert.headline.slice(0, 100)}${alert.headline.length > 100 ? '…' : ''}</div>
+          <div class="text-gray-500 mt-1">${alert.headline.slice(0,100)}${alert.headline.length>100?'…':''}</div>
           <div class="text-gray-400 mt-1">Source : ${alert.source}</div>
           ${alert.airports?.length ? `<div class="mt-1">✈️ ${alert.airports.join(' · ')}</div>` : ''}
-        </div>
-      `);
+        </div>`);
       markersLayer.addLayer(marker);
     }
   }
 
-  // ── Chargement principal ──────────────────────────────────────────────────────
   async function loadAlerts() {
     const mainEl     = document.getElementById('main-content');
     const lastUpdate = document.getElementById('last-update');
     const countersEl = document.getElementById('counters');
-
-    if (!mainEl) { console.error('[main.js] #main-content introuvable'); return; }
+    if (!mainEl) return;
 
     mainEl.innerHTML = `
       <div class="flex items-center gap-3 text-gray-400 text-sm py-12 justify-center">
@@ -258,8 +223,7 @@
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
         </svg>
         Chargement des alertes mondiales…
-      </div>
-    `;
+      </div>`;
 
     try {
       const controller = new AbortController();
@@ -275,15 +239,13 @@
 
       if (countersEl) {
         countersEl.innerHTML = [
-          redCount    ? `<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-semibold">🔴 ${redCount}</span>` : '',
-          orangeCount ? `<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-semibold">🟠 ${orangeCount}</span>` : '',
-          yellowCount ? `<span class="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-xs font-semibold">🟡 ${yellowCount}</span>` : '',
+          redCount    ? `<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-[11px] font-semibold">🔴 ${redCount}</span>` : '',
+          orangeCount ? `<span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full text-[11px] font-semibold">🟠 ${orangeCount}</span>` : '',
+          yellowCount ? `<span class="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full text-[11px] font-semibold">🟡 ${yellowCount}</span>` : '',
         ].join('');
       }
       if (lastUpdate) {
-        lastUpdate.textContent = 'Mis à jour : ' + new Date().toLocaleTimeString('fr-FR', {
-          hour: '2-digit', minute: '2-digit',
-        });
+        lastUpdate.textContent = 'MàJ ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
       }
 
       initMap();
@@ -294,8 +256,7 @@
           <div class="text-center py-16 text-gray-400">
             <div class="text-5xl mb-3">✅</div>
             <div class="text-sm font-medium">Aucune alerte significative sur le réseau AF</div>
-          </div>
-        `;
+          </div>`;
         return;
       }
 
@@ -309,27 +270,19 @@
       mainEl.innerHTML = `
         <h2 class="text-xl font-bold text-gray-900 mb-6">
           🌐 Alertes actives
-          <span class="text-sm font-normal text-gray-400 ml-2">
-            ${alerts.length} phénomène${alerts.length > 1 ? 's' : ''} détecté${alerts.length > 1 ? 's' : ''}
-          </span>
+          <span class="text-sm font-normal text-gray-400 ml-2">${alerts.length} phénomène${alerts.length > 1 ? 's' : ''} détecté${alerts.length > 1 ? 's' : ''}</span>
         </h2>
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-          ${ordered.map(r => renderRegionSection(r, byRegion[r])).join('')}
-        </div>
+        ${ordered.map(r => renderRegionSection(r, byRegion[r])).join('')}
       `;
 
     } catch (e) {
       const msg = e.name === 'AbortError' ? 'Timeout — API trop lente (>15s)' : 'Erreur : ' + e.message;
       mainEl.innerHTML = `
-        <div class="bg-red-50 border border-red-200 rounded-xl p-5 text-red-700 text-sm">
-          ⚠️ ${msg}
-        </div>
-      `;
+        <div class="bg-red-50 border border-red-200 rounded-xl p-5 text-red-700 text-sm">⚠️ ${msg}</div>`;
       if (lastUpdate) lastUpdate.textContent = 'Erreur de chargement';
     }
   }
 
-  // ── Init ──────────────────────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
     initMap();
     loadAlerts();

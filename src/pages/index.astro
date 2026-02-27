@@ -11,76 +11,197 @@ import '../styles/global.css';
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 
-<body class="text-gray-900 min-h-screen p-6 max-w-7xl mx-auto">
+<body class="text-gray-900 min-h-screen flex" style="background:#f8fafc">
 
-  <header class="mb-8">
-    <div class="flex items-center justify-between flex-wrap gap-4">
-      <div>
-        <h1 class="text-3xl font-bold tracking-tight text-gray-900">🛡 SkyWatch</h1>
-        <p class="text-gray-500 text-sm mt-1">Agrégateur d&rsquo;alertes météo mondiales — Outil superviseur dispatch</p>
-      </div>
-      <div class="text-right text-xs text-gray-500">
-        <div id="last-update">Chargement...</div>
-        <div id="counters" class="mt-2 flex gap-2 justify-end"></div>
-      </div>
+  <!-- ─── Sidebar ─────────────────────────────────────────────── -->
+  <aside class="hidden lg:flex flex-col w-56 shrink-0 sticky top-0 h-screen border-r border-gray-200 bg-white px-4 py-6 overflow-y-auto">
+
+    <!-- Logo -->
+    <div class="mb-6">
+      <div class="text-2xl font-bold tracking-tight text-gray-900">🛡 SkyWatch</div>
+      <div class="text-gray-400 text-xs mt-1">Superviseur dispatch</div>
     </div>
-    <div class="mt-4 bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-700">
-      ℹ️ <strong>Horizon affiché :</strong> J à J+3 — Phénomènes de grande échelle uniquement.
-      Les évènements à J restent sous responsabilité dispatcher individuelle.
-      <span class="text-blue-400 text-xs ml-2">— Cliquez sur une ligne pour afficher le détail.</span>
+
+    <!-- Statut mise à jour -->
+    <div class="text-xs text-gray-400 mb-1" id="last-update">Chargement…</div>
+    <div id="counters" class="flex flex-wrap gap-1 mb-6"></div>
+
+    <!-- Navigation -->
+    <nav class="flex flex-col gap-1 text-sm" id="sidebar-nav">
+      <div class="text-[10px] uppercase font-semibold text-gray-400 tracking-widest mb-2">Sections</div>
+
+      <a href="#section-carte"
+         class="sidebar-link flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition font-medium">
+        🗺️ Carte
+      </a>
+
+      <a href="#section-alertes"
+         class="sidebar-link flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition font-medium">
+        🌐 Alertes actives
+        <span id="nav-alert-count" class="ml-auto"></span>
+      </a>
+
+      <a href="#section-vols"
+         class="sidebar-link flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition font-medium">
+        ✈️ Vols impactés
+        <span id="nav-vol-count" class="ml-auto"></span>
+      </a>
+
+      <a href="#section-taf"
+         class="sidebar-link flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition font-medium">
+        🌩 TAF Risques AF
+        <span id="nav-taf-count" class="ml-auto"></span>
+      </a>
+    </nav>
+
+    <!-- Bandeau horizon -->
+    <div class="mt-auto pt-6 border-t border-gray-100 text-[10px] text-gray-400 leading-relaxed">
+      <strong class="text-gray-500">Horizon :</strong> J à J+3<br>
+      Phénomènes grande échelle uniquement.<br>
+      J reste sous resp. dispatcher individuelle.
     </div>
-  </header>
+  </aside>
 
-  <div class="mb-8 rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-    <div class="bg-gray-50 border-b border-gray-200 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-      Carte des alertes actives
-    </div>
-    <div id="alert-map" style="height: 420px; width: 100%;"></div>
-  </div>
+  <!-- ─── Contenu principal ───────────────────────────────────── -->
+  <div class="flex-1 min-w-0 overflow-y-auto">
+    <div class="max-w-6xl mx-auto px-6 py-6">
 
-  <main id="main-content">
-    <div class="text-gray-400 text-sm italic">Chargement des alertes...</div>
-  </main>
-
-  <div class="mt-12 grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-
-    <section>
-      <div class="flex items-center justify-between mb-3">
-        <div>
-          <h2 class="text-xl font-bold text-gray-900">✈️ Vols AF LC impactés</h2>
-          <p class="text-gray-500 text-sm mt-0.5">
-            Croisement TAF / vols AF arrivées — ETA dans une fenêtre de menace active ou dans les 2h précédant celle-ci.
-          </p>
+      <!-- Header mobile (masqué sur lg) -->
+      <header class="lg:hidden mb-6">
+        <div class="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h1 class="text-2xl font-bold tracking-tight text-gray-900">🛡 SkyWatch</h1>
+            <p class="text-gray-500 text-xs mt-1">Agrégateur d&rsquo;alertes météo — Outil superviseur dispatch</p>
+          </div>
+          <div class="text-right text-xs text-gray-500">
+            <div id="last-update-mobile">Chargement...</div>
+          </div>
         </div>
-        <div id="taf-vol-counters" class="flex gap-2 text-xs"></div>
-      </div>
-      <div id="taf-vol-main">
-        <div class="text-gray-400 text-sm italic">Chargement des vols…</div>
-      </div>
-    </section>
-
-    <section>
-      <div class="flex items-center justify-between mb-4">
-        <div>
-          <h2 class="text-xl font-bold text-gray-900">🌩 TAF Risques AF</h2>
-          <p class="text-gray-500 text-sm mt-0.5">Phénomènes significatifs sur le réseau AF — Source AviationWeather.gov</p>
+        <div class="mt-3 bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700">
+          ℹ️ <strong>Horizon :</strong> J à J+3 — Phénomènes grande échelle uniquement.
         </div>
-        <div id="taf-counters" class="flex gap-2"></div>
-      </div>
-      <div id="taf-main">
-        <div class="text-gray-400 text-sm italic">Chargement des TAFs...</div>
-      </div>
-    </section>
+      </header>
 
+      <!-- Carte -->
+      <section id="section-carte" class="mb-8 scroll-mt-6">
+        <div class="rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+          <div class="bg-gray-50 border-b border-gray-200 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            🗺️ Carte des alertes actives
+          </div>
+          <div id="alert-map" style="height: 420px; width: 100%;"></div>
+        </div>
+      </section>
+
+      <!-- Alertes actives -->
+      <section id="section-alertes" class="mb-12 scroll-mt-6">
+        <main id="main-content">
+          <div class="text-gray-400 text-sm italic">Chargement des alertes...</div>
+        </main>
+      </section>
+
+      <!-- Vols AF impactés -->
+      <section id="section-vols" class="mb-12 scroll-mt-6">
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-3">
+          <div>
+            <h2 class="text-xl font-bold text-gray-900">✈️ Vols AF LC impactés</h2>
+            <p class="text-gray-500 text-sm mt-0.5">
+              Croisement TAF / vols AF arrivées — ETA dans une fenêtre de menace active ou dans les 2h précédant celle-ci.
+            </p>
+          </div>
+          <div id="taf-vol-counters" class="flex gap-2 text-xs"></div>
+        </div>
+        <div id="taf-vol-main">
+          <div class="text-gray-400 text-sm italic">Chargement des vols…</div>
+        </div>
+      </section>
+
+      <!-- TAF Risques AF -->
+      <section id="section-taf" class="mb-12 scroll-mt-6">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+          <div>
+            <h2 class="text-xl font-bold text-gray-900">🌩 TAF Risques AF</h2>
+            <p class="text-gray-500 text-sm mt-0.5">Phénomènes significatifs sur le réseau AF — Source AviationWeather.gov</p>
+          </div>
+          <div id="taf-counters" class="flex gap-2"></div>
+        </div>
+        <div id="taf-main">
+          <div class="text-gray-400 text-sm italic">Chargement des TAFs...</div>
+        </div>
+      </section>
+
+      <!-- Footer -->
+      <footer class="pt-6 border-t border-gray-200 text-xs text-gray-400 flex flex-wrap gap-4 justify-between">
+        <span>Sources : GDACS (UN/CE) · NOAA/NWS · MeteoAlarm (EUMETNET) · AviationWeather.gov (TAF) · NHC (NOAA) · RSMC La Réunion (Météo-France) · JTWC</span>
+        <span>SkyWatch POC v0.1 — Open source uniquement</span>
+      </footer>
+
+    </div>
   </div>
-
-  <footer class="mt-12 pt-6 border-t border-gray-200 text-xs text-gray-400 flex flex-wrap gap-4 justify-between">
-    <span>Sources : GDACS (UN/CE) · NOAA/NWS · MeteoAlarm (EUMETNET) · AviationWeather.gov (TAF) · NHC (NOAA) · RSMC La Réunion (Météo-France) · JTWC</span>
-    <span>SkyWatch POC v0.1 — Open source uniquement</span>
-  </footer>
 
   <script is:inline src="/lib/main.js"></script>
   <script is:inline src="/lib/taf-ui.js"></script>
+
+  <!-- Sidebar : highlight section active au scroll -->
+  <script is:inline>
+    (function () {
+      const sections = ['section-carte', 'section-alertes', 'section-vols', 'section-taf'];
+      const links = document.querySelectorAll('.sidebar-link');
+
+      function setActive(id) {
+        links.forEach(l => {
+          const href = l.getAttribute('href');
+          if (href === '#' + id) {
+            l.classList.add('bg-blue-50', 'text-blue-700');
+            l.classList.remove('text-gray-600');
+          } else {
+            l.classList.remove('bg-blue-50', 'text-blue-700');
+            l.classList.add('text-gray-600');
+          }
+        });
+      }
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach(e => { if (e.isIntersecting) setActive(e.target.id); });
+        },
+        { threshold: 0.2 }
+      );
+
+      document.addEventListener('DOMContentLoaded', () => {
+        sections.forEach(id => {
+          const el = document.getElementById(id);
+          if (el) observer.observe(el);
+        });
+        setActive('section-carte');
+      });
+    })();
+  </script>
+
+  <!-- Sync compteurs sidebar depuis les spans déjà peuplés -->
+  <script is:inline>
+    (function () {
+      function syncNavCount(sourceId, navId, bgClass, textClass) {
+        const src = document.getElementById(sourceId);
+        const nav = document.getElementById(navId);
+        if (!src || !nav) return;
+        const observer = new MutationObserver(() => {
+          const spans = src.querySelectorAll('span');
+          let count = 0;
+          spans.forEach(s => { const n = parseInt(s.textContent.replace(/\D/g,'')); if (!isNaN(n)) count += n; });
+          nav.innerHTML = count > 0
+            ? `<span class="${bgClass} ${textClass} text-[10px] font-bold px-1.5 py-0.5 rounded-full">${count}</span>`
+            : '';
+        });
+        observer.observe(src, { childList: true, subtree: true });
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        syncNavCount('counters',         'nav-alert-count', 'bg-red-100',    'text-red-700');
+        syncNavCount('taf-vol-counters', 'nav-vol-count',   'bg-orange-100', 'text-orange-700');
+        syncNavCount('taf-counters',     'nav-taf-count',   'bg-orange-100', 'text-orange-700');
+      });
+    })();
+  </script>
 
 </body>
 </html>

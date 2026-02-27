@@ -906,9 +906,11 @@ function swpcValidFrom(msg: string): string {
   return new Date().toISOString();
 }
 
-// Extrait la date "Valid To" / "Now Valid Until" du message SWPC
+// Extrait la date de fin du message SWPC.
+// Reconnait : "Valid To", "Now Valid Until" (Watches/Warnings)
+// et "End Time" (messages SUMMARY de type XRA/flare).
 function swpcValidTo(msg: string): string | null {
-  const m = msg.match(/(?:Valid To|Now Valid Until)[:\s]+([\w\s:]+UTC)/i);
+  const m = msg.match(/(?:Valid To|Now Valid Until|End Time)[:\s]+([\w\s:]+UTC)/i);
   if (m) {
     const d = new Date(m[1].trim());
     if (!isNaN(d.getTime())) return d.toISOString();

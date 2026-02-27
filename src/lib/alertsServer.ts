@@ -20,8 +20,7 @@ interface Alert {
   magnitude?: number;
   basin?: string;
   eventType?: string;
-  volcanoName?: string;   // ← nom extrait du XML/RSS, sans namespace issue
-  // Enrichissement TC : lien bulletin officiel NHC/RSMC/JTWC
+  volcanoName?: string;
   tcBulletinLabel?: string;
   tcBulletinUrl?: string;
 }
@@ -148,7 +147,6 @@ function basinFromCoords(lat: number, lon: number): string {
   return 'Océan Indien';
 }
 
-// ─── Lien bulletin officiel NHC / RSMC / JTWC selon le basin ───────────────────────────
 function tcBulletinLink(lat: number, lon: number): { label: string; url: string } {
   if (lon >= 20 && lon < 90 && lat < 30) {
     return {
@@ -464,7 +462,6 @@ export async function fetchGDACS(): Promise<Alert[]> {
       const magStr = windKmh ? ` ${windKmh} km/h` : magnitude ? ` M${magnitude}` : '';
       const tcName = eventType === 'TC' && eventName ? ` (${eventName})` : '';
 
-      // ─── Enrichissement TC : lien bulletin officiel NHC / RSMC / JTWC ──────────────────
       const tcBulletin = eventType === 'TC' ? tcBulletinLink(lat, lon) : undefined;
 
       alerts.push({
@@ -499,7 +496,8 @@ export async function fetchGDACS(): Promise<Alert[]> {
   }
   return alerts;
 }
-// ─── VAAC — tous les 9 centres mondiaux ──────────────────────────────────────────────────────
+
+// ─── VAAC ────────────────────────────────────────────────────────────────────────────────────
 
 function hasAshCloudExtent(text: string): boolean {
   const extentPatterns = [
@@ -550,10 +548,6 @@ function vaacSeverity(flLevel: string): Severity {
   return 'yellow';
 }
 
-/**
- * Extrait le contenu d'un tag XML en ignorant les namespaces.
- * Supporte : <prefix:tag>, <tag xmlns="..."> ou <tag>.
- */
 function iwxxmGetTag(xml: string, tag: string): string {
   const m = xml.match(new RegExp(`<(?:[^:>]+:)?${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/(?:[^:>]+:)?${tag}>`, 'i'));
   return m ? m[1].replace(/<[^>]+>/g, '').trim() : '';
@@ -766,13 +760,20 @@ async function fetchVAACWashington(): Promise<Alert[]> {
         continue;
       }
 
-      // Le <name> est dans le bloc <EruptingVolcano>, avec namespace optionnel
-      // Format : <name xmlns="...">REVENTADOR 352010</name>
-      // On extrait tout (nom + code si présent)
-      const volcanoRaw  = iwxxmGetTag(xml, 'name');
-      const volcanoName = volcanoRaw ? volcanoRaw.trim() : null;
+      // Extraire le bloc <EruptingVolcano>...</EruptingVolcano> entier, puis chercher <name> dedans
+      const volcanoBlockMatch = xml.match(/<(?:[^:>]+:)?EruptingVolcano[^>]*>([\s\S]*?)<\/(?:[^:>]+:)?EruptingVolcano>/i);
+      let volcanoName: string | null = null;
+      if (volcanoBlockMatch) {
+        const volcanoBlock = volcanoBlockMatch[1];
+        const nameMatch = volcanoBlock.match(/<(?:[^:>]+:)?name(?:\s[^>]*)?>([\s\S]*?)<\/(?:[^:>]+:)?name>/i);
+        if (nameMatch) {
+          const raw = nameMatch[1].replace(/<[^>]+>/g, '').trim();
+          // Supprime le code numérique final (ex: "REVENTADOR 352010" → "REVENTADOR")
+          volcanoName = raw.replace(/\s+\d+$/, '').trim() || null;
+        }
+      }
 
-      const posTag      = xml.match(/<gml:pos[^>]*>([\s\S]*?)<\/gml:pos>/i);
+      const posTag = xml.match(/<gml:pos[^>]*>([\s\S]*?)<\/gml:pos>/i);
       if (!posTag) continue;
       const parts = posTag[1].trim().split(/\s+/);
       if (parts.length < 2) continue;
@@ -853,7 +854,7 @@ export async function fetchVAAC(): Promise<Alert[]> {
   return results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
 }
 
-// ─── MeteoAlarm ───────────────────────────────────────────────────────────────────────────────────
+// ─── MeteoAlarm ───────────────────────────────────────────────────────────────────────────────
 const AWT_LABEL: Record<number, string> = {
   1: 'Vent violent', 2: 'Neige / Verglas', 3: 'Orage', 4: 'Brouillard',
   5: 'Chaleur extrême', 6: 'Froid extrême', 7: 'Événement côtier',

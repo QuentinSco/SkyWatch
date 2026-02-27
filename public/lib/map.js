@@ -3,7 +3,7 @@ const SEVERITY_RADIUS = { red: 14, orange: 10, yellow: 8 };
 const PHENOMENON_EMOJI = {
   // GDACS
   'Cyclone tropical':      '🌀',
-  'Tremblement de terre':  '🫨',
+  'Tremblement de terre':  '🌏',
   'Éruption volcanique':   '🌋',
   'Inondation':            '🌊',
   'Tsunami':               '🌊',

@@ -20,13 +20,13 @@ interface Alert {
   magnitude?: number;
   basin?: string;
   eventType?: string;
-  volcanoName?: string;   // ← champ dédié, plus fiable que parser le headline
+  volcanoName?: string;   // ← nom extrait du XML/RSS, sans namespace issue
   // Enrichissement TC : lien bulletin officiel NHC/RSMC/JTWC
   tcBulletinLabel?: string;
   tcBulletinUrl?: string;
 }
 
-// ─── AF Airports ───────────────────────────────────────────────────────────────────────────────
+// ─── AF Airports ─────────────────────────────────────────────────────────────────────────────
 const AF_AIRPORTS = [
   { icao: 'LFPG', lat: 49.0128,  lon:   2.5500, iso3: 'FRA', name: 'Paris CDG' },
   { icao: 'LFPO', lat: 48.7233,  lon:   2.3794, iso3: 'FRA', name: 'Paris Orly' },
@@ -550,8 +550,12 @@ function vaacSeverity(flLevel: string): Severity {
   return 'yellow';
 }
 
+/**
+ * Extrait le contenu d'un tag XML en ignorant les namespaces.
+ * Supporte : <prefix:tag>, <tag xmlns="..."> ou <tag>.
+ */
 function iwxxmGetTag(xml: string, tag: string): string {
-  const m = xml.match(new RegExp(`<(?:[^:>]+:)?${tag}[^>]*>([\\s\\S]*?)<\\/(?:[^:>]+:)?${tag}>`, 'i'));
+  const m = xml.match(new RegExp(`<(?:[^:>]+:)?${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/(?:[^:>]+:)?${tag}>`, 'i'));
   return m ? m[1].replace(/<[^>]+>/g, '').trim() : '';
 }
 
@@ -762,8 +766,12 @@ async function fetchVAACWashington(): Promise<Alert[]> {
         continue;
       }
 
+      // Le <name> est dans le bloc <EruptingVolcano>, avec namespace optionnel
+      // Format : <name xmlns="...">REVENTADOR 352010</name>
+      // On extrait tout (nom + code si présent)
       const volcanoRaw  = iwxxmGetTag(xml, 'name');
-      const volcanoName = volcanoRaw ? volcanoRaw.replace(/\s+\d+$/, '').trim() : null;
+      const volcanoName = volcanoRaw ? volcanoRaw.trim() : null;
+
       const posTag      = xml.match(/<gml:pos[^>]*>([\s\S]*?)<\/gml:pos>/i);
       if (!posTag) continue;
       const parts = posTag[1].trim().split(/\s+/);

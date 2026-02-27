@@ -363,7 +363,7 @@ const GDACS_RELEVANT_TYPES = new Set(['EQ', 'TC', 'FL', 'VO', 'TS']);
 
 function gdacsGetTag(item: string, tag: string): string {
   const m = item.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
-  return m ? m[1].replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, '$1').trim() : '';
+  return m ? m[1].replace(/<![CDATA[(\s\S]*?)]]/g, '$1').trim() : '';
 }
 
 function gdacsParseLevel(item: string): number {
@@ -515,7 +515,7 @@ function hasAshCloudExtent(text: string): boolean {
 
 function vaacGetTag(xml: string, tag: string): string {
   const m = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
-  return m ? m[1].replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, '$1').trim() : '';
+  return m ? m[1].replace(/<![CDATA[(\s\S]*?)]]/g, '$1').trim() : '';
 }
 
 function vaacParseVolcanoCoords(text: string): { lat: number; lon: number } | null {
@@ -905,16 +905,10 @@ function swpcValidTo(msg: string): string | null {
 
 const SWPC_RULES: SwpcRule[] = [
   // ── Tempête géomagnétique G3+ → impact GNSS sévère ──────────────────────
-  // G3 (Kp=7) : dégradation GPS signalée sur toute latitude, problèmes HF/SATCOM généralisés
-  // G4 (Kp=8) : perte de positionnement GPS possible
-  // G5 (Kp=9) : coupures GPS complètes signalées
   {
     match: (id, msg) => {
-      // K07W, K07A, K08W, K08A, K09W, K09A
       if (/^K(0[7-9]|[1-9]\d)[WA]$/i.test(id)) return true;
-      // Watches G3+ : A40F (G3), A50F (G4), A99F (G5)
       if (/^A[4-9]\dF$/i.test(id)) return true;
-      // Inline scale G3+
       if (swpcScale(msg, 'G') >= 3) return true;
       return false;
     },
@@ -923,7 +917,7 @@ const SWPC_RULES: SwpcRule[] = [
     severity: (msg) => {
       const g = swpcScale(msg, 'G');
       if (g >= 4) return 'red';
-      return 'orange'; // G3
+      return 'orange';
     },
     headline: (msg) => {
       const g = swpcScale(msg, 'G');
@@ -933,9 +927,6 @@ const SWPC_RULES: SwpcRule[] = [
   },
 
   // ── Radio blackout R3+ (flare ≥X1) → coupure HF/SATCOM ─────────────────
-  // R3 (X1) : coupure HF sur face illuminée du globe, dégradation navigation
-  // R4 (X10) : coupure HF 1-2h, perturbations SATCOM low-band
-  // R5 (X20+) : coupure HF complète face Soleil, 30min–quelques heures
   {
     match: (id, msg) => {
       if (/^XRA$/i.test(id)) return true;
@@ -947,7 +938,7 @@ const SWPC_RULES: SwpcRule[] = [
     severity: (msg) => {
       const r = swpcScale(msg, 'R');
       if (r >= 4) return 'red';
-      return 'orange'; // R3
+      return 'orange';
     },
     headline: (msg) => {
       const r = swpcScale(msg, 'R');
@@ -957,9 +948,6 @@ const SWPC_RULES: SwpcRule[] = [
   },
 
   // ── Radiation storm S3+ → dose équipages routes polaires ────────────────
-  // S3 (≥10³ pfu) : dose élevée, évitement routes polaires recommandé
-  // S4 (≥10⁴ pfu) : dose très élevée, isolation spatiale possible
-  // S5 (≥10⁵ pfu) : événement extrême rare (<1/cycle)
   {
     match: (id, msg) => {
       if (/^P1[01][WA]$/i.test(id)) return true;
@@ -971,7 +959,7 @@ const SWPC_RULES: SwpcRule[] = [
     severity: (msg) => {
       const s = swpcScale(msg, 'S');
       if (s >= 4) return 'red';
-      return 'orange'; // S3
+      return 'orange';
     },
     headline: (msg) => {
       const s = swpcScale(msg, 'S');
@@ -995,7 +983,6 @@ export async function fetchSWPC(): Promise<Alert[]> {
 
     const json: Array<{ product_id: string; issue_datetime: string; message: string }> = await res.json();
 
-    // Dédupliquer : garder seulement le message le plus récent par catégorie
     const seen = new Set<SwpcCategory>();
 
     for (const item of json) {
@@ -1005,7 +992,6 @@ export async function fetchSWPC(): Promise<Alert[]> {
         if (seen.has(rule.category)) continue;
         if (!rule.match(product_id, message)) continue;
 
-        // Vérifier que l'alerte est encore valide
         const validTo = swpcValidTo(message);
         if (validTo && new Date(validTo) < new Date()) continue;
 
@@ -1123,7 +1109,7 @@ export async function fetchMeteoAlarm(): Promise<Alert[]> {
     for (const item of xml.split('<item>').slice(1)) {
       const getTag = (tag: string) => {
         const m = item.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
-        return m ? m[1].replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, '$1').trim() : '';
+        return m ? m[1].replace(/<![CDATA[(\s\S]*?)]]/g, '$1').trim() : '';
       };
 
       const title = getTag('title');

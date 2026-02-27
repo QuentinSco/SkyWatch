@@ -496,8 +496,7 @@ export async function fetchGDACS(): Promise<Alert[]> {
   }
   return alerts;
 }
-
-// ─── VAAC ────────────────────────────────────────────────────────────────────────────────────
+// ─── VAAC — tous les 9 centres mondiaux ──────────────────────────────────────────────────────
 
 function hasAshCloudExtent(text: string): boolean {
   const extentPatterns = [
@@ -760,7 +759,7 @@ async function fetchVAACWashington(): Promise<Alert[]> {
         continue;
       }
 
-      // Extraire le bloc <EruptingVolcano>...</EruptingVolcano> entier, puis chercher <name> dedans
+      // Extraire le bloc <EruptingVolcano> puis chercher <name> dedans uniquement
       const volcanoBlockMatch = xml.match(/<(?:[^:>]+:)?EruptingVolcano[^>]*>([\s\S]*?)<\/(?:[^:>]+:)?EruptingVolcano>/i);
       let volcanoName: string | null = null;
       if (volcanoBlockMatch) {
@@ -854,7 +853,218 @@ export async function fetchVAAC(): Promise<Alert[]> {
   return results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
 }
 
-// ─── MeteoAlarm ───────────────────────────────────────────────────────────────────────────────
+// ─── SWPC (NOAA Space Weather) ────────────────────────────────────────────────────────────────
+// Alertes impactant l'aviation : GNSS/GPS, Communications HF/SATCOM, Radiations équipages
+//
+// Seuils retenus :
+//   GNSS      → tempête géomagnétique G2+ (Kp≥6) : dégradation GPS signalée sur les SID/STAR
+//   HF/SATCOM → radio blackout R1+ (éruption solaire M ou X) + storm G1+ pour fades polaires
+//   Radiation → S1+ proton storm (dose équipages sur routes polaires)
+//
+// product_id mappings SWPC :
+//   K05W/K05A/K06W/K06A… → géomagnétique (G-scale)
+//   A20F/A30F…           → Watch géomagnétique multi-jours
+//   XRA                  → X-Ray / flare (R-scale)
+//   P11W/P11A…           → Proton storm (S-scale)
+
+type SwpcCategory = 'GNSS' | 'HF_SATCOM' | 'RADIATION';
+
+interface SwpcRule {
+  /** true si ce product_id doit déclencher une alerte */
+  match: (productId: string, message: string) => boolean;
+  category: SwpcCategory;
+  phenomenon: string;
+  /** détermine la sévérité à partir du message brut */
+  severity: (message: string) => Severity;
+  headline: (message: string) => string;
+}
+
+// Extrait le niveau G/R/S depuis le message (ex: "G2 - Moderate" → 2)
+function swpcScale(msg: string, letter: 'G' | 'R' | 'S'): number {
+  const m = msg.match(new RegExp(`${letter}(\\d)\\s*[-–]`, 'i'));
+  return m ? parseInt(m[1], 10) : 0;
+}
+
+// Extrait la date "Valid From" ou "Begin Time" du message SWPC
+function swpcValidFrom(msg: string): string {
+  const m = msg.match(/(?:Valid From|Begin Time|Threshold Reached)[:\s]+([\w\s:]+UTC)/i);
+  if (m) {
+    const d = new Date(m[1].trim());
+    if (!isNaN(d.getTime())) return d.toISOString();
+  }
+  return new Date().toISOString();
+}
+
+// Extrait la date "Valid To" / "Now Valid Until" du message SWPC
+function swpcValidTo(msg: string): string | null {
+  const m = msg.match(/(?:Valid To|Now Valid Until)[:\s]+([\w\s:]+UTC)/i);
+  if (m) {
+    const d = new Date(m[1].trim());
+    if (!isNaN(d.getTime())) return d.toISOString();
+  }
+  return null;
+}
+
+const SWPC_RULES: SwpcRule[] = [
+  // ── Tempête géomagnétique G2+ → impact GNSS ──────────────────────────────
+  {
+    match: (id, msg) => {
+      // Alerts K06+, Watches A30F (G2 pred.), A40F (G3), A50F (G4), A99F (G5)
+      // K06W, K06A, K07W, K07A, K08W, K08A, K09W, K09A
+      if (/^K(0[6-9]|[1-9]\d)[WA]$/i.test(id)) return true;
+      // Watches géomagnétiques G2+
+      if (/^A[3-9]\dF$/i.test(id)) return true;
+      // Alerts inline avec scale G2+
+      if (swpcScale(msg, 'G') >= 2) return true;
+      return false;
+    },
+    category: 'GNSS',
+    phenomenon: 'Perturbation GNSS/GPS',
+    severity: (msg) => {
+      const g = swpcScale(msg, 'G');
+      if (g >= 4) return 'red';
+      if (g >= 2) return 'orange';
+      return 'yellow';
+    },
+    headline: (msg) => {
+      const g = swpcScale(msg, 'G');
+      const label = g >= 5 ? 'G5 Extrême' : g === 4 ? 'G4 Sévère' : g === 3 ? 'G3 Fort' : 'G2 Modéré';
+      return `Tempête géomagnétique ${label} — Perturbations GNSS/GPS possibles`;
+    },
+  },
+
+  // ── Tempête géomagnétique G1 → impact HF polaire ─────────────────────────
+  {
+    match: (id, msg) => {
+      if (/^K05[WA]$/i.test(id)) return true;
+      if (/^A20F$/i.test(id)) return true;
+      if (swpcScale(msg, 'G') === 1) return true;
+      return false;
+    },
+    category: 'HF_SATCOM',
+    phenomenon: 'Dégradation HF / SATCOM',
+    severity: (_msg) => 'yellow',
+    headline: (_msg) => 'Tempête géomagnétique G1 — Fades HF possibles aux latitudes polaires',
+  },
+
+  // ── Radio blackout R1+ (flares X-ray) → impact HF/SATCOM ─────────────────
+  {
+    match: (id, msg) => {
+      // XRA = X-Ray flare alert
+      if (/^XRA$/i.test(id)) return true;
+      if (swpcScale(msg, 'R') >= 1) return true;
+      return false;
+    },
+    category: 'HF_SATCOM',
+    phenomenon: 'Radio Blackout HF',
+    severity: (msg) => {
+      const r = swpcScale(msg, 'R');
+      if (r >= 3) return 'red';
+      if (r >= 1) return 'orange';
+      return 'yellow';
+    },
+    headline: (msg) => {
+      const r = swpcScale(msg, 'R');
+      const label = r >= 5 ? 'R5 Extrême' : r === 4 ? 'R4 Sévère' : r === 3 ? 'R3 Fort' : r === 2 ? 'R2 Modéré' : 'R1 Mineur';
+      return `Radio Blackout ${label} — Perturbations HF/SATCOM en cours`;
+    },
+  },
+
+  // ── Radiation storm S1+ (protons) → dose équipages routes polaires ────────
+  {
+    match: (id, msg) => {
+      // P11W/P11A = proton 10 MeV warning/alert
+      if (/^P1[01][WA]$/i.test(id)) return true;
+      if (swpcScale(msg, 'S') >= 1) return true;
+      return false;
+    },
+    category: 'RADIATION',
+    phenomenon: 'Radiation Storm',
+    severity: (msg) => {
+      const s = swpcScale(msg, 'S');
+      if (s >= 3) return 'red';
+      if (s >= 2) return 'orange';
+      return 'yellow';  // S1 = seuil minimum pour l'aviation
+    },
+    headline: (msg) => {
+      const s = swpcScale(msg, 'S');
+      const label = s >= 5 ? 'S5 Extrême' : s === 4 ? 'S4 Sévère' : s === 3 ? 'S3 Fort' : s === 2 ? 'S2 Modéré' : 'S1 Mineur';
+      return `Radiation Storm ${label} — Dose équipages élevée sur routes polaires`;
+    },
+  },
+];
+
+export async function fetchSWPC(): Promise<Alert[]> {
+  const alerts: Alert[] = [];
+  try {
+    const res = await fetch('https://services.swpc.noaa.gov/products/alerts.json', {
+      headers: {
+        'User-Agent': 'SkyWatch/1.0 (aviation alerts)',
+        'Accept':     'application/json',
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) { console.error('[SWPC] HTTP', res.status); return alerts; }
+
+    const json: Array<{ product_id: string; issue_datetime: string; message: string }> = await res.json();
+
+    // Dédupliquer : garder seulement le message le plus récent par (catégorie)
+    // L'API renvoie les messages du plus récent au plus ancien
+    const seen = new Set<SwpcCategory>();
+
+    for (const item of json) {
+      const { product_id, issue_datetime, message } = item;
+
+      for (const rule of SWPC_RULES) {
+        if (seen.has(rule.category)) continue;
+        if (!rule.match(product_id, message)) continue;
+
+        // Vérifier que l'alerte est encore valide (ou pas de date d'expiration)
+        const validTo = swpcValidTo(message);
+        if (validTo && new Date(validTo) < new Date()) continue;
+
+        const severity  = rule.severity(message);
+        const validFrom = swpcValidFrom(message);
+
+        // Description courte : première ligne non vide du message
+        const descLines = message
+          .split(/\r?\n/)
+          .map(l => l.trim())
+          .filter(l => l.length > 0 && !l.startsWith('Space Weather') && !l.startsWith('NOAA Space'));
+        const description = descLines.slice(0, 6).join(' — ').slice(0, 500);
+
+        alerts.push({
+          id:          `SWPC-${rule.category}-${issue_datetime}`,
+          source:      'SWPC',
+          region:      'GLOBAL',
+          severity,
+          phenomenon:  rule.phenomenon,
+          eventType:   `SWPC_${rule.category}`,
+          country:     'Global',
+          airports:    [],   // impact mondial, pas de filtre géographique
+          validFrom,
+          validTo,
+          headline:    rule.headline(message),
+          description,
+          link:        'https://www.swpc.noaa.gov/communities/aviation-community-dashboard',
+        });
+
+        seen.add(rule.category);
+        break; // une règle suffit par item
+      }
+
+      // Stopper dès qu'on a les 3 catégories
+      if (seen.size === SWPC_RULES.length) break;
+    }
+
+    console.log(`[SWPC] ${alerts.length} alerte(s) space weather active(s)`);
+  } catch (e) {
+    console.error('[SWPC]', e);
+  }
+  return alerts;
+}
+
+// ─── MeteoAlarm ───────────────────────────────────────────────────────────────────────────────────
 const AWT_LABEL: Record<number, string> = {
   1: 'Vent violent', 2: 'Neige / Verglas', 3: 'Orage', 4: 'Brouillard',
   5: 'Chaleur extrême', 6: 'Froid extrême', 7: 'Événement côtier',

@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { fetchGDACS, fetchNOAA, fetchMeteoAlarm, fetchVAAC } from '../../lib/alertsServer';
+import { fetchGDACS, fetchNOAA, fetchMeteoAlarm, fetchVAAC, fetchSWPC } from '../../lib/alertsServer';
 
 export const prerender = false;
 
@@ -15,18 +15,19 @@ export const GET: APIRoute = async () => {
     });
   }
 
-  const [gdacs, noaa, meteoalarm, vaac] = await Promise.all([
+  const [gdacs, noaa, meteoalarm, vaac, swpc] = await Promise.all([
     fetchGDACS(),
     fetchNOAA(),
     fetchMeteoAlarm(),
     fetchVAAC(),
+    fetchSWPC(),
   ]);
 
   const SEVERITY_ORDER: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
-  const all = [...gdacs, ...noaa, ...meteoalarm, ...vaac]
+  const all = [...gdacs, ...noaa, ...meteoalarm, ...vaac, ...swpc]
     .sort((a: any, b: any) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])
     .filter((a: any) => {
-      if (!a.validTo) return true; // pas de date d'expiration = on garde
+      if (!a.validTo) return true;
       return Date.now() - new Date(a.validTo).getTime() < TWO_HOURS;
     });
 

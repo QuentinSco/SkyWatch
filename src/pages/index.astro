@@ -42,36 +42,40 @@ import '../styles/global.css';
     <div class="text-gray-400 text-sm italic">Chargement des alertes...</div>
   </main>
 
-  <section class="mt-12">
-    <div class="flex items-center justify-between mb-3">
-      <div>
-        <h2 class="text-xl font-bold text-gray-900">✈️ Vols AF LC impactés</h2>
-        <p class="text-gray-500 text-sm mt-0.5">
-          Croisement TAF / vols AF arrivées — ETA dans une fenêtre de menace active ou dans les 2h précédant celle-ci.
-        </p>
-      </div>
-      <div id="taf-vol-counters" class="flex gap-2 text-xs"></div>
-    </div>
-    <div id="taf-vol-main">
-      <div class="text-gray-400 text-sm italic">Chargement des vols…</div>
-    </div>
-  </section>
+  <div class="mt-12 grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
-  <section class="mt-12">
-    <div class="flex items-center justify-between mb-4">
-      <div>
-        <h2 class="text-xl font-bold text-gray-900">🌩 TAF Risques AF</h2>
-        <p class="text-gray-500 text-sm mt-0.5">Phénomènes significatifs sur le réseau AF — Source AviationWeather.gov</p>
+    <section>
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <h2 class="text-xl font-bold text-gray-900">✈️ Vols AF LC impactés</h2>
+          <p class="text-gray-500 text-sm mt-0.5">
+            Croisement TAF / vols AF arrivées — ETA dans une fenêtre de menace active ou dans les 2h précédant celle-ci.
+          </p>
+        </div>
+        <div id="taf-vol-counters" class="flex gap-2 text-xs"></div>
       </div>
-      <div id="taf-counters" class="flex gap-2"></div>
-    </div>
-    <div id="taf-main">
-      <div class="text-gray-400 text-sm italic">Chargement des TAFs...</div>
-    </div>
-  </section>
+      <div id="taf-vol-main">
+        <div class="text-gray-400 text-sm italic">Chargement des vols…</div>
+      </div>
+    </section>
+
+    <section>
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="text-xl font-bold text-gray-900">🌩 TAF Risques AF</h2>
+          <p class="text-gray-500 text-sm mt-0.5">Phénomènes significatifs sur le réseau AF — Source AviationWeather.gov</p>
+        </div>
+        <div id="taf-counters" class="flex gap-2"></div>
+      </div>
+      <div id="taf-main">
+        <div class="text-gray-400 text-sm italic">Chargement des TAFs...</div>
+      </div>
+    </section>
+
+  </div>
 
   <footer class="mt-12 pt-6 border-t border-gray-200 text-xs text-gray-400 flex flex-wrap gap-4 justify-between">
-    <span>Sources : GDACS (UN/CE) · NOAA/NWS · MeteoAlarm (EUMETNET) · AviationWeather.gov (TAF) · NHC (NOAA) · RSMC La Réunion (Météo-France) · JTWC</span>
+    <span>Sources : GDACS (UN/CE) · NOAA/NWS · MeteoAlarm (EUMETNET) · AviationWeather.gov (TAF) · NHC (NOAA) · RSMC La Réunion (Météo-France) · JTWC</span>
     <span>SkyWatch POC v0.1 — Open source uniquement</span>
   </footer>
 

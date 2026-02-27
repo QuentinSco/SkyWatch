@@ -149,7 +149,7 @@
     const regionLabel = REGION_LABEL[region] ?? region;
     const rows = alerts.map(renderAlertRow).join('');
     return `
-      <div class="mb-8">
+      <div>
         <div class="flex items-center gap-3 mb-3">
           <h3 class="text-base font-bold text-gray-800">${regionLabel}</h3>
           <span class="text-xs text-gray-400 font-medium">${alerts.length} alerte${alerts.length > 1 ? 's' : ''}</span>
@@ -313,7 +313,9 @@
             ${alerts.length} phénomène${alerts.length > 1 ? 's' : ''} détecté${alerts.length > 1 ? 's' : ''}
           </span>
         </h2>
-        ${ordered.map(r => renderRegionSection(r, byRegion[r])).join('')}
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          ${ordered.map(r => renderRegionSection(r, byRegion[r])).join('')}
+        </div>
       `;
 
     } catch (e) {

@@ -367,12 +367,16 @@
   }
 
   /**
-   * Frise temporelle TAF pour CDG/ORY.
+   * Frise temporelle TAF — CDG/ORY.
    *
-   * FIX TOOLTIP : le tooltip est rendu en dehors du div segment (au même niveau
-   * que lui, enfant direct de la barre container). Ainsi left/right sont des %
-   * de la barre entière, pas du segment, ce qui évite tout débordement.
-   * Le positionnement gauche/droite dépend du centre du segment dans la frise.
+   * FIX OVERLAPPING : AWC retourne les fcsts avec des périodes qui se
+   * chevauchent (ex: une période TEMPO ou BECMG couvre le même plage
+   * qu'une période de base). On fusionne en prenant la sévérité la plus
+   * forte sur chaque slot horaire, puis on affiche des segments contigus
+   * sans chevauchement.
+   *
+   * FIX TOOLTIP : les tooltips sont frères des barres (enfants directs de
+   * la barre container), left/right en % de la barre entière.
    */
   function renderTafTimeline(baseTaf) {
     const fcsts     = baseTaf.fcsts   || [];
@@ -391,38 +395,86 @@
 
     const totalSec = tEnd - tStart;
 
-    const segments = fcsts
-      .filter(f => f.timeTo > tStart && f.timeFrom < tEnd)
-      .map(f => {
-        const segStart = Math.max(f.timeFrom, tStart);
-        const segEnd   = Math.min(f.timeTo, tEnd);
-        const left     = ((segStart - tStart) / totalSec) * 100;
-        const width    = ((segEnd   - segStart) / totalSec) * 100;
-        const sev      = periodSeverity(f, threats);
-        const label    = periodLabel(f, threats);
-        const ci       = f.changeIndicator ?? '';
-        const snippet  = buildFcstSnippet(f);
-        return { left, width, sev, label, ci, segStart, segEnd, snippet };
-      });
+    // ── Étape 1 : résolution des périodes en slots de 30 min sans chevauchement ────────
+    // AWC retourne des couches qui se superposent (période de base + TEMPO + BECMG).
+    // On évalue la sévérité de chaque slot en prenant le pire de toutes les couches.
+    const SLOT = 30 * 60; // 30 min en secondes
+    const nSlots = Math.ceil((tEnd - tStart) / SLOT);
+    // Pour chaque slot : sévérité pire + référence au fcst le plus prioritaire
+    const slotSev   = new Array(nSlots).fill('none');
+    const slotFcst  = new Array(nSlots).fill(null);
+
+    // Tri des fcsts par priorité : TEMPO > BECMG > FM/BASE
+    // On les traite dans l’ordre inverse (les couches supérieures écrasent)
+    const CI_PRIORITY = { TEMPO: 3, 'PROB30 TEMPO': 3, 'PROB40 TEMPO': 3, BECMG: 2, PROB30: 1, PROB40: 1 };
+    const sortedFcsts = [...fcsts].sort((a, b) =>
+      (CI_PRIORITY[a.changeIndicator] ?? 0) - (CI_PRIORITY[b.changeIndicator] ?? 0)
+    );
+
+    for (const f of sortedFcsts) {
+      const fStart = Math.max(f.timeFrom ?? tStart, tStart);
+      const fEnd   = Math.min(f.timeTo   ?? tEnd,   tEnd);
+      if (fEnd <= fStart) continue;
+
+      const sev = periodSeverity(f, threats);
+
+      const iSlot = Math.floor((fStart - tStart) / SLOT);
+      const eSlot = Math.ceil( (fEnd   - tStart) / SLOT);
+
+      for (let s = iSlot; s < eSlot && s < nSlots; s++) {
+        // La couche la plus prioritaire (TEMPO > BECMG > base) écrase le slot
+        const curPriority = slotFcst[s] ? (CI_PRIORITY[slotFcst[s].changeIndicator] ?? 0) : -1;
+        const newPriority = CI_PRIORITY[f.changeIndicator] ?? 0;
+        if (newPriority >= curPriority) {
+          // Prend la sévérité pire entre la couche prioritaire et l’existante
+          if (slotSev[s] === 'none' || SEVERITY_ORDER[sev] < SEVERITY_ORDER[slotSev[s]]) {
+            slotSev[s]  = sev;
+          }
+          slotFcst[s] = f;
+        }
+      }
+    }
+
+    // ── Étape 2 : fusion des slots consécutifs de même sévérité + même fcst en segments ──
+    const segments = [];
+    let i = 0;
+    while (i < nSlots) {
+      const sev   = slotSev[i];
+      const fcst  = slotFcst[i];
+      let j = i + 1;
+      // Fusionne les slots consécutifs de même sévérité
+      while (j < nSlots && slotSev[j] === sev) j++;
+
+      const segStart = tStart + i * SLOT;
+      const segEnd   = Math.min(tStart + j * SLOT, tEnd);
+      const left  = ((segStart - tStart) / totalSec) * 100;
+      const width = ((segEnd   - segStart) / totalSec) * 100;
+      const label = fcst ? periodLabel(fcst, threats) : 'Dégagé';
+      const ci    = fcst?.changeIndicator ?? '';
+      const snippet = fcst ? buildFcstSnippet(fcst) : '';
+
+      segments.push({ left, width, sev, label, ci, segStart, segEnd, snippet });
+      i = j;
+    }
 
     // Graduations toutes les 3h
     const ticks = [];
     const firstTickSec = tStart + (3600 - (tStart % 3600)) % 3600;
     for (let t = firstTickSec; t < tEnd; t += 3 * 3600) {
       const pct   = ((t - tStart) / totalSec) * 100;
-      const label = new Date(t * 1000).toLocaleString('fr-FR', {
+      const lbl   = new Date(t * 1000).toLocaleString('fr-FR', {
         hour: '2-digit', minute: '2-digit', timeZone: 'UTC',
       }) + 'Z';
-      ticks.push({ pct, label });
+      ticks.push({ pct, label: lbl });
     }
 
     const groupId = 'taf-grp-' + baseTaf.icao;
 
-    // ── Segments (barres colorées uniquement, sans tooltip imbriqué) ──────────────
+    // Barres colorées
     const barsHtml = segments.map((s, i) => {
-      const color   = PERIOD_BG[s.sev] ?? '#22c55e';
-      const textCl  = s.sev === 'yellow' ? 'text-black' : 'text-white';
-      const tipId   = `taf-seg-${baseTaf.icao}-${i}`;
+      const color  = PERIOD_BG[s.sev] ?? '#22c55e';
+      const textCl = s.sev === 'yellow' ? 'text-black' : 'text-white';
+      const tipId  = `taf-seg-${baseTaf.icao}-${i}`;
       return `
         <div
           class="absolute top-0 h-full rounded transition-opacity hover:opacity-80 cursor-pointer"
@@ -436,14 +488,10 @@
         >${s.width > 12 ? `<span class="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-[10px] font-semibold ${textCl} truncate px-1 pointer-events-none leading-tight">${s.label}</span>` : ''}</div>`;
     }).join('');
 
-    // ── Tooltips (frères des barres, positionnés en % de la barre container) ─────
-    // FIX : en dehors du div segment → left/right = % de la barre entière
+    // Tooltips frères (left/right = % de la barre entière)
     const tipsHtml = segments.map((s, i) => {
-      const tipId = `taf-seg-${baseTaf.icao}-${i}`;
-      // Centre du segment en % de la barre
+      const tipId  = `taf-seg-${baseTaf.icao}-${i}`;
       const center = s.left + s.width / 2;
-      // Si centre > 50% → ancre à droite (right = distance depuis le bord droit)
-      // Sinon → ancre à gauche (left = début du segment)
       const posStyle = center > 50
         ? `right:${(100 - s.left - s.width).toFixed(2)}%;left:auto;`
         : `left:${s.left.toFixed(2)}%;right:auto;`;
@@ -473,7 +521,6 @@
 
     return `
       <div class="relative mt-8 mb-6 select-none" onclick="void(0)">
-        <!-- Barre principale : position:relative pour ancrer les tooltips -->
         <div class="relative h-8 rounded-lg bg-gray-100 border border-gray-200" style="overflow:visible">
           ${barsHtml}
           ${tipsHtml}

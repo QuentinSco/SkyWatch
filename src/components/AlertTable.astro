@@ -48,27 +48,33 @@ function timeWindowStatus(validTo: string | undefined): { label: string; cls: st
 /**
  * Extrait le nom du volcan depuis le headline d'une alerte VAAC.
  *
- * Formats gérés :
- *   "Avis cendres volcaniques : LOPEVI — Cendres FL200 ... (VAAC Washington)"
- *   "Cendres volcaniques — MERAPI FL180 (VAAC Tokyo)"
- *   "VOLCANO: POPOCATEPETL ..."
+ * Le headline produit par alertsServer.ts a exactement ces formats :
  *
- * FIX : le séparateur après le nom peut être un espace suivi de FL, de (VAAC,
- * d'un tiret (—, -, –) ou simplement la fin de chaîne. La regex accepte aussi
- * les noms minuscules/mixtes et les accents (ex: "Etna", "Fournaise").
+ * VAAC Washington :
+ *   "Avis cendres volcaniques : POPOCATEPETL — Cendres FL200 | 270° / 15 kt (VAAC Washington)"
+ *
+ * Autres VAAC (parseVAATextBlock / parseVAACRssItem) :
+ *   "Cendres volcaniques — MERAPI FL180 (VAAC Tokyo)"
+ *   "Cendres volcaniques — Inconnu FL100 (VAAC Toulouse)"
+ *
+ * FIX : on extrait directement depuis les formats produits par le serveur,
+ * en se basant sur les séparateurs connus et le token FL qui suit le nom.
  */
 function extractVolcanoName(alert: WeatherAlert): string | null {
   if (alert.source !== 'VAAC' && alert.eventType !== 'VAAC') return null;
   const h = alert.headline;
-  // Format 1 — "Avis cendres volcaniques : NOM ..."
-  const m1 = h.match(/Avis cendres volcaniques\s*:\s*([\w][\w .,'-]{1,40}?)\s*(?:—|-–|FL|\(VAAC|$)/i);
+  if (!h) return null;
+
+  // Format VAAC Washington : "Avis cendres volcaniques : NOM — Cendres FL..."
+  // ou                       "Avis cendres volcaniques : NOM FL..."
+  const m1 = h.match(/Avis cendres volcaniques\s*:\s*([\w][\w .,\u2019'-]{0,50}?)\s*(?:—|FL\d|\(VAAC)/);
   if (m1) return m1[1].trim();
-  // Format 2 — "Cendres volcaniques — NOM ..."
-  const m2 = h.match(/Cendres volcaniques\s*[—\-–]\s*([\w][\w .,'-]{1,40}?)\s*(?:FL|\(VAAC|—|-–|$)/i);
-  if (m2) return m2[1].trim();
-  // Format 3 — "VOLCANO: NOM"
-  const m3 = h.match(/VOLCANO[:\s]+([\w][\w .,'-]{1,40}?)(?:\s|$)/i);
-  if (m3) return m3[1].trim();
+
+  // Format autres VAAC : "Cendres volcaniques — NOM FL..."
+  // ou                   "Cendres volcaniques — NOM (VAAC ...)"
+  const m2 = h.match(/Cendres volcaniques\s*[—\-–]\s*([\w][\w .,\u2019'-]{0,50}?)\s*(?:FL\d|\(VAAC|—|$)/);
+  if (m2 && m2[1].trim() !== 'Inconnu') return m2[1].trim();
+
   return null;
 }
 

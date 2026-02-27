@@ -102,6 +102,14 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
   if (!res.ok) {
     const body = await res.text();
     console.error('[AF Flights] HTTP', res.status, body);
+
+    // ── Quota journalier dépassé : on lève une erreur explicite ──
+    // pour qu'elle remonte jusqu'au frontend (bandeau rouge)
+    // plutôt que de retourner [] et afficher "Aucun vol" à tort.
+    if (res.status === 429) {
+      throw new Error(`Quota API Air France dépassé (429) — réessaie demain ou augmente le plan.`);
+    }
+
     return [];
   }
 
@@ -124,6 +132,10 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
       console.log(`[AF Flights] page ${p}/${totalPages} — +${extra.length} vols`);
     } else {
       console.warn(`[AF Flights] page ${p} HTTP`, r.status);
+      // 429 sur une page de pagination : on lève aussi
+      if (r.status === 429) {
+        throw new Error(`Quota API Air France dépassé (429) à la page ${p}.`);
+      }
     }
   }
 
@@ -164,14 +176,13 @@ export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
   }
 
   // ── 2. Distributed lock — SET NX (only if not exists) ───────────────────
-  // Upstash : set avec NX retourne "OK" si acquis, null sinon
   const lockAcquired = await kv.set(KV_LOCK_KEY, '1', { nx: true, ex: LOCK_TTL });
 
   if (!lockAcquired) {
     // Une autre instance est en train de fetcher — on attend le cache
     console.log('[AF Flights] Lock non acquis — attente cache...');
     for (let i = 0; i < 20; i++) {
-      await new Promise(r => setTimeout(r, 2000)); // attente 2s
+      await new Promise(r => setTimeout(r, 2000));
       try {
         const cached = await kv.get<AfFlightArrival[]>(KV_KEY);
         if (cached && cached.length > 0) {
@@ -185,6 +196,8 @@ export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
   }
 
   // ── 3. Lock acquis — on est la seule instance à fetcher ──────────────────
+  // ⚠️ callAfApi() peut lever une Error (ex: 429) — on la laisse remonter
+  // volontairement pour qu'elle soit visible dans le frontend.
   try {
     const result = await callAfApi();
 

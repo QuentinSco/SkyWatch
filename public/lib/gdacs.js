@@ -131,6 +131,8 @@ export async function fetchGDACS() {
       const link        = getTag(item, 'link') || 'https://www.gdacs.org';
       const gdacsCountry = getTag(item, 'gdacs:country');
       const eventName    = getTag(item, 'gdacs:eventname') || '';
+      // Nettoie l'ID numérique en fin de nom (ex: "POPOCATEPETL 341090" → "POPOCATEPETL")
+      const cleanEventName = eventName.replace(/\s+\d{4,}$/, '').trim();
       const magRaw      = getTag(item, 'gdacs:magnitude');
       const magnitude   = magRaw ? parseFloat(magRaw) : windKmh;
       const eventId     = getTag(item, 'gdacs:eventid') || `${eventType}-${lat}-${lon}`;
@@ -140,18 +142,20 @@ export async function fetchGDACS() {
       const region   = regionFromCoords(lat, lon);
       const basin    = eventType === 'TC' ? basinFromCoords(lat, lon) : null;
 
-      const country = gdacsCountry || (eventType === 'TC' ? (basin ?? '') : eventName);
+      const country = gdacsCountry || (eventType === 'TC' ? (basin ?? '') : cleanEventName);
 
       const label  = TYPE_LABELS[eventType] ?? 'Événement';
       const magStr = magnitude ? ` ${windKmh ? windKmh + ' km/h' : 'M' + magnitude}` : '';
-      const tcName = eventType === 'TC' && eventName ? ` (${eventName})` : '';
+      const tcName = eventType === 'TC' && cleanEventName ? ` (${cleanEventName})` : '';
+      // Pour les volcans, afficher le nom dans le phénomène
+      const voName = eventType === 'VO' && cleanEventName ? ` — ${cleanEventName}` : '';
 
       alerts.push({
         id:          `gdacs-${eventId}`,
         source:      'GDACS',
         region,
         severity,
-        phenomenon:  label,
+        phenomenon:  label + voName,
         eventType,
         country,
         airports,
@@ -159,7 +163,7 @@ export async function fetchGDACS() {
         lon,
         validFrom:   pubDate,
         validTo:     null,
-        headline:    `${label}${magStr}${tcName} — ${country || 'Région inconnue'} ▲`,
+        headline:    `${label}${magStr}${tcName}${voName} — ${country || 'Région inconnue'} ▲`,
         description,
         link,
         ...(basin     ? { basin }     : {}),

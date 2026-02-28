@@ -33,22 +33,28 @@ import '../styles/global.css';
         align-items: start;
         gap: 1.5rem;
       }
-      /* La carte occupe la colonne gauche et reste sticky */
+
+      /* ✅ Fix colonne gauche : même hauteur bornée + scroll indépendant
+         que .col-alerts. Sans ça, body{overflow:hidden} tronquait le bas
+         de la section État base CDG/ORY. La position sticky reste utile
+         pour l'ancrage visuel en top:1.5rem. */
       .col-map {
         position: sticky;
         top: 1.5rem;
         display: flex;
         flex-direction: column;
         gap: 1.5rem;
+        overflow-y: auto;
+        height: calc(100vh - 3rem);
       }
+
       /* Hauteur de carte bornée — ni trop petite ni trop haute */
       #alert-map {
         height: clamp(420px, 55vh, 620px) !important;
         min-height: 420px;
       }
-      /* ✅ Fix layout : height fixe (pas max-height) pour que la colonne
-         occupe toujours toute la hauteur disponible — plus d'espace vide
-         en bas quand le contenu est plus court que la fenêtre. */
+
+      /* Colonne droite : scroll indépendant, hauteur fixe */
       .col-alerts {
         overflow-y: auto;
         height: calc(100vh - 3rem);
@@ -56,9 +62,12 @@ import '../styles/global.css';
       }
     }
 
-    /* Scrollbar discrète sur la colonne droite */
+    /* Scrollbars discrètes sur les deux colonnes */
+    .col-map::-webkit-scrollbar,
     .col-alerts::-webkit-scrollbar { width: 4px; }
+    .col-map::-webkit-scrollbar-track,
     .col-alerts::-webkit-scrollbar-track { background: transparent; }
+    .col-map::-webkit-scrollbar-thumb,
     .col-alerts::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
 
     /* Slot état base — masqué par défaut, visible seulement sur grand écran */

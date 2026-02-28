@@ -20,10 +20,11 @@ export interface AfFlightArrival {
   timeToArrivalMinutes?: number;
 }
 
-const KV_KEY      = 'af_flights_cache';
-const KV_LOCK_KEY = 'af_flights_lock';   // ✅ Distributed lock
-const KV_TTL_SEC  = 4 * 60 * 60;         // 4h TTL cache
-const LOCK_TTL    = 60;                   // 60s max pour un fetch
+const KV_KEY          = 'af_flights_cache';
+const KV_LOCK_KEY     = 'af_flights_lock';  // ✅ Distributed lock
+const KV_TTL_SEC      = 4 * 60 * 60;        // 4h TTL cache (vols futurs)
+const KV_EMPTY_TTL    = 5 * 60;             // 5min TTL cache vide (évite re-fetch inutiles)
+const LOCK_TTL        = 60;                 // 60s max pour un fetch
 
 function minutesToArrival(etaIso: string | undefined): number | undefined {
   if (!etaIso) return undefined;
@@ -103,11 +104,9 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
   if (!res.ok) {
     const body = await res.text();
     console.error('[AF Flights] HTTP', res.status, body);
-
     if (res.status === 429) {
       throw new Error(`Quota API Air France dépassé (429) — réessaie demain ou augmente le plan.`);
     }
-
     return [];
   }
 
@@ -158,25 +157,23 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
  * ✅ Cache Redis partagé entre toutes les instances Vercel.
  * ✅ Distributed lock — une seule instance fait le fetch à la fois.
  * ✅ Les autres instances attendent que le cache soit rempli.
- * ✅ Le TTL Redis (4h) gère l'expiration — plus d'auto-invalidation
- *    intempestive quand tous les vols sont passés.
+ * ✅ Stocke [] avec TTL court si aucun vol futur, bloquant les re-fetch.
  */
 export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
 
   const now = Date.now();
 
   // ── 1. Cache KV — hit → retour immédiat, 0 requête AF ────────────────────
+  // ✅ Fix : Array.isArray() au lieu de cached && cached.length > 0
+  //    Un tableau vide [] est un HIT valide (résultat d'un fetch sans vol futur)
+  //    et doit bloquer les re-fetch jusqu'à expiration du TTL court (5 min).
   try {
     const cached = await kv.get<AfFlightArrival[]>(KV_KEY);
-    if (cached && cached.length > 0) {
+    if (Array.isArray(cached)) {
       const futureFlights = cached.filter(f => {
         const eta = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
         return eta >= now;
       });
-
-      // ✅ Fix : on ne supprime plus le cache KV quand tous les vols sont passés.
-      // Le TTL Redis (4h) gère l'expiration naturellement, évitant les
-      // re-fetch intempestifs qui épuisaient le quota AF.
       console.log(`[AF Flights] Cache KV HIT — ${futureFlights.length}/${cached.length} vols futurs`);
       return futureFlights;
     }
@@ -188,20 +185,19 @@ export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
   const lockAcquired = await kv.set(KV_LOCK_KEY, '1', { nx: true, ex: LOCK_TTL });
 
   if (!lockAcquired) {
+    // Une autre instance est en train de fetcher — on attend le cache
     console.log('[AF Flights] Lock non acquis — attente cache...');
     for (let i = 0; i < 20; i++) {
       await new Promise(r => setTimeout(r, 2000));
       try {
         const cached = await kv.get<AfFlightArrival[]>(KV_KEY);
-        if (cached && cached.length > 0) {
+        if (Array.isArray(cached)) {
           const futureFlights = cached.filter(f => {
             const eta = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
             return eta >= now;
           });
-          if (futureFlights.length > 0) {
-            console.log(`[AF Flights] Cache KV disponible après attente — ${futureFlights.length} vols futurs`);
-            return futureFlights;
-          }
+          console.log(`[AF Flights] Cache KV disponible après attente — ${futureFlights.length} vols futurs`);
+          return futureFlights;
         }
       } catch { /* continue */ }
     }
@@ -219,15 +215,20 @@ export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
     });
 
     if (futureFlights.length > 0) {
+      // Vols futurs présents → TTL long (4h)
       await kv.set(KV_KEY, futureFlights, { ex: KV_TTL_SEC });
       console.log(`[AF Flights] ${futureFlights.length}/${result.length} vols futurs stockés en KV (TTL ${KV_TTL_SEC}s)`);
     } else {
-      console.warn(`[AF Flights] Aucun vol futur à stocker (${result.length} vols passés filtrés)`);
+      // ✅ Fix : aucun vol futur → stocke [] avec TTL court (5 min)
+      // Bloque les re-fetch inutiles jusqu'à expiration, évite le throttle AF.
+      await kv.set(KV_KEY, [], { ex: KV_EMPTY_TTL });
+      console.warn(`[AF Flights] Aucun vol futur — [] stocké en KV (TTL ${KV_EMPTY_TTL}s)`);
     }
 
     return futureFlights;
 
   } finally {
+    // ✅ Toujours libérer le lock, même en cas d'erreur
     await kv.del(KV_LOCK_KEY);
     console.log('[AF Flights] Lock libéré');
   }

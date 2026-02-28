@@ -19,6 +19,13 @@ import '../styles/global.css';
 
     /* À partir de 1280px : carte + alertes côte à côte */
     @media (min-width: 1280px) {
+      /* ✅ Fix scroll : body borné à 100vh, empêche le double-scroll
+         (page entière + col-alerts). Sur mobile, aucun effet. */
+      body {
+        height: 100vh;
+        overflow: hidden;
+      }
+
       .main-grid {
         display: grid;
         grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
@@ -39,10 +46,12 @@ import '../styles/global.css';
         height: clamp(420px, 55vh, 620px) !important;
         min-height: 420px;
       }
-      /* La colonne droite scroll indépendamment */
+      /* ✅ Fix layout : height fixe (pas max-height) pour que la colonne
+         occupe toujours toute la hauteur disponible — plus d'espace vide
+         en bas quand le contenu est plus court que la fenêtre. */
       .col-alerts {
         overflow-y: auto;
-        max-height: calc(100vh - 3rem);
+        height: calc(100vh - 3rem);
         padding-right: 0.25rem;
       }
     }
@@ -116,7 +125,7 @@ import '../styles/global.css';
   </aside>
 
   <!-- ─── Contenu principal ───────────────────────────────────── -->
-  <div class="flex-1 min-w-0 overflow-y-auto">
+  <div class="flex-1 min-w-0 overflow-y-auto xl:overflow-hidden">
     <div class="px-4 py-6 xl:px-6">
 
       <!-- Header mobile (masqué sur lg) -->
@@ -230,7 +239,6 @@ import '../styles/global.css';
       if (!slot) return;
 
       function findBaseSection() {
-        // taf-ui.js rend un <section> ou <div> contenant un <h2>/<h3> "État base CDG / ORY"
         const headings = Array.from(document.querySelectorAll('h2, h3'));
         const h = headings.find(el =>
           /[Ée]tat\s+base/i.test(el.textContent || '') &&

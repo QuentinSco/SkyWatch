@@ -235,7 +235,8 @@
     const icon   = THREAT_ICONS[threat.type] ?? '⚠️';
     const badge  = SEVERITY_BADGE[threat.severity];
     const ci     = CI_LABEL[threat.changeIndicator] ?? null;
-    const etaIso = flight.estimatedArrival || flight.scheduledArrival;
+    // ✅ Fix : estimatedTouchDownTime (était estimatedArrival, champ inexistant)
+    const etaIso = flight.estimatedTouchDownTime || flight.scheduledArrival;
     const etaStr = formatIsoToLocalShort(etaIso);
     const tta    = etaIso ? Math.round((new Date(etaIso).getTime() - Date.now()) / 60000) : null;
     const ttaStr = formatTta(tta);
@@ -332,7 +333,6 @@
     if (!threats || threats.length === 0) return 'none';
     let best = 'none';
     for (const t of threats) {
-      // Vérifier que la menace chevauche CE slot spécifique (pas le forecast entier)
       const overlap = t.periodStart < slotEnd && t.periodEnd > slotStart;
       if (!overlap) continue;
       if (best === 'none' || SEVERITY_ORDER[t.severity] < SEVERITY_ORDER[best]) {
@@ -340,14 +340,6 @@
       }
     }
     return best;
-  }
-
-  function periodLabel(fcst, threats) {
-    const matching = (threats || []).filter(t =>
-      t.periodStart < fcst.timeTo && t.periodEnd > fcst.timeFrom
-    );
-    if (matching.length === 0) return 'Dégagé';
-    return matching.map(t => (THREAT_ICONS[t.type] ?? '⚠️') + ' ' + t.label).join(' · ');
   }
 
   function buildFcstSnippet(fcst) {
@@ -367,18 +359,6 @@
     return parts.join(' ');
   }
 
-  /**
-   * Frise temporelle TAF — CDG/ORY.
-   *
-   * FIX OVERLAPPING : AWC retourne les fcsts avec des périodes qui se
-   * chevauchent (ex: une période TEMPO ou BECMG couvre le même plage
-   * qu'une période de base). On fusionne en prenant la sévérité la plus
-   * forte sur chaque slot horaire, puis on affiche des segments contigus
-   * sans chevauchement.
-   *
-   * FIX TOOLTIP : les tooltips sont frères des barres (enfants directs de
-   * la barre container), left/right en % de la barre entière.
-   */
   function renderTafTimeline(baseTaf) {
     const fcsts     = baseTaf.fcsts   || [];
     const threats   = baseTaf.threats || [];
@@ -416,21 +396,18 @@
       const eSlot = Math.ceil( (fEnd   - tStart) / SLOT);
 
       for (let s = iSlot; s < eSlot && s < nSlots; s++) {
-        // FIX: vérifier que le forecast chevauche réellement ce slot temporel
         const slotStart = tStart + s * SLOT;
         const slotEnd   = tStart + (s + 1) * SLOT;
         const overlap = fStart < slotEnd && fEnd > slotStart;
-        
         if (!overlap) continue;
-        
-        // FIX RACINE: calculer la sévérité basée sur les MENACES qui chevauchent CE slot
+
         const sev = periodSeverity(slotStart, slotEnd, threats);
-        
+
         const curPriority = slotFcst[s] ? (CI_PRIORITY[slotFcst[s].changeIndicator] ?? 0) : -1;
         const newPriority = CI_PRIORITY[f.changeIndicator] ?? 0;
         if (newPriority >= curPriority) {
           if (slotSev[s] === 'none' || SEVERITY_ORDER[sev] < SEVERITY_ORDER[slotSev[s]]) {
-            slotSev[s]  = sev;
+            slotSev[s] = sev;
           }
           slotFcst[s] = f;
         }
@@ -441,8 +418,8 @@
     const segments = [];
     let i = 0;
     while (i < nSlots) {
-      const sev   = slotSev[i];
-      const fcst  = slotFcst[i];
+      const sev  = slotSev[i];
+      const fcst = slotFcst[i];
       let j = i + 1;
       while (j < nSlots && slotSev[j] === sev) j++;
 
@@ -450,9 +427,20 @@
       const segEnd   = Math.min(tStart + j * SLOT, tEnd);
       const left  = ((segStart - tStart) / totalSec) * 100;
       const width = ((segEnd   - segStart) / totalSec) * 100;
-      const label = fcst ? periodLabel(fcst, threats) : 'Dégagé';
-      const ci    = fcst?.changeIndicator ?? '';
-      const snippet = fcst ? buildFcstSnippet(fcst) : '';
+
+      // ✅ Fix label : basé sur les menaces qui chevauchent CE segment précisément
+      // (était basé sur la période forecast, qui peut couvrir des plages sans menace
+      // → un segment vert affichait "Visibilité 700m" au lieu de "Dégagé")
+      const matchingThreats = threats.filter(t =>
+        t.periodStart < segEnd && t.periodEnd > segStart
+      );
+      const label = matchingThreats.length === 0
+        ? 'Dégagé'
+        : matchingThreats.map(t => (THREAT_ICONS[t.type] ?? '⚠️') + ' ' + t.label).join(' · ');
+
+      const ci      = fcst?.changeIndicator ?? '';
+      // ✅ snippet masqué pour les segments dégagés (sev = 'none')
+      const snippet = sev !== 'none' && fcst ? buildFcstSnippet(fcst) : '';
 
       segments.push({ left, width, sev, label, ci, segStart, segEnd, snippet });
       i = j;
@@ -685,9 +673,6 @@
           </div>`;
       }
 
-      // FIX : sur grand écran, la section CDG/ORY est injectée directement dans
-      // le slot gauche (#base-status-body) pour éviter le doublon au refresh.
-      // Sur mobile (< 1280px), le slot est masqué → on garde l'affichage inline.
       const baseSectionHtml = renderBaseSection(baseHits, baseTafs);
       const isWide = window.matchMedia('(min-width: 1280px)').matches;
       const baseBodyEl = document.getElementById('base-status-body');

@@ -195,12 +195,9 @@ function visMtoMeters(raw: string | number | null | undefined): number | null {
   if (raw == null || raw === '') return null;
   const s = String(raw).trim();
   if (s === '6+' || s.toUpperCase() === 'P6SM' || s === '9999') return 9999;
-
   const n = parseFloat(s);
   if (isNaN(n)) return null;
-
   if (Number.isInteger(n) && n >= 800) return n;
-
   const SM_TO_M = 1609.344;
   return Math.round((n * SM_TO_M) / 50) * 50;
 }
@@ -220,9 +217,8 @@ function groupHasExplicitVisib(fcst: any): boolean {
 }
 
 /**
- * Convertit une base de nuage en pieds (ex: 2000) au format TAF (centaines
- * de pieds, 3 chiffres zéro-rembourrés, ex: "020").
- * L'AWC API retourne c.base en pieds AGL ; le TAF METAR utilise des centaines.
+ * Convertit une base de nuage en pieds (ex: 2000) au format TAF
+ * (centaines de pieds, 3 chiffres zéro-rembourrés, ex: "020").
  */
 function cloudBaseToTafCode(baseFt: number | null | undefined): string {
   if (baseFt == null) return '';
@@ -230,15 +226,14 @@ function cloudBaseToTafCode(baseFt: number | null | undefined): string {
 }
 
 function buildSnippet(fcst: any): string {
-  const wdir  = fcst.wdir != null ? String(fcst.wdir).padStart(3, '0') : 'VRB';
-  const wspd  = fcst.wspd != null ? String(fcst.wspd).padStart(2, '0') : null;
-  const wgst  = fcst.wgst != null ? `G${String(fcst.wgst).padStart(2, '0')}` : '';
+  const wdir    = fcst.wdir != null ? String(fcst.wdir).padStart(3, '0') : 'VRB';
+  const wspd    = fcst.wspd != null ? String(fcst.wspd).padStart(2, '0') : null;
+  const wgst    = fcst.wgst != null ? `G${String(fcst.wgst).padStart(2, '0')}` : '';
   const windStr = wspd ? `${wdir}${wspd}${wgst}KT` : '';
   const wxStr   = fcst.wxString ?? '';
   const visRaw  = fcst.visib;
   const visM    = visMtoMeters(visRaw);
   const visStr  = (visM !== null && visM !== 9999) ? `VIS ${visM}m` : '';
-  // ✅ Fix : base en centaines de pieds (format TAF) plutôt qu'en pieds bruts
   const cbStr   = fcst.clouds
     ?.filter((c: any) => c.type === 'CB' || c.type === 'TCU')
     .map((c: any) => `${c.cover}${cloudBaseToTafCode(c.base)}${c.type}`)
@@ -285,7 +280,7 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
     });
   }
 
-  // ── Précip. verlaçantes
+  // ── Précip. verglaçantes
   if (wxString && /\bFZRA\b|\bFZDZ\b|\bFZFG\b/.test(wxString)) {
     threats.push({
       type: 'FREEZING', label: 'Précip. verglaçantes', value: wxString,
@@ -324,7 +319,7 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
     const visM = visMtoMeters(visib);
     if (visM !== null && visM < 3500 && groupHasExplicitVisib(fcst)) {
       const severity: ThreatSeverity =
-        visM < 400 ? 'red' :
+        visM < 400  ? 'red'    :
         visM < 1000 ? 'orange' :
         'yellow';
       threats.push({
@@ -352,13 +347,45 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
           label: cloud.base != null
             ? `${cloud.type} base ${cloud.base}ft`
             : `${cloud.type}`,
-          // ✅ Fix : valeur affichée en format TAF (centaines de pieds)
           value: `${cloud.cover}${cloudBaseToTafCode(cloud.base)}${cloud.type}`,
           severity,
           periodStart: timeFrom, periodEnd: timeTo,
           changeIndicator: ci, snippet,
         });
       }
+    }
+  }
+
+  // ── Plafond bas BKN/OVC (hors CB/TCU)
+  //   BKN/OVC = couverture ≥5/8 = plafond officiel.
+  //   On ne remonte que le layer le plus bas (≤ 1000ft) pour éviter le bruit.
+  //   Seuils LVP CDG/ORY : BKN/OVC ≤ 200ft = conditions LVP.
+  //     base < 100ft  : RED
+  //     base < 500ft  : ORANGE  (couvre le seuil LVP 200ft)
+  //     base < 1000ft : YELLOW
+  if (Array.isArray(clouds)) {
+    const ceilingLayers = clouds
+      .filter((c: any) =>
+        (c.cover === 'BKN' || c.cover === 'OVC') &&
+        c.type !== 'CB' && c.type !== 'TCU' &&
+        c.base != null && c.base <= 1000
+      )
+      .sort((a: any, b: any) => a.base - b.base); // plus bas en premier
+
+    if (ceilingLayers.length > 0) {
+      const lowest = ceilingLayers[0];
+      const severity: ThreatSeverity =
+        lowest.base < 100 ? 'red'    :
+        lowest.base < 500 ? 'orange' :
+        'yellow';
+      threats.push({
+        type: 'LOW_CEILING',
+        label: `Plafond ${lowest.base}ft`,
+        value: `${lowest.cover}${cloudBaseToTafCode(lowest.base)}`,
+        severity,
+        periodStart: timeFrom, periodEnd: timeTo,
+        changeIndicator: ci, snippet,
+      });
     }
   }
 

@@ -32,7 +32,7 @@
 
   const PHENOMENON_EMOJI = {
     'Cyclone tropical':      '🌀',
-    'Tremblement de terre':  '🫨',
+    'Tremblement de terre':  '🌏',
     'Éruption volcanique':   '🌋',
     'Inondation':            '🌊',
     'Tsunami':               '🌊',

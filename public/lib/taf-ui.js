@@ -417,6 +417,13 @@
       const eSlot = Math.ceil( (fEnd   - tStart) / SLOT);
 
       for (let s = iSlot; s < eSlot && s < nSlots; s++) {
+        // FIX: vérifier que le forecast chevauche réellement ce slot temporel
+        const slotStart = tStart + s * SLOT;
+        const slotEnd   = tStart + (s + 1) * SLOT;
+        const overlap = fStart < slotEnd && fEnd > slotStart;
+        
+        if (!overlap) continue;
+        
         const curPriority = slotFcst[s] ? (CI_PRIORITY[slotFcst[s].changeIndicator] ?? 0) : -1;
         const newPriority = CI_PRIORITY[f.changeIndicator] ?? 0;
         if (newPriority >= curPriority) {

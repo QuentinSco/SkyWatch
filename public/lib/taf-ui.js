@@ -555,7 +555,7 @@
       return `
         <section class="mt-8 pt-6 border-t border-gray-200">
           <h2 class="text-xl font-bold text-gray-900 mb-1">🏠 État base CDG / ORY</h2>
-          <p class="text-gray-500 text-sm mb-4">TAF actifs sur notre base — Hors croisement vols LC.</p>
+          <p class="text-gray-500 text-sm mb-4">TAF actifs sur CDG/ORY.</p>
           <div class="text-center py-8 text-gray-400">
             <div class="text-3xl mb-2">⏳</div>
             <div class="text-sm">TAF en cours de chargement…</div>

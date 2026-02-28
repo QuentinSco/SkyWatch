@@ -10,15 +10,20 @@ import '../styles/global.css';
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
-    /* ── Layout widescreen ─────────────────────────────────────────── */
+    /* ── Layout mobile (défaut) ─────────────────────────────────────── */
     .main-grid {
       display: flex;
       flex-direction: column;
       gap: 1.5rem;
     }
 
+    /* Slot CDG/ORY masqué par défaut (mobile), visible sur grand écran */
+    #base-status-slot { display: none; }
+
+    /* ── Layout widescreen (≥1280px) ────────────────────────────── */
     @media (min-width: 1280px) {
-      /* Body borné : empêche le double-scroll page + colonnes */
+
+      /* Body borné : élimine le scroll de page parasite */
       body {
         height: 100vh;
         overflow: hidden;
@@ -32,27 +37,44 @@ import '../styles/global.css';
         gap: 1.5rem;
       }
 
-      /* ✅ Colonne gauche : hauteur fixe + scroll propre.
-         SANS position:sticky — sticky + overflow-y:auto sur le même
-         élément se neutralisent (overflow crée un scroll context qui
-         invalide sticky). La hauteur fixe suffit à maintenir la colonne
-         en haut du grid. */
+      /* ✅ Colonne gauche : sticky + hauteur bornée.
+         PAS de overflow-y ici — overflow-y + sticky sur le même élément
+         crée un scroll context qui invalide sticky.
+         Le scroll CDG/ORY est délégué à #base-status-body. */
       .col-map {
+        position: sticky;
+        top: 1.5rem;
         display: flex;
         flex-direction: column;
         gap: 1.5rem;
-        overflow-y: auto;
         height: calc(100vh - 3rem);
       }
 
-      /* La carte ne doit pas être compressée quand .col-map est bornée */
+      /* Carte : hauteur fixe, ne se compresse pas */
       #alert-map {
         height: clamp(420px, 55vh, 620px) !important;
         min-height: 420px;
         flex-shrink: 0;
       }
 
-      /* Colonne droite : même comportement que col-map */
+      /* Slot CDG/ORY : prend toute la hauteur restante de col-map */
+      #base-status-slot {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0; /* flex child peut retrécir sous son contenu */
+      }
+
+      /* Corps du slot CDG/ORY : zone de scroll indépendante.
+         flex:1 + min-height:0 + overflow-y:auto = scroll borné dans
+         l'espace restant après l'entête du slot. */
+      #base-status-body {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+      }
+
+      /* Colonne droite : scroll indépendant */
       .col-alerts {
         overflow-y: auto;
         height: calc(100vh - 3rem);
@@ -60,19 +82,13 @@ import '../styles/global.css';
       }
     }
 
-    /* Scrollbars discrètes sur les deux colonnes */
-    .col-map::-webkit-scrollbar,
+    /* Scrollbars discrètes */
+    #base-status-body::-webkit-scrollbar,
     .col-alerts::-webkit-scrollbar { width: 4px; }
-    .col-map::-webkit-scrollbar-track,
+    #base-status-body::-webkit-scrollbar-track,
     .col-alerts::-webkit-scrollbar-track { background: transparent; }
-    .col-map::-webkit-scrollbar-thumb,
+    #base-status-body::-webkit-scrollbar-thumb,
     .col-alerts::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
-
-    /* Slot état base — masqué par défaut */
-    #base-status-slot { display: none; }
-    @media (min-width: 1280px) {
-      #base-status-slot { display: block; }
-    }
   </style>
 </head>
 
@@ -130,6 +146,7 @@ import '../styles/global.css';
 
         <!-- Colonne gauche -->
         <div class="col-map">
+
           <section id="section-carte" class="scroll-mt-6">
             <div class="rounded-xl overflow-hidden border border-gray-200 shadow-sm">
               <div class="bg-gray-50 border-b border-gray-200 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
@@ -138,16 +155,23 @@ import '../styles/global.css';
               <div id="alert-map" style="height: 420px; width: 100%;"></div>
             </div>
           </section>
-          <div id="base-status-slot" class="rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-white">
-            <div class="bg-gray-50 border-b border-gray-200 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+
+          <!-- Slot CDG/ORY — flex:1 via CSS, prend toute la hauteur restante -->
+          <div id="base-status-slot" class="rounded-xl border border-gray-200 shadow-sm bg-white overflow-hidden">
+            <div class="bg-gray-50 border-b border-gray-200 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide flex-shrink-0">
               🛫 État base CDG / ORY
             </div>
-            <div id="base-status-body" class="text-sm text-gray-400 italic px-4 py-3">Chargement…</div>
+            <!-- overflow-y:auto via CSS — scroll indépendant dans l'espace restant -->
+            <div id="base-status-body" class="text-sm text-gray-400 italic px-4 py-3">
+              Chargement…
+            </div>
           </div>
+
         </div>
 
         <!-- Colonne droite -->
         <div class="col-alerts">
+
           <section id="section-alertes" class="mb-8 scroll-mt-6">
             <main id="main-content">
               <div class="text-gray-400 text-sm italic">Chargement des alertes...</div>
@@ -184,8 +208,8 @@ import '../styles/global.css';
             <span>Sources : GDACS (UN/CE) · NOAA/NWS · MeteoAlarm (EUMETNET) · AviationWeather.gov (TAF) · NHC (NOAA) · RSMC La Réunion (Météo-France) · JTWC</span>
             <span>SkyWatch POC v0.1 — Open source uniquement</span>
           </footer>
-        </div>
 
+        </div>
       </div>
     </div>
   </div>

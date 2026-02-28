@@ -47,16 +47,16 @@ function mapLegToArrival(operationalFlight: any, leg: any): AfFlightArrival | nu
     if (!scheduled) return null;
 
     return {
-      flightId:             `${carrier}${fn}-${operationalFlight.flightScheduleDate ?? ''}`,
-      marketingCarrier:     carrier,
-      flightNumber:         fn,
+      flightId:               `${carrier}${fn}-${operationalFlight.flightScheduleDate ?? ''}`,
+      marketingCarrier:       carrier,
+      flightNumber:           fn,
       iata,
       icao,
-      registration:         leg.aircraft?.registration ?? undefined,
-      aircraftType:         leg.aircraft?.typeCode ?? undefined,
-      scheduledArrival:     scheduled,
-      estimatedTouchDownTime:     estimated,
-      timeToArrivalMinutes: minutesToArrival(estimated ?? scheduled),
+      registration:           leg.aircraft?.registration ?? undefined,
+      aircraftType:           leg.aircraft?.typeCode ?? undefined,
+      scheduledArrival:       scheduled,
+      estimatedTouchDownTime: estimated,
+      timeToArrivalMinutes:   minutesToArrival(estimated ?? scheduled),
     };
   } catch (e) {
     console.error('[AF mapLegToArrival]', e);
@@ -71,9 +71,10 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
     return [];
   }
 
-  const now   = new Date();
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 0, 0, 0));
-  const end   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 2, 23, 59, 59));
+  const now = new Date();
+  // ✅ Fenêtre réduite : J+0 00:00 UTC → J+1 23:59 UTC (48h, était J-1→J+2 = 4 jours)
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
+  const end   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 23, 59, 59));
 
   const headers: Record<string, string> = {
     'API-Key':    API_KEY,
@@ -103,9 +104,6 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
     const body = await res.text();
     console.error('[AF Flights] HTTP', res.status, body);
 
-    // ── Quota journalier dépassé : on lève une erreur explicite ──
-    // pour qu'elle remonte jusqu'au frontend (bandeau rouge)
-    // plutôt que de retourner [] et afficher "Aucun vol" à tort.
     if (res.status === 429) {
       throw new Error(`Quota API Air France dépassé (429) — réessaie demain ou augmente le plan.`);
     }
@@ -132,7 +130,6 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
       console.log(`[AF Flights] page ${p}/${totalPages} — +${extra.length} vols`);
     } else {
       console.warn(`[AF Flights] page ${p} HTTP`, r.status);
-      // 429 sur une page de pagination : on lève aussi
       if (r.status === 429) {
         throw new Error(`Quota API Air France dépassé (429) à la page ${p}.`);
       }
@@ -161,7 +158,8 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
  * ✅ Cache Redis partagé entre toutes les instances Vercel.
  * ✅ Distributed lock — une seule instance fait le fetch à la fois.
  * ✅ Les autres instances attendent que le cache soit rempli.
- * ✅ Filtre automatique des vols passés avant retour.
+ * ✅ Le TTL Redis (4h) gère l'expiration — plus d'auto-invalidation
+ *    intempestive quand tous les vols sont passés.
  */
 export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
 
@@ -171,20 +169,16 @@ export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
   try {
     const cached = await kv.get<AfFlightArrival[]>(KV_KEY);
     if (cached && cached.length > 0) {
-      // ✅ Vérifie si le cache est périmé (tous les vols dans le passé)
       const futureFlights = cached.filter(f => {
         const eta = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
         return eta >= now;
       });
 
-      if (futureFlights.length === 0) {
-        console.log(`[AF Flights] Cache KV périmé — tous les vols sont passés → invalidation`);
-        await kv.del(KV_KEY);
-        // Continue vers fetch
-      } else {
-        console.log(`[AF Flights] Cache KV HIT — ${futureFlights.length}/${cached.length} vols futurs`);
-        return futureFlights;
-      }
+      // ✅ Fix : on ne supprime plus le cache KV quand tous les vols sont passés.
+      // Le TTL Redis (4h) gère l'expiration naturellement, évitant les
+      // re-fetch intempestifs qui épuisaient le quota AF.
+      console.log(`[AF Flights] Cache KV HIT — ${futureFlights.length}/${cached.length} vols futurs`);
+      return futureFlights;
     }
   } catch (e) {
     console.warn('[AF Flights] KV read error:', e);
@@ -194,7 +188,6 @@ export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
   const lockAcquired = await kv.set(KV_LOCK_KEY, '1', { nx: true, ex: LOCK_TTL });
 
   if (!lockAcquired) {
-    // Une autre instance est en train de fetcher — on attend le cache
     console.log('[AF Flights] Lock non acquis — attente cache...');
     for (let i = 0; i < 20; i++) {
       await new Promise(r => setTimeout(r, 2000));
@@ -217,12 +210,9 @@ export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
   }
 
   // ── 3. Lock acquis — on est la seule instance à fetcher ──────────────────
-  // ⚠️ callAfApi() peut lever une Error (ex: 429) — on la laisse remonter
-  // volontairement pour qu'elle soit visible dans le frontend.
   try {
     const result = await callAfApi();
 
-    // ✅ Filtre les vols passés AVANT de stocker (même pour un fetch frais)
     const futureFlights = result.filter(f => {
       const eta = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
       return eta >= now;
@@ -238,7 +228,6 @@ export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
     return futureFlights;
 
   } finally {
-    // ✅ Toujours libérer le lock, même en cas d'erreur
     await kv.del(KV_LOCK_KEY);
     console.log('[AF Flights] Lock libéré');
   }

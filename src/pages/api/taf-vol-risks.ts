@@ -4,6 +4,7 @@ import type { TafRisk, TafThreat } from '../../lib/tafParser';
 import type { AfFlightArrival } from '../../lib/afFlights';
 import { fetchTafRisks, AF_AIRPORT_ICAOS } from '../../lib/tafParser';
 import { getCachedAfArrivals } from '../../lib/afFlights';
+import { Redis } from '@upstash/redis';
 
 // ✅ Mode debug — passe à true pour voir les logs détaillés dans Vercel Functions
 const DEBUG = true;
@@ -36,8 +37,13 @@ export interface TafVolRisksResponse {
   baseTafs: BaseTaf[];   // ← toujours présent, même si vide de menaces
 }
 
-const CACHE_TTL = 20 * 60 * 1000;
-let cache: { ts: number; data: TafVolRisksResponse } | null = null;
+// ✅ Cache Redis partagé — remplace le cache in-memory inopérant sur Vercel (cold-start)
+const kv = new Redis({
+  url:   import.meta.env.KV_REST_API_URL,
+  token: import.meta.env.KV_REST_API_TOKEN,
+});
+const TAF_VOL_CACHE_KEY     = 'taf_vol_risks_cache';
+const TAF_VOL_CACHE_TTL_SEC = 20 * 60; // 20 min
 
 // Bases home — exclues de la section "Vols LC impactés", affichées dans leur propre section
 const HOME_BASES = new Set(['LFPG', 'LFPO']); // CDG, ORY
@@ -65,17 +71,21 @@ function overlapsThreatWindow(
 export const prerender = false;
 
 export const GET: APIRoute = async () => {
-  if (cache && Date.now() - cache.ts < CACHE_TTL) {
-    dbg('Cache HIT — retour immédiat');
-    return new Response(JSON.stringify(cache.data), {
-      headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' },
-    });
+  // ── Cache KV — hit → retour immédiat, 0 calcul ──────────────────────────
+  try {
+    const cached = await kv.get<TafVolRisksResponse>(TAF_VOL_CACHE_KEY);
+    if (cached) {
+      dbg('Cache KV HIT — retour immédiat');
+      return new Response(JSON.stringify(cached), {
+        headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' },
+      });
+    }
+  } catch (e) {
+    console.warn('[taf-vol-risks] KV read error:', e);
   }
 
   try {
     // Fetch TAF bruts (tous aéroports AF) + vols en parallèle
-    // On a besoin des TAF bruts pour CDG/ORY même si parseTafToRisks ne les retourne pas
-    // (car pas de menace). On les fetch directement via l'AWC API.
     const [tafRisks, allFlights, rawBaseTafsResult] = await Promise.all([
       fetchTafRisks(),
       getCachedAfArrivals(),
@@ -94,14 +104,12 @@ export const GET: APIRoute = async () => {
     dbg(`Vols chargés total : ${allFlights.length}`);
     dbg(`Vols ICAO uniques  : ${[...new Set(allFlights.map(f => f.icao))].join(', ')}`);
 
-    // ── Exemple vol brut ────────────────────────────────────────────────────
     if (allFlights.length > 0) {
       dbg('Sample vol[0] :', JSON.stringify(allFlights[0], null, 2));
     } else {
       dbg('⚠️ allFlights est VIDE — vérifier AF_API_KEY et pageSize');
     }
 
-    // ── Exemple menace brute ────────────────────────────────────────────────────
     if (tafRisks.length > 0 && tafRisks[0].threats.length > 0) {
       const t = tafRisks[0].threats[0];
       dbg(`Sample threat[0] : type=${t.type} severity=${t.severity}`);
@@ -114,10 +122,11 @@ export const GET: APIRoute = async () => {
 
     // ── Filtrage vols invalides ────────────────────────────────────────────────────
     const now = Date.now();
+    // ✅ Fix : estimatedTouchDownTime (était estimatedArrival, champ inexistant sur AfFlightArrival)
     const cleanedFlights = allFlights.filter(f => {
       if (f.aircraftType === 'BUS') return false;
       if (!f.registration?.trim()) return false;
-      const etaIso = f.estimatedArrival ?? f.scheduledArrival;
+      const etaIso = f.estimatedTouchDownTime ?? f.scheduledArrival;
       if (etaIso && new Date(etaIso).getTime() < now) return false;
       return true;
     });
@@ -143,7 +152,8 @@ export const GET: APIRoute = async () => {
       for (const threat of taf.threats) {
         for (const flight of flights) {
           totalFlightsChecked++;
-          const etaIso = flight.estimatedArrival ?? flight.scheduledArrival;
+          // ✅ Fix : estimatedTouchDownTime (était estimatedArrival, champ inexistant)
+          const etaIso = flight.estimatedTouchDownTime ?? flight.scheduledArrival;
           if (!etaIso) continue;
 
           const etaMs = new Date(etaIso).getTime();
@@ -195,9 +205,7 @@ export const GET: APIRoute = async () => {
     dbg(`  TAF bruts CDG/ORY : ${rawBaseTafs.length}`);
 
     const baseTafs: BaseTaf[] = ['LFPG', 'LFPO'].map(icao => {
-      // Cherche dans les risques parsés (si menace détectée)
       const riskEntry = tafRisks.find(r => r.icao === icao);
-      // Cherche le TAF brut AWC
       const rawEntry  = rawBaseTafs.find((t: any) => (t.icaoId ?? t.stationId) === icao);
 
       return {
@@ -216,15 +224,23 @@ export const GET: APIRoute = async () => {
       const sev: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
       if (sev[a.threat.severity] !== sev[b.threat.severity])
         return sev[a.threat.severity] - sev[b.threat.severity];
-      return new Date(a.flight.estimatedArrival ?? a.flight.scheduledArrival).getTime() -
-             new Date(b.flight.estimatedArrival ?? b.flight.scheduledArrival).getTime();
+      // ✅ Fix : estimatedTouchDownTime (était estimatedArrival)
+      return new Date(a.flight.estimatedTouchDownTime ?? a.flight.scheduledArrival).getTime() -
+             new Date(b.flight.estimatedTouchDownTime ?? b.flight.scheduledArrival).getTime();
     });
 
     sortHits(filteredHits);
     sortHits(baseHits);
 
     const response: TafVolRisksResponse = { hits: filteredHits, baseHits, baseTafs };
-    cache = { ts: Date.now(), data: response };
+
+    // ✅ Stockage en KV Redis (TTL 20 min) — partagé entre toutes les instances Vercel
+    try {
+      await kv.set(TAF_VOL_CACHE_KEY, response, { ex: TAF_VOL_CACHE_TTL_SEC });
+      dbg(`Cache KV MISS → stocké (TTL ${TAF_VOL_CACHE_TTL_SEC}s)`);
+    } catch (e) {
+      console.warn('[taf-vol-risks] KV write error:', e);
+    }
 
     return new Response(JSON.stringify(response), {
       headers: { 'Content-Type': 'application/json', 'X-Cache': 'MISS' },

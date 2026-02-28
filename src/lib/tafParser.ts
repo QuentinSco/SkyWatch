@@ -336,7 +336,7 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
     }
   }
 
-  // ── Visibilité réduite — ORANGE < 1000m / RED < 400m
+  // ── Visibilité réduite — YELLOW 1000-3500m / ORANGE 400-1000m / RED < 400m
   //
   // Garde-fous :
   //   1. visMtoMeters() distingue mètres ICAO (valeur entière ≥ 800) et SM (US)
@@ -344,27 +344,41 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
   //      héritée d'un groupe parent quand le groupe courant ne la mentionne pas
   if (visib != null && visib !== '6+') {
     const visM = visMtoMeters(visib);
-    if (visM !== null && visM < 1000 && groupHasExplicitVisib(fcst)) {
+    if (visM !== null && visM < 3500 && groupHasExplicitVisib(fcst)) {
+      const severity: ThreatSeverity = 
+        visM < 400 ? 'red' : 
+        visM < 1000 ? 'orange' : 
+        'yellow';
       threats.push({
         type: 'LOW_VIS',
         label: `Visibilité ${visM}m`,
         value: `${visM}m`,
-        severity: visM < 400 ? 'red' : 'orange',
+        severity,
         periodStart: timeFrom, periodEnd: timeTo,
         changeIndicator: ci, snippet,
       });
     }
   }
 
-  // ── CB / TCU base < 200ft uniquement
+  // ── CB / TCU — stratégie affinée
+  //   • CB : toujours ORANGE quelle que soit l'altitude
+  //   • TCU : ORANGE si base < 1000ft, YELLOW sinon
   if (Array.isArray(clouds)) {
     for (const cloud of clouds) {
-      if ((cloud.type === 'CB' || cloud.type === 'TCU') && cloud.base != null && cloud.base < 200) {
+      if (cloud.type === 'CB' || cloud.type === 'TCU') {
+        const isCB = cloud.type === 'CB';
+        const severity: ThreatSeverity = 
+          isCB ? 'orange' : 
+          (cloud.base != null && cloud.base < 1000) ? 'orange' : 
+          'yellow';
+        
         threats.push({
           type: 'CB_TCU',
-          label: `${cloud.type} base ${cloud.base}ft`,
-          value: `${cloud.cover}${cloud.base}${cloud.type}`,
-          severity: 'orange',
+          label: cloud.base != null 
+            ? `${cloud.type} base ${cloud.base}ft`
+            : `${cloud.type}`,
+          value: `${cloud.cover}${cloud.base ?? ''}${cloud.type}`,
+          severity,
           periodStart: timeFrom, periodEnd: timeTo,
           changeIndicator: ci, snippet,
         });

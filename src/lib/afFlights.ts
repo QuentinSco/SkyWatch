@@ -161,15 +161,30 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
  * ✅ Cache Redis partagé entre toutes les instances Vercel.
  * ✅ Distributed lock — une seule instance fait le fetch à la fois.
  * ✅ Les autres instances attendent que le cache soit rempli.
+ * ✅ Filtre automatique des vols passés avant retour.
  */
 export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
+
+  const now = Date.now();
 
   // ── 1. Cache KV — hit → retour immédiat, 0 requête AF ────────────────────
   try {
     const cached = await kv.get<AfFlightArrival[]>(KV_KEY);
     if (cached && cached.length > 0) {
-      console.log(`[AF Flights] Cache KV HIT — ${cached.length} vols`);
-      return cached;
+      // ✅ Vérifie si le cache est périmé (tous les vols dans le passé)
+      const futureFlights = cached.filter(f => {
+        const eta = new Date(f.estimatedArrival ?? f.scheduledArrival).getTime();
+        return eta >= now;
+      });
+
+      if (futureFlights.length === 0) {
+        console.log(`[AF Flights] Cache KV périmé — tous les vols sont passés → invalidation`);
+        await kv.del(KV_KEY);
+        // Continue vers fetch
+      } else {
+        console.log(`[AF Flights] Cache KV HIT — ${futureFlights.length}/${cached.length} vols futurs`);
+        return futureFlights;
+      }
     }
   } catch (e) {
     console.warn('[AF Flights] KV read error:', e);
@@ -186,8 +201,14 @@ export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
       try {
         const cached = await kv.get<AfFlightArrival[]>(KV_KEY);
         if (cached && cached.length > 0) {
-          console.log(`[AF Flights] Cache KV disponible après attente — ${cached.length} vols`);
-          return cached;
+          const futureFlights = cached.filter(f => {
+            const eta = new Date(f.estimatedArrival ?? f.scheduledArrival).getTime();
+            return eta >= now;
+          });
+          if (futureFlights.length > 0) {
+            console.log(`[AF Flights] Cache KV disponible après attente — ${futureFlights.length} vols futurs`);
+            return futureFlights;
+          }
         }
       } catch { /* continue */ }
     }
@@ -201,12 +222,20 @@ export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
   try {
     const result = await callAfApi();
 
-    if (result.length > 0) {
-      await kv.set(KV_KEY, result, { ex: KV_TTL_SEC });
-      console.log(`[AF Flights] ${result.length} vols stockés en KV (TTL ${KV_TTL_SEC}s)`);
+    // ✅ Filtre les vols passés AVANT de stocker (même pour un fetch frais)
+    const futureFlights = result.filter(f => {
+      const eta = new Date(f.estimatedArrival ?? f.scheduledArrival).getTime();
+      return eta >= now;
+    });
+
+    if (futureFlights.length > 0) {
+      await kv.set(KV_KEY, futureFlights, { ex: KV_TTL_SEC });
+      console.log(`[AF Flights] ${futureFlights.length}/${result.length} vols futurs stockés en KV (TTL ${KV_TTL_SEC}s)`);
+    } else {
+      console.warn(`[AF Flights] Aucun vol futur à stocker (${result.length} vols passés filtrés)`);
     }
 
-    return result;
+    return futureFlights;
 
   } finally {
     // ✅ Toujours libérer le lock, même en cas d'erreur

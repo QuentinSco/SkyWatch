@@ -16,7 +16,7 @@ export interface AfFlightArrival {
   registration?: string;
   aircraftType?: string;
   scheduledArrival: string;
-  estimatedArrival?: string;
+  estimatedTouchDownTime?: string;
   timeToArrivalMinutes?: number;
 }
 
@@ -43,7 +43,7 @@ function mapLegToArrival(operationalFlight: any, leg: any): AfFlightArrival | nu
 
     const times     = leg.arrivalInformation?.times ?? {};
     const scheduled = times.scheduled ?? times.latestPublished ?? times.estimatedArrival;
-    const estimated = times.estimatedArrival ?? times.estimated?.value ?? times.actual;
+    const estimated = times.estimatedTouchDownTime ?? times.estimated?.value ?? times.actual;
     if (!scheduled) return null;
 
     return {
@@ -55,7 +55,7 @@ function mapLegToArrival(operationalFlight: any, leg: any): AfFlightArrival | nu
       registration:         leg.aircraft?.registration ?? undefined,
       aircraftType:         leg.aircraft?.typeCode ?? undefined,
       scheduledArrival:     scheduled,
-      estimatedArrival:     estimated,
+      estimatedTouchDownTime:     estimated,
       timeToArrivalMinutes: minutesToArrival(estimated ?? scheduled),
     };
   } catch (e) {
@@ -173,7 +173,7 @@ export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
     if (cached && cached.length > 0) {
       // ✅ Vérifie si le cache est périmé (tous les vols dans le passé)
       const futureFlights = cached.filter(f => {
-        const eta = new Date(f.estimatedArrival ?? f.scheduledArrival).getTime();
+        const eta = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
         return eta >= now;
       });
 
@@ -202,7 +202,7 @@ export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
         const cached = await kv.get<AfFlightArrival[]>(KV_KEY);
         if (cached && cached.length > 0) {
           const futureFlights = cached.filter(f => {
-            const eta = new Date(f.estimatedArrival ?? f.scheduledArrival).getTime();
+            const eta = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
             return eta >= now;
           });
           if (futureFlights.length > 0) {
@@ -224,7 +224,7 @@ export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
 
     // ✅ Filtre les vols passés AVANT de stocker (même pour un fetch frais)
     const futureFlights = result.filter(f => {
-      const eta = new Date(f.estimatedArrival ?? f.scheduledArrival).getTime();
+      const eta = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
       return eta >= now;
     });
 
@@ -249,7 +249,7 @@ export async function getArrivalsForAirport(icao: string): Promise<AfFlightArriv
   return all
     .filter(f => f.icao === icao)
     .sort((a, b) =>
-      new Date(a.estimatedArrival ?? a.scheduledArrival).getTime() -
-      new Date(b.estimatedArrival ?? b.scheduledArrival).getTime()
+      new Date(a.estimatedTouchDownTime ?? a.scheduledArrival).getTime() -
+      new Date(b.estimatedTouchDownTime ?? b.scheduledArrival).getTime()
     );
 }

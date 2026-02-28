@@ -17,10 +17,8 @@ import '../styles/global.css';
       gap: 1.5rem;
     }
 
-    /* À partir de 1280px : carte + alertes côte à côte */
     @media (min-width: 1280px) {
-      /* ✅ Fix scroll : body borné à 100vh, empêche le double-scroll
-         (page entière + col-alerts). Sur mobile, aucun effet. */
+      /* Body borné : empêche le double-scroll page + colonnes */
       body {
         height: 100vh;
         overflow: hidden;
@@ -34,13 +32,12 @@ import '../styles/global.css';
         gap: 1.5rem;
       }
 
-      /* ✅ Fix colonne gauche : même hauteur bornée + scroll indépendant
-         que .col-alerts. Sans ça, body{overflow:hidden} tronquait le bas
-         de la section État base CDG/ORY. La position sticky reste utile
-         pour l'ancrage visuel en top:1.5rem. */
+      /* ✅ Colonne gauche : hauteur fixe + scroll propre.
+         SANS position:sticky — sticky + overflow-y:auto sur le même
+         élément se neutralisent (overflow crée un scroll context qui
+         invalide sticky). La hauteur fixe suffit à maintenir la colonne
+         en haut du grid. */
       .col-map {
-        position: sticky;
-        top: 1.5rem;
         display: flex;
         flex-direction: column;
         gap: 1.5rem;
@@ -48,13 +45,14 @@ import '../styles/global.css';
         height: calc(100vh - 3rem);
       }
 
-      /* Hauteur de carte bornée — ni trop petite ni trop haute */
+      /* La carte ne doit pas être compressée quand .col-map est bornée */
       #alert-map {
         height: clamp(420px, 55vh, 620px) !important;
         min-height: 420px;
+        flex-shrink: 0;
       }
 
-      /* Colonne droite : scroll indépendant, hauteur fixe */
+      /* Colonne droite : même comportement que col-map */
       .col-alerts {
         overflow-y: auto;
         height: calc(100vh - 3rem);
@@ -70,14 +68,10 @@ import '../styles/global.css';
     .col-map::-webkit-scrollbar-thumb,
     .col-alerts::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
 
-    /* Slot état base — masqué par défaut, visible seulement sur grand écran */
-    #base-status-slot {
-      display: none;
-    }
+    /* Slot état base — masqué par défaut */
+    #base-status-slot { display: none; }
     @media (min-width: 1280px) {
-      #base-status-slot {
-        display: block;
-      }
+      #base-status-slot { display: block; }
     }
   </style>
 </head>
@@ -86,46 +80,25 @@ import '../styles/global.css';
 
   <!-- ─── Sidebar ─────────────────────────────────────────────── -->
   <aside class="hidden lg:flex flex-col w-56 shrink-0 sticky top-0 h-screen border-r border-gray-200 bg-white px-4 py-6 overflow-y-auto">
-
-    <!-- Logo -->
     <div class="mb-6">
       <div class="text-2xl font-bold tracking-tight text-gray-900">🛡 SkyWatch</div>
       <div class="text-gray-400 text-xs mt-1">Superviseur dispatch</div>
     </div>
-
-    <!-- Statut mise à jour -->
     <div class="text-xs text-gray-400 mb-1" id="last-update">Chargement…</div>
     <div id="counters" class="flex flex-wrap gap-1 mb-6"></div>
-
-    <!-- Navigation -->
     <nav class="flex flex-col gap-1 text-sm" id="sidebar-nav">
       <div class="text-[10px] uppercase font-semibold text-gray-400 tracking-widest mb-2">Sections</div>
-
-      <a href="#section-carte"
-         class="sidebar-link flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition font-medium">
-        🗺️ Carte
+      <a href="#section-carte" class="sidebar-link flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition font-medium">🗺️ Carte</a>
+      <a href="#section-alertes" class="sidebar-link flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition font-medium">
+        🌐 Alertes actives <span id="nav-alert-count" class="ml-auto"></span>
       </a>
-
-      <a href="#section-alertes"
-         class="sidebar-link flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition font-medium">
-        🌐 Alertes actives
-        <span id="nav-alert-count" class="ml-auto"></span>
+      <a href="#section-vols" class="sidebar-link flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition font-medium">
+        ✈️ Vols impactés <span id="nav-vol-count" class="ml-auto"></span>
       </a>
-
-      <a href="#section-vols"
-         class="sidebar-link flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition font-medium">
-        ✈️ Vols impactés
-        <span id="nav-vol-count" class="ml-auto"></span>
-      </a>
-
-      <a href="#section-taf"
-         class="sidebar-link flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition font-medium">
-        🌩 TAF Risques AF
-        <span id="nav-taf-count" class="ml-auto"></span>
+      <a href="#section-taf" class="sidebar-link flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition font-medium">
+        🌩 TAF Risques AF <span id="nav-taf-count" class="ml-auto"></span>
       </a>
     </nav>
-
-    <!-- Bandeau horizon -->
     <div class="mt-auto pt-6 border-t border-gray-100 text-[10px] text-gray-400 leading-relaxed">
       <strong class="text-gray-500">Horizon :</strong> J à J+3<br>
       Phénomènes grande échelle uniquement.<br>
@@ -137,7 +110,7 @@ import '../styles/global.css';
   <div class="flex-1 min-w-0 overflow-y-auto xl:overflow-hidden">
     <div class="px-4 py-6 xl:px-6">
 
-      <!-- Header mobile (masqué sur lg) -->
+      <!-- Header mobile -->
       <header class="lg:hidden mb-6">
         <div class="flex items-center justify-between flex-wrap gap-4">
           <div>
@@ -153,13 +126,10 @@ import '../styles/global.css';
         </div>
       </header>
 
-      <!-- ─── Grid principal : carte | alertes+vols+taf ─────────── -->
       <div class="main-grid">
 
-        <!-- Colonne gauche : Carte (sticky sur grand écran) -->
+        <!-- Colonne gauche -->
         <div class="col-map">
-
-          <!-- Carte -->
           <section id="section-carte" class="scroll-mt-6">
             <div class="rounded-xl overflow-hidden border border-gray-200 shadow-sm">
               <div class="bg-gray-50 border-b border-gray-200 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
@@ -168,38 +138,27 @@ import '../styles/global.css';
               <div id="alert-map" style="height: 420px; width: 100%;"></div>
             </div>
           </section>
-
-          <!-- Slot État base CDG / ORY (widescreen uniquement) -->
           <div id="base-status-slot" class="rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-white">
             <div class="bg-gray-50 border-b border-gray-200 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
               🛫 État base CDG / ORY
             </div>
-            <div id="base-status-body" class="text-sm text-gray-400 italic px-4 py-3">
-              Chargement…
-            </div>
+            <div id="base-status-body" class="text-sm text-gray-400 italic px-4 py-3">Chargement…</div>
           </div>
-
         </div>
-        <!-- /col-map -->
 
-        <!-- Colonne droite : Alertes + Vols + TAF -->
+        <!-- Colonne droite -->
         <div class="col-alerts">
-
-          <!-- Alertes actives -->
           <section id="section-alertes" class="mb-8 scroll-mt-6">
             <main id="main-content">
               <div class="text-gray-400 text-sm italic">Chargement des alertes...</div>
             </main>
           </section>
 
-          <!-- Vols AF impactés -->
           <section id="section-vols" class="mb-8 scroll-mt-6">
             <div class="flex items-center justify-between mb-3 flex-wrap gap-3">
               <div>
                 <h2 class="text-xl font-bold text-gray-900">✈️ Vols AF LC impactés</h2>
-                <p class="text-gray-500 text-sm mt-0.5">
-                  Croisement TAF / vols AF arrivées — ETA dans une fenêtre de menace active ou dans les 2h précédant celle-ci.
-                </p>
+                <p class="text-gray-500 text-sm mt-0.5">Croisement TAF / vols AF arrivées — ETA dans une fenêtre de menace active ou dans les 2h précédant celle-ci.</p>
               </div>
               <div id="taf-vol-counters" class="flex gap-2 text-xs"></div>
             </div>
@@ -208,7 +167,6 @@ import '../styles/global.css';
             </div>
           </section>
 
-          <!-- TAF Risques AF -->
           <section id="section-taf" class="mb-8 scroll-mt-6">
             <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
               <div>
@@ -222,31 +180,24 @@ import '../styles/global.css';
             </div>
           </section>
 
-          <!-- Footer -->
           <footer class="pt-6 border-t border-gray-200 text-xs text-gray-400 flex flex-wrap gap-4 justify-between">
             <span>Sources : GDACS (UN/CE) · NOAA/NWS · MeteoAlarm (EUMETNET) · AviationWeather.gov (TAF) · NHC (NOAA) · RSMC La Réunion (Météo-France) · JTWC</span>
             <span>SkyWatch POC v0.1 — Open source uniquement</span>
           </footer>
-
         </div>
-        <!-- /col-alerts -->
-      </div>
-      <!-- /main-grid -->
 
+      </div>
     </div>
   </div>
 
   <script is:inline src="/lib/main.js"></script>
   <script is:inline src="/lib/taf-ui.js"></script>
 
-  <!-- Déplace le bloc État base CDG/ORY dans le slot gauche sur grand écran -->
   <script is:inline>
     (function () {
       if (!window.matchMedia('(min-width: 1280px)').matches) return;
-
       const slot = document.getElementById('base-status-body');
       if (!slot) return;
-
       function findBaseSection() {
         const headings = Array.from(document.querySelectorAll('h2, h3'));
         const h = headings.find(el =>
@@ -256,7 +207,6 @@ import '../styles/global.css';
         if (!h) return null;
         return h.closest('section') || h.closest('[class]') || h.parentElement;
       }
-
       function tryMove() {
         const block = findBaseSection();
         if (!block) return false;
@@ -265,53 +215,34 @@ import '../styles/global.css';
         slot.appendChild(block);
         return true;
       }
-
       if (tryMove()) return;
-
-      const obs = new MutationObserver(() => {
-        if (tryMove()) obs.disconnect();
-      });
+      const obs = new MutationObserver(() => { if (tryMove()) obs.disconnect(); });
       obs.observe(document.body, { childList: true, subtree: true });
     })();
   </script>
 
-  <!-- Sidebar : highlight section active au scroll -->
   <script is:inline>
     (function () {
       const sections = ['section-carte', 'section-alertes', 'section-vols', 'section-taf'];
       const links = document.querySelectorAll('.sidebar-link');
-
       function setActive(id) {
         links.forEach(l => {
           const href = l.getAttribute('href');
-          if (href === '#' + id) {
-            l.classList.add('bg-blue-50', 'text-blue-700');
-            l.classList.remove('text-gray-600');
-          } else {
-            l.classList.remove('bg-blue-50', 'text-blue-700');
-            l.classList.add('text-gray-600');
-          }
+          if (href === '#' + id) { l.classList.add('bg-blue-50', 'text-blue-700'); l.classList.remove('text-gray-600'); }
+          else { l.classList.remove('bg-blue-50', 'text-blue-700'); l.classList.add('text-gray-600'); }
         });
       }
-
       const observer = new IntersectionObserver(
-        (entries) => {
-          entries.forEach(e => { if (e.isIntersecting) setActive(e.target.id); });
-        },
+        (entries) => { entries.forEach(e => { if (e.isIntersecting) setActive(e.target.id); }); },
         { threshold: 0.2 }
       );
-
       document.addEventListener('DOMContentLoaded', () => {
-        sections.forEach(id => {
-          const el = document.getElementById(id);
-          if (el) observer.observe(el);
-        });
+        sections.forEach(id => { const el = document.getElementById(id); if (el) observer.observe(el); });
         setActive('section-carte');
       });
     })();
   </script>
 
-  <!-- Sync compteurs sidebar depuis les spans déjà peuplés -->
   <script is:inline>
     (function () {
       function syncNavCount(sourceId, navId, bgClass, textClass) {
@@ -328,7 +259,6 @@ import '../styles/global.css';
         });
         observer.observe(src, { childList: true, subtree: true });
       }
-
       document.addEventListener('DOMContentLoaded', () => {
         syncNavCount('counters',         'nav-alert-count', 'bg-red-100',    'text-red-700');
         syncNavCount('taf-vol-counters', 'nav-vol-count',   'bg-orange-100', 'text-orange-700');

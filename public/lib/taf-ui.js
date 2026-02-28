@@ -328,11 +328,12 @@
   // ██████████████████████  FRISE TEMPORELLE TAF BASE  ██████████████████████████████████████
   // ─────────────────────────────────────────────────────────────────────────────────────────
 
-  function periodSeverity(fcst, threats) {
+  function periodSeverity(slotStart, slotEnd, threats) {
     if (!threats || threats.length === 0) return 'none';
     let best = 'none';
     for (const t of threats) {
-      const overlap = t.periodStart < fcst.timeTo && t.periodEnd > fcst.timeFrom;
+      // Vérifier que la menace chevauche CE slot spécifique (pas le forecast entier)
+      const overlap = t.periodStart < slotEnd && t.periodEnd > slotStart;
       if (!overlap) continue;
       if (best === 'none' || SEVERITY_ORDER[t.severity] < SEVERITY_ORDER[best]) {
         best = t.severity;
@@ -411,8 +412,6 @@
       const fEnd   = Math.min(f.timeTo   ?? tEnd,   tEnd);
       if (fEnd <= fStart) continue;
 
-      const sev = periodSeverity(f, threats);
-
       const iSlot = Math.floor((fStart - tStart) / SLOT);
       const eSlot = Math.ceil( (fEnd   - tStart) / SLOT);
 
@@ -423,6 +422,9 @@
         const overlap = fStart < slotEnd && fEnd > slotStart;
         
         if (!overlap) continue;
+        
+        // FIX RACINE: calculer la sévérité basée sur les MENACES qui chevauchent CE slot
+        const sev = periodSeverity(slotStart, slotEnd, threats);
         
         const curPriority = slotFcst[s] ? (CI_PRIORITY[slotFcst[s].changeIndicator] ?? 0) : -1;
         const newPriority = CI_PRIORITY[f.changeIndicator] ?? 0;

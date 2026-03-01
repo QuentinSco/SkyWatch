@@ -152,9 +152,17 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--bg-secondary) !important;
 }
 
-/* Text Colors */
+/* Text Colors - Comprehensive Coverage */
 .dark .text-gray-900 {
   color: var(--text-primary) !important;
+}
+
+.dark .text-gray-800 {
+  color: var(--text-primary) !important;
+}
+
+.dark .text-gray-700 {
+  color: var(--text-secondary) !important;
 }
 
 .dark .text-gray-500,
@@ -250,18 +258,35 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--text-secondary);
 }
 
-/* Tables - Dark Mode */
+/* Tables - Dark Mode - Enhanced */
 .dark table {
   color: var(--text-primary);
 }
 
 .dark table th {
   background: var(--bg-tertiary);
-  color: var(--text-secondary);
+  color: var(--text-secondary) !important;
 }
 
 .dark table td {
+  color: var(--text-primary) !important;
   border-color: var(--border-color);
+}
+
+/* Table cells with specific text classes */
+.dark table td .text-gray-900,
+.dark table td .text-gray-800,
+.dark table td .text-gray-700 {
+  color: var(--text-primary) !important;
+}
+
+.dark table td .text-gray-600,
+.dark table td .text-gray-500 {
+  color: var(--text-secondary) !important;
+}
+
+.dark table td .text-gray-400 {
+  color: var(--text-tertiary) !important;
 }
 
 .dark table tr:hover {
@@ -291,6 +316,14 @@ h1, h2, h3, h4, h5, h6 {
 
 .dark .text-green-700 {
   color: #86efac;
+}
+
+.dark .bg-yellow-100 {
+  background: rgba(161, 98, 7, 0.3) !important;
+}
+
+.dark .text-yellow-700 {
+  color: #fde047;
 }
 
 /* Buttons */

@@ -14,21 +14,21 @@
     none:   'text-green-600',
   };
   const SEVERITY_LABEL = {
-    red:    '\uD83D\uDD34',
-    orange: '\uD83D\uDFE0',
-    yellow: '\uD83D\uDFE1',
-    none:   '\u2705',
+    red:    '🔴',
+    orange: '🟠',
+    yellow: '🟡',
+    none:   '✅',
   };
   const THREAT_ICONS = {
-    THUNDERSTORM: '\u26C8',
-    SNOW:         '\uD83C\uDF28',
-    WIND:         '\uD83D\uDCA8',
-    FREEZING:     '\uD83E\uDDCA',
-    HAIL:         '\uD83C\uDF27',
-    CB_TCU:       '\u26C5',
-    LOW_VIS:      '\uD83C\uDF2B',
-    FUNNEL_CLOUD: '\uD83C\uDF2A',
-    LOW_CEILING:  '\u2601\uFE0F',
+    THUNDERSTORM: '⛈',
+    SNOW:         '🌨',
+    WIND:         '💨',
+    FREEZING:     '🧊',
+    HAIL:         '🌧',
+    CB_TCU:       '⛅',
+    LOW_VIS:      '🌫',
+    FUNNEL_CLOUD: '🌪',
+    LOW_CEILING:  '☁️',
   };
   const CI_LABEL = {
     'TEMPO':       { text: 'TEMPO',         cls: 'bg-purple-100 text-purple-700 border border-purple-300' },
@@ -64,7 +64,7 @@
   }
 
   function formatIsoToLocalShort(iso) {
-    if (!iso) return '\u2014';
+    if (!iso) return '—';
     return new Date(iso).toLocaleString('fr-FR', {
       day: '2-digit', month: '2-digit',
       hour: '2-digit', minute: '2-digit',
@@ -73,7 +73,7 @@
   }
 
   function formatTta(tta) {
-    if (typeof tta !== 'number' || isNaN(tta)) return '\u2014';
+    if (typeof tta !== 'number' || isNaN(tta)) return '—';
     const abs  = Math.abs(tta);
     const sign = tta > 0 ? 'T-' : 'T+';
     if (abs < 60) return sign + abs + 'min';
@@ -93,9 +93,9 @@
   function lastUpdateBar() {
     return `
       <div class="text-xs text-gray-400 mt-2 flex items-center gap-2">
-        <span>Mis \u00e0 jour \u00e0 ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+        <span>Mis à jour à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
         <button id="btn-refresh-vol" class="text-blue-500 hover:text-blue-700 underline text-xs">
-          \u21BA Actualiser
+          ↺ Actualiser
         </button>
       </div>`;
   }
@@ -107,13 +107,13 @@
 
   // ── TAF : badge menace (utilisé dans les lignes détail — conserve le fond coloré) ────────────────────────────────────
   function renderThreatBadge(threat) {
-    const icon   = THREAT_ICONS[threat.type] ?? '\u26A0\uFE0F';
+    const icon   = THREAT_ICONS[threat.type] ?? '⚠️';
     const badge  = SEVERITY_BADGE[threat.severity];
     const ci     = CI_LABEL[threat.changeIndicator] ?? null;
     return `
       <div class="flex flex-col gap-1 text-xs">
         <div class="flex items-center gap-2 font-mono font-semibold bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-1 w-fit">
-          \uD83D\uDD50 ${formatUTC(threat.periodStart)} \u2192 ${formatUTC(threat.periodEnd)}
+          🕐 ${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}
           ${ci ? `<span class="${ci.cls} px-1.5 py-0.5 rounded font-semibold">${ci.text}</span>` : ''}
         </div>
         <div class="flex items-center flex-wrap gap-2">
@@ -146,19 +146,19 @@
                 return acc;
               }, {})
             ).map(t => {
-              const icon = THREAT_ICONS[t.type] ?? '\u26A0\uFE0F';
-              const cls  = SEVERITY_TEXT[t.severity];
-              return `<span class="${cls} text-xs font-semibold whitespace-nowrap">${icon} ${t.label}</span>`;
+              const icon = THREAT_ICONS[t.type] ?? '⚠️';
+              const cls  = SEVERITY_BADGE[t.severity];
+              return `<span class="${cls} text-xs font-semibold whitespace-nowrap px-2 py-0.5 rounded">${icon} ${t.label}</span>`;
             }).join('')}
           </div>
         </td>
         <td class="py-2 px-4 font-mono text-xs text-gray-400 max-w-xs truncate" title="${risk.rawTaf}">
-          ${risk.rawTaf.slice(0, 80)}${risk.rawTaf.length > 80 ? '\u2026' : ''}
+          ${risk.rawTaf.slice(0, 80)}${risk.rawTaf.length > 80 ? '…' : ''}
         </td>
       </tr>
       <tr class="hidden bg-gray-50">
         <td colspan="5" class="px-6 py-3">
-          <div class="text-xs font-semibold text-gray-500 uppercase mb-2">D\u00e9tail des menaces</div>
+          <div class="text-xs font-semibold text-gray-500 uppercase mb-2">Détail des menaces</div>
           ${threatsHtml}
           <div class="mt-3 font-mono text-xs bg-white border border-gray-200 rounded px-2 py-1 text-gray-600" style="white-space:pre-wrap;word-break:break-word">${formatTafRaw(risk.rawTaf)}</div>
         </td>
@@ -177,7 +177,7 @@
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
         </svg>
-        Chargement des TAFs sur le r\u00e9seau AF\u2026
+        Chargement des TAFs sur le réseau AF…
       </div>`;
 
     try {
@@ -192,23 +192,23 @@
       const orangeCount = risks.filter(r => r.worstSeverity === 'orange').length;
       if (countersEl) {
         countersEl.innerHTML = [
-          redCount    ? `<span class="bg-red-100 text-red-700 font-semibold text-xs px-3 py-1 rounded-full">\uD83D\uDD34 ${redCount}</span>` : '',
-          orangeCount ? `<span class="bg-orange-100 text-orange-700 font-semibold text-xs px-3 py-1 rounded-full">\uD83D\uDFE0 ${orangeCount}</span>` : '',
+          redCount    ? `<span class="bg-red-100 text-red-700 font-semibold text-xs px-3 py-1 rounded-full">🔴 ${redCount}</span>` : '',
+          orangeCount ? `<span class="bg-orange-100 text-orange-700 font-semibold text-xs px-3 py-1 rounded-full">🟠 ${orangeCount}</span>` : '',
         ].join('');
       }
 
       if (risks.length === 0) {
         container.innerHTML = `
           <div class="text-center py-12 text-gray-400">
-            <div class="text-4xl mb-2">\u2705</div>
-            <div class="text-sm font-medium">Aucun ph\u00e9nom\u00e8ne significatif sur le r\u00e9seau AF</div>
+            <div class="text-4xl mb-2">✅</div>
+            <div class="text-sm font-medium">Aucun phénomène significatif sur le réseau AF</div>
           </div>`;
         return;
       }
 
       container.innerHTML = `
         <div class="text-xs text-gray-400 mb-3">
-          ${risks.length} a\u00e9roport${risks.length > 1 ? 's' : ''} avec ph\u00e9nom\u00e8nes \u2014 Cliquez une ligne pour voir le d\u00e9tail
+          ${risks.length} aéroport${risks.length > 1 ? 's' : ''} avec phénomènes — Cliquez une ligne pour voir le détail
         </div>
         <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
           <table class="w-full text-sm text-left text-gray-700 bg-white">
@@ -216,8 +216,8 @@
               <tr>
                 <th class="py-3 px-4">Niveau</th>
                 <th class="py-3 px-4">ICAO</th>
-                <th class="py-3 px-4">A\u00e9roport</th>
-                <th class="py-3 px-4">Menaces d\u00e9tect\u00e9es</th>
+                <th class="py-3 px-4">Aéroport</th>
+                <th class="py-3 px-4">Menaces détectées</th>
                 <th class="py-3 px-4">TAF (extrait)</th>
               </tr>
             </thead>
@@ -225,10 +225,10 @@
           </table>
         </div>`;
     } catch (e) {
-      const msg = e.name === 'AbortError' ? 'Timeout \u2014 API trop lente (>15s)' : e.message;
+      const msg = e.name === 'AbortError' ? 'Timeout — API trop lente (>15s)' : e.message;
       container.innerHTML = `
         <div class="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
-          \u26A0\uFE0F Erreur lors du chargement des TAFs : ${msg}
+          ⚠️ Erreur lors du chargement des TAFs : ${msg}
         </div>`;
     }
   }
@@ -240,14 +240,14 @@
     const threat = hit.threat;
     const flight = hit.flight;
     const taf    = hit.taf;
-    const icon   = THREAT_ICONS[threat.type] ?? '\u26A0\uFE0F';
+    const icon   = THREAT_ICONS[threat.type] ?? '⚠️';
     const badge  = SEVERITY_BADGE[threat.severity];
     const ci     = CI_LABEL[threat.changeIndicator] ?? null;
     const etaIso = flight.estimatedTouchDownTime || flight.scheduledArrival;
     const etaStr = formatIsoToLocalShort(etaIso);
     const tta    = etaIso ? Math.round((new Date(etaIso).getTime() - Date.now()) / 60000) : null;
     const ttaStr = formatTta(tta);
-    const windowStr = `${formatUTC(threat.periodStart)} \u2192 ${formatUTC(threat.periodEnd)}`;
+    const windowStr = `${formatUTC(threat.periodStart)} → ${formatUTC(threat.periodEnd)}`;
 
     const rowId = 'vol-row-' + (_rowIdx++);
 
@@ -258,7 +258,7 @@
     );
     const otherThreatsHtml = otherThreats.length
       ? otherThreats.map(t => `<div class="mb-2 pb-2 border-b border-gray-100 last:border-0">${renderThreatBadge(t)}</div>`).join('')
-      : '<span class="text-gray-400">Aucune autre menace d\u00e9tect\u00e9e sur ce TAF.</span>';
+      : '<span class="text-gray-400">Aucune autre menace détectée sur ce TAF.</span>';
 
     return `
       <tr class="border-b border-gray-100 hover:bg-blue-50/70 transition cursor-pointer"
@@ -268,10 +268,10 @@
         </td>
         <td class="py-2 px-3 font-mono font-semibold text-gray-800">AF${flight.flightNumber}</td>
         <td class="py-2 px-3 text-xs text-gray-500">
-          ${flight.registration ?? '\u2014'}
+          ${flight.registration ?? '—'}
           <span class="ml-1 text-gray-400">${flight.aircraftType ?? ''}</span>
         </td>
-        <td class="py-2 px-3 text-sm text-gray-800">${taf.iata} (${taf.icao}) \u2014 ${taf.name}</td>
+        <td class="py-2 px-3 text-sm text-gray-800">${taf.iata} (${taf.icao}) — ${taf.name}</td>
         <td class="py-2 px-3 text-xs text-gray-700">${icon} ${threat.label}</td>
         <td class="py-2 px-3 text-xs font-mono text-gray-700 whitespace-nowrap">
           <div class="font-semibold text-gray-800">${windowStr}</div>
@@ -289,7 +289,7 @@
               <div class="flex items-center gap-3 flex-wrap mb-2">
                 <span class="${badge} px-2 py-0.5 rounded font-bold text-xs">${icon} ${threat.label}</span>
                 <span class="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 font-mono font-semibold text-xs px-2 py-1 rounded">
-                  \uD83D\uDD50 ${windowStr}
+                  🕐 ${windowStr}
                   ${ci ? `<span class="${ci.cls} ml-1 px-1.5 py-0.5 rounded font-semibold">${ci.text}</span>` : ''}
                 </span>
                 <span class="text-gray-500">ETA <strong>${etaStr}</strong></span>
@@ -304,10 +304,10 @@
                   var el = btn.closest('.flex.flex-col').querySelector('.other-threats-block');
                   el.classList.toggle('hidden');
                   btn.textContent = el.classList.contains('hidden')
-                    ? '\u25B6 Autres menaces sur ${taf.iata} (${otherThreats.length})'
-                    : '\u25BC Masquer les autres menaces';
+                    ? '▶ Autres menaces sur ${taf.iata} (${otherThreats.length})'
+                    : '▼ Masquer les autres menaces';
                 })(this); event.stopPropagation();">
-                \u25B6 Autres menaces sur ${taf.iata} (${otherThreats.length})
+                ▶ Autres menaces sur ${taf.iata} (${otherThreats.length})
               </button>
               <div class="other-threats-block hidden mt-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
                 ${otherThreatsHtml}
@@ -320,10 +320,10 @@
                   var el = btn.closest('.flex.flex-col').querySelector('.taf-raw-block');
                   el.classList.toggle('hidden');
                   btn.textContent = el.classList.contains('hidden')
-                    ? '\u25B6 Afficher TAF complet'
-                    : '\u25BC Masquer TAF complet';
+                    ? '▶ Afficher TAF complet'
+                    : '▼ Masquer TAF complet';
                 })(this); event.stopPropagation();">
-                \u25B6 Afficher TAF complet
+                ▶ Afficher TAF complet
               </button>
               <div class="taf-raw-block hidden mt-2 font-mono bg-white border border-gray-200 rounded-lg px-2 py-1 text-gray-600 text-[11px]" style="white-space:pre-wrap;word-break:break-word">${formatTafRaw(taf.rawTaf)}</div>
             </div>
@@ -440,8 +440,8 @@
         t.periodStart < segEnd && t.periodEnd > segStart
       );
       const label = matchingThreats.length === 0
-        ? 'D\u00e9gag\u00e9'
-        : matchingThreats.map(t => (THREAT_ICONS[t.type] ?? '\u26A0\uFE0F') + ' ' + t.label).join(' \u00b7 ');
+        ? 'Dégagé'
+        : matchingThreats.map(t => (THREAT_ICONS[t.type] ?? '⚠️') + ' ' + t.label).join(' · ');
 
       const ci      = fcst?.changeIndicator ?? '';
       const snippet = sev !== 'none' && fcst ? buildFcstSnippet(fcst) : '';
@@ -489,7 +489,7 @@
         <div id="${tipId}" data-taf-group="${groupId}"
              class="hidden absolute z-30 bg-white border border-gray-200 rounded-xl shadow-xl p-3 text-xs w-56 pointer-events-none"
              style="${posStyle}top:calc(100% + 6px)">
-          <div class="font-semibold text-gray-700 mb-1">${formatHHMM(s.segStart)} \u2192 ${formatHHMM(s.segEnd)}</div>
+          <div class="font-semibold text-gray-700 mb-1">${formatHHMM(s.segStart)} → ${formatHHMM(s.segEnd)}</div>
           <div class="mb-1">${s.label}</div>
           ${s.ci ? `<div class="text-gray-400 text-[10px]">${s.ci}</div>` : ''}
           ${s.snippet ? `<div class="font-mono text-gray-600 mt-1 bg-gray-50 rounded px-1 py-0.5">${s.snippet}</div>` : ''}
@@ -519,7 +519,7 @@
         </div>
         <div class="relative h-5"></div>
         <div class="flex gap-3 mt-2 flex-wrap text-xs">
-          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-green-500"></span>D\u00e9gag\u00e9</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-green-500"></span>Dégagé</span>
           <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-yellow-400"></span>Jaune</span>
           <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-orange-500"></span>Orange</span>
           <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-red-600"></span>Rouge</span>
@@ -545,11 +545,11 @@
     if (tafsToRender.length === 0) {
       return `
         <section class="mt-8 pt-6 border-t border-gray-200">
-          <h2 class="text-xl font-bold text-gray-900 mb-1">\uD83C\uDFE0 \u00c9tat base CDG / ORY</h2>
+          <h2 class="text-xl font-bold text-gray-900 mb-1">🏠 État base CDG / ORY</h2>
           <p class="text-gray-500 text-sm mb-4">TAF actifs sur CDG/ORY.</p>
           <div class="text-center py-8 text-gray-400">
-            <div class="text-3xl mb-2">\u23F3</div>
-            <div class="text-sm">TAF en cours de chargement\u2026</div>
+            <div class="text-3xl mb-2">⏳</div>
+            <div class="text-sm">TAF en cours de chargement…</div>
           </div>
         </section>`;
     }
@@ -562,7 +562,7 @@
         ? taf.threats.map(t => `
           <div class="mb-2 pb-2 border-b border-gray-100 last:border-0">${renderThreatBadge(t)}</div>`
           ).join('')
-        : `<div class="text-xs text-green-600 font-medium py-1">\u2705 Aucun ph\u00e9nom\u00e8ne significatif sur ce TAF</div>`;
+        : `<div class="text-xs text-green-600 font-medium py-1">✅ Aucun phénomène significatif sur ce TAF</div>`;
 
       const tafId = 'base-taf-raw-' + taf.icao;
 
@@ -583,10 +583,10 @@
                 var el = document.getElementById('${tafId}');
                 el.classList.toggle('hidden');
                 btn.innerHTML = el.classList.contains('hidden')
-                  ? '\u25B6 Afficher TAF brut'
-                  : '\u25BC Masquer TAF brut';
+                  ? '▶ Afficher TAF brut'
+                  : '▼ Masquer TAF brut';
               })(this)">
-              \u25B6 Afficher TAF brut
+              ▶ Afficher TAF brut
             </button>
             <div id="${tafId}" class="hidden mt-2 font-mono text-[11px] bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-600" style="white-space:pre-wrap;word-break:break-word">${formatTafRaw(taf.rawTaf)}</div>
           </div>
@@ -601,13 +601,13 @@
       <section class="mt-8 pt-6 border-t border-gray-200">
         <div class="flex items-center justify-between mb-3 flex-wrap gap-4">
           <div>
-            <h2 class="text-xl font-bold text-gray-900">\uD83C\uDFE0 \u00c9tat base CDG / ORY</h2>
-            <p class="text-gray-500 text-sm mt-0.5">TAF actifs sur notre base \u2014 frise 24h. Hors croisement vols LC.</p>
+            <h2 class="text-xl font-bold text-gray-900">🏠 État base CDG / ORY</h2>
+            <p class="text-gray-500 text-sm mt-0.5">TAF actifs sur notre base — frise 24h. Hors croisement vols LC.</p>
           </div>
           <div class="flex gap-2 text-xs">
-            ${redCount    ? `<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full font-semibold">\uD83D\uDD34 ${redCount} menace${redCount > 1 ? 's' : ''}</span>` : ''}
-            ${orangeCount ? `<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full font-semibold">\uD83D\uDFE0 ${orangeCount} menace${orangeCount > 1 ? 's' : ''}</span>` : ''}
-            ${allThreats.length === 0 ? '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full font-semibold">\u2705 Aucune menace</span>' : ''}
+            ${redCount    ? `<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full font-semibold">🔴 ${redCount} menace${redCount > 1 ? 's' : ''}</span>` : ''}
+            ${orangeCount ? `<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full font-semibold">🟠 ${orangeCount} menace${orangeCount > 1 ? 's' : ''}</span>` : ''}
+            ${allThreats.length === 0 ? '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full font-semibold">✅ Aucune menace</span>' : ''}
           </div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">${cards}</div>
@@ -627,7 +627,7 @@
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
         </svg>
-        Analyse des vols AF vs menaces TAF\u2026
+        Analyse des vols AF vs menaces TAF…
       </div>`;
 
     try {
@@ -643,8 +643,8 @@
       const orange = hits.filter(h => h.threat.severity === 'orange').length;
       if (countersEl) {
         countersEl.innerHTML = [
-          red    ? `<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-semibold">\uD83D\uDD34 ${red}</span>` : '',
-          orange ? `<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-semibold">\uD83D\uDFE0 ${orange}</span>` : '',
+          red    ? `<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-semibold">🔴 ${red}</span>` : '',
+          orange ? `<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-semibold">🟠 ${orange}</span>` : '',
           hits.length ? `<span class="text-gray-400 text-xs">Total ${hits.length} vol${hits.length > 1 ? 's' : ''}</span>` : '',
         ].join('');
       }
@@ -653,7 +653,7 @@
       if (hits.length === 0) {
         mainHtml = `
           <div class="text-gray-400 text-sm py-4">
-            Aucun vol AF LC actuellement dans une fen\u00eatre de menace TAF d\u00e9tect\u00e9e.
+            Aucun vol AF LC actuellement dans une fenêtre de menace TAF détectée.
           </div>`;
       } else {
         mainHtml = `
@@ -666,7 +666,7 @@
                   <th class="py-2 px-3">Immat / Type</th>
                   <th class="py-2 px-3">Destination</th>
                   <th class="py-2 px-3">Menace</th>
-                  <th class="py-2 px-3">Fen\u00eatre TAF</th>
+                  <th class="py-2 px-3">Fenêtre TAF</th>
                   <th class="py-2 px-3">ETA</th>
                 </tr>
               </thead>
@@ -688,10 +688,10 @@
       bindRefreshBtn();
 
     } catch (e) {
-      const msg = e.name === 'AbortError' ? 'Timeout \u2014 API trop lente (>30s)' : e.message;
+      const msg = e.name === 'AbortError' ? 'Timeout — API trop lente (>30s)' : e.message;
       container.innerHTML = `
         <div class="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
-          \u26A0\uFE0F Erreur lors du chargement AF/TAF : ${msg}
+          ⚠️ Erreur lors du chargement AF/TAF : ${msg}
         </div>
         ${lastUpdateBar()}`;
       bindRefreshBtn();

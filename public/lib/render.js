@@ -1,9 +1,9 @@
 const REGION_LABELS = {
-  AMN:  '\uD83C\uDF0E Am\u00e9rique du Nord',
-  AMS:  '\uD83C\uDF0E Am\u00e9rique du Sud',
-  EUR:  '\uD83C\uDF0D Europe',
-  AFR:  '\uD83C\uDF0D Afrique / Moyen-Orient',
-  ASIE: '\uD83C\uDF0F Asie',
+  AMN:  '🌎 Amérique du Nord',
+  AMS:  '🌎 Amérique du Sud',
+  EUR:  '🌍 Europe',
+  AFR:  '🌍 Afrique / Moyen-Orient',
+  ASIE: '🌏 Asie',
 };
 
 const SOURCE_LINKS = {
@@ -14,27 +14,31 @@ const SOURCE_LINKS = {
 };
 
 const SOURCE_LABEL = {
-  GDACS:      '\uD83D\uDCCB Rapport GDACS complet',
-  NOAA:       '\uD83D\uDCCB Alerte NOAA compl\u00e8te',
-  MeteoAlarm: '\uD83D\uDCCB D\u00e9tail MeteoAlarm',
-  VAAC:       '\uD83D\uDCCB Avis VAAC complet',
+  GDACS:      '📋 Rapport GDACS complet',
+  NOAA:       '📋 Alerte NOAA complète',
+  MeteoAlarm: '📋 Détail MeteoAlarm',
+  VAAC:       '📋 Avis VAAC complet',
 };
 
 function severityBadge(s) {
-  const dot = { red: '\uD83D\uDD34', orange: '\uD83D\uDFE0', yellow: '\uD83D\uDFE1' };
-  const lbl = { red: 'rouge',        orange: 'orange',        yellow: 'jaune'  };
-  return `<span class="text-lg" title="${lbl[s] ?? s}">${dot[s] ?? '\u26AA'}</span>`;
+  const cfg = {
+    red:    { cls: 'bg-red-500 text-white',          dot: '🔴', lbl: 'rouge'  },
+    orange: { cls: 'bg-orange-400 text-white',       dot: '🟠', lbl: 'orange' },
+    yellow: { cls: 'bg-yellow-400 text-gray-900',    dot: '🟡', lbl: 'jaune'  },
+  };
+  const c = cfg[s] ?? { cls: 'bg-gray-100 text-gray-600', dot: '⚪', lbl: s };
+  return `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${c.cls}" title="${c.lbl}">${c.dot}</span>`;
 }
 
 function airportBadges(airports) {
-  if (!airports.length) return `<span class="text-gray-300 italic text-xs">\u2014</span>`;
+  if (!airports.length) return `<span class="text-gray-300 italic text-xs">—</span>`;
   return `<div class="flex flex-wrap gap-1">${airports.map(a =>
     `<span class="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded font-mono whitespace-nowrap">${a}</span>`
   ).join('')}</div>`;
 }
 
 function formatDate(str) {
-  if (!str) return '\u2014';
+  if (!str) return '—';
   try {
     return new Date(str).toLocaleString('fr-FR', {
       day: '2-digit', month: '2-digit', year: 'numeric',
@@ -44,7 +48,7 @@ function formatDate(str) {
 }
 
 function formatShortDate(str) {
-  if (!str) return '\u2014';
+  if (!str) return '—';
   try {
     return new Date(str).toLocaleString('fr-FR', {
       day: '2-digit', month: '2-digit',
@@ -64,7 +68,7 @@ function timeWindow(validFrom, validTo) {
   if (to) {
     const msLeft = to - now;
     if (msLeft < 0) {
-      statusLabel = 'Expir\u00e9e';
+      statusLabel = 'Expirée';
       statusCls   = 'text-gray-400 italic';
     } else {
       const h = Math.floor(msLeft / 3600000);
@@ -83,19 +87,19 @@ function timeWindow(validFrom, validTo) {
     }
   }
 
-  const fromStr = from ? formatShortDate(validFrom) : '\u2014';
-  const toStr   = to   ? formatShortDate(validTo)   : '\u2014';
+  const fromStr = from ? formatShortDate(validFrom) : '—';
+  const toStr   = to   ? formatShortDate(validTo)   : '—';
 
   return `<div class="text-xs leading-tight whitespace-nowrap">
     <div class="text-gray-500">${fromStr}</div>
-    <div class="text-gray-400 text-[10px]">\u2192 ${toStr}</div>
+    <div class="text-gray-400 text-[10px]">→ ${toStr}</div>
     ${statusLabel ? `<div class="mt-0.5 ${statusCls} text-[10px]">${statusLabel}</div>` : ''}
   </div>`;
 }
 
 function detailPanel(a, idx) {
   const sourceLink  = a.link || SOURCE_LINKS[a.source] || '#';
-  const sourceLabel = SOURCE_LABEL[a.source] ?? '\uD83D\uDCCB Source';
+  const sourceLabel = SOURCE_LABEL[a.source] ?? '📋 Source';
 
   return `
     <tr id="detail-${idx}" class="hidden bg-blue-50 border-b border-blue-100">
@@ -103,19 +107,19 @@ function detailPanel(a, idx) {
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
 
           <div>
-            <div class="text-xs font-semibold text-gray-500 uppercase mb-1">\uD83D\uDCC5 Validit\u00e9</div>
+            <div class="text-xs font-semibold text-gray-500 uppercase mb-1">📅 Validité</div>
             <div class="text-gray-700">
-              <span class="font-medium">D\u00e9but :</span> ${formatDate(a.validFrom)}<br/>
+              <span class="font-medium">Début :</span> ${formatDate(a.validFrom)}<br/>
               <span class="font-medium">Fin :</span>   ${formatDate(a.validTo)}
             </div>
           </div>
 
           <div class="md:col-span-2">
-            <div class="text-xs font-semibold text-gray-500 uppercase mb-1">\uD83D\uDCDD D\u00e9tail</div>
+            <div class="text-xs font-semibold text-gray-500 uppercase mb-1">📝 Détail</div>
             <div class="text-gray-700 leading-relaxed">
               ${a.description
                 ? `<p>${a.description}</p>`
-                : `<p class="text-gray-400 italic">R\u00e9sum\u00e9 non disponible.</p>`
+                : `<p class="text-gray-400 italic">Résumé non disponible.</p>`
               }
             </div>
           </div>
@@ -125,11 +129,11 @@ function detailPanel(a, idx) {
         <div class="mt-3 flex gap-4 flex-wrap items-center">
           <a href="${sourceLink}" target="_blank" rel="noopener"
              class="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 underline font-medium">
-            ${sourceLabel} \u2197
+            ${sourceLabel} ↗
           </a>
           <a href="${SOURCE_LINKS[a.source]}" target="_blank" rel="noopener"
              class="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 underline">
-            \uD83C\uDF10 ${a.source} \u2197
+            🌐 ${a.source} ↗
           </a>
         </div>
       </td>
@@ -149,12 +153,12 @@ export function renderRegion(region, alerts) {
           <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="py-3 px-4">Niveau</th>
-              <th class="py-3 px-4">Ph\u00e9nom\u00e8ne</th>
+              <th class="py-3 px-4">Phénomène</th>
               <th class="py-3 px-4">Pays / Zone</th>
-              <th class="py-3 px-4">A\u00e9roports AF concern\u00e9s</th>
-              <th class="py-3 px-4">Fen\u00eatre</th>
+              <th class="py-3 px-4">Aéroports AF concernés</th>
+              <th class="py-3 px-4">Fenêtre</th>
               <th class="py-3 px-4">Source</th>
-              <th class="py-3 px-4">R\u00e9sum\u00e9</th>
+              <th class="py-3 px-4">Résumé</th>
             </tr>
           </thead>
           <tbody>
@@ -173,8 +177,8 @@ export function renderRegion(region, alerts) {
                   </td>
                   <td class="py-2 px-4 text-gray-500 text-xs max-w-xs truncate"
                       title="${a.headline.replace(/"/g, '&quot;')}">
-                    ${a.headline.slice(0, 90)}${a.headline.length > 90 ? '\u2026' : ''}
-                    <span class="chevron ml-1 text-blue-400">\u25BC</span>
+                    ${a.headline.slice(0, 90)}${a.headline.length > 90 ? '…' : ''}
+                    <span class="chevron ml-1 text-blue-400">▼</span>
                   </td>
                 </tr>
                 ${detailPanel(a, idx)}`;

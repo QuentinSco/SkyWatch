@@ -14,10 +14,10 @@
     none:   'text-green-600',
   };
   const SEVERITY_LABEL = {
-    red:    '\uD83D\uDD34 Rouge',
-    orange: '\uD83D\uDFE0 Orange',
-    yellow: '\uD83D\uDFE1 Jaune',
-    none:   '\u2705 D\u00e9gag\u00e9',
+    red:    '\uD83D\uDD34',
+    orange: '\uD83D\uDFE0',
+    yellow: '\uD83D\uDFE1',
+    none:   '\u2705',
   };
   const THREAT_ICONS = {
     THUNDERSTORM: '\u26C8',
@@ -126,7 +126,6 @@
 
   // ── TAF : ligne tableau ─────────────────────────────────────────────────────────────────────────────────────────
   function renderTafRiskCard(risk) {
-    // NIVEAU : texte coloré seul, sans fond
     const badgeCls    = SEVERITY_TEXT[risk.worstSeverity];
     const threatsHtml = risk.threats.map(t => `
       <div class="mb-2 pb-2 border-b border-gray-100 last:border-0">${renderThreatBadge(t)}</div>`
@@ -134,8 +133,8 @@
     return `
       <tr class="border-b border-gray-100 hover:bg-blue-50 transition cursor-pointer"
           onclick="this.nextElementSibling.classList.toggle('hidden')">
-        <td class="py-2 px-4">
-          <span class="${badgeCls} text-xs font-bold">${SEVERITY_LABEL[risk.worstSeverity]}</span>
+        <td class="py-2 px-4 text-lg">
+          <span title="${risk.worstSeverity}">${SEVERITY_LABEL[risk.worstSeverity]}</span>
         </td>
         <td class="py-2 px-4 font-mono font-bold text-gray-800">${risk.icao}</td>
         <td class="py-2 px-4 text-gray-600">${risk.name}</td>
@@ -148,7 +147,6 @@
               }, {})
             ).map(t => {
               const icon = THREAT_ICONS[t.type] ?? '\u26A0\uFE0F';
-              // Menaces : texte coloré seul, sans fond
               const cls  = SEVERITY_TEXT[t.severity];
               return `<span class="${cls} text-xs font-semibold whitespace-nowrap">${icon} ${t.label}</span>`;
             }).join('')}
@@ -235,7 +233,7 @@
     }
   }
 
-  // ── Vols AF : rendu ligne ───────────────────────────────────────────────────────────────────────────────────────
+  // ── Vols AF : rendu ligne ──────────────────────────────────────────────────────────────────────────────────────
   let _rowIdx = 0;
 
   function renderTafVolRow(hit) {
@@ -243,8 +241,7 @@
     const flight = hit.flight;
     const taf    = hit.taf;
     const icon   = THREAT_ICONS[threat.type] ?? '\u26A0\uFE0F';
-    const badge  = SEVERITY_BADGE[threat.severity];  // conservé pour le détail expandable
-    const badgeText = SEVERITY_TEXT[threat.severity]; // texte seul pour la cellule tableau
+    const badge  = SEVERITY_BADGE[threat.severity];
     const ci     = CI_LABEL[threat.changeIndicator] ?? null;
     const etaIso = flight.estimatedTouchDownTime || flight.scheduledArrival;
     const etaStr = formatIsoToLocalShort(etaIso);
@@ -266,8 +263,8 @@
     return `
       <tr class="border-b border-gray-100 hover:bg-blue-50/70 transition cursor-pointer"
           onclick="document.getElementById('${rowId}').classList.toggle('hidden')">
-        <td class="py-2 px-3">
-          <span class="${badgeText} text-xs font-bold">${SEVERITY_LABEL[threat.severity]}</span>
+        <td class="py-2 px-3 text-lg">
+          <span title="${threat.severity}">${SEVERITY_LABEL[threat.severity]}</span>
         </td>
         <td class="py-2 px-3 font-mono font-semibold text-gray-800">AF${flight.flightNumber}</td>
         <td class="py-2 px-3 text-xs text-gray-500">
@@ -559,8 +556,6 @@
 
     const cards = tafsToRender.map(taf => {
       const sev   = taf.worstSeverity ?? 'none';
-      // Texte coloré seul pour le header de carte CDG/ORY
-      const badgeText = SEVERITY_TEXT[sev];
       const label = SEVERITY_LABEL[sev];
 
       const threatsList = taf.threats.length > 0
@@ -574,7 +569,7 @@
       return `
         <div class="bg-white border ${sev === 'none' ? 'border-green-200' : sev === 'red' ? 'border-red-300' : 'border-orange-200'} rounded-xl p-4 shadow-sm">
           <div class="flex items-center gap-3 mb-2 flex-wrap">
-            <span class="${badgeText} text-xs font-bold">${label}</span>
+            <span class="text-lg" title="${sev}">${label}</span>
             <span class="font-mono font-bold text-gray-800 text-base">${taf.iata}</span>
             <span class="text-gray-400 font-mono text-sm">${taf.icao}</span>
             <span class="text-gray-600 text-sm">${taf.name}</span>

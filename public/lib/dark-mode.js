@@ -55,15 +55,31 @@
    */
   function updateToggleButton(isDark) {
     const btn = document.getElementById('dark-mode-toggle');
-    if (!btn) return;
-
-    const icon = btn.querySelector('.theme-icon');
-    if (icon) {
-      icon.textContent = isDark ? '☀️' : '🌙';
+    const btnMobile = document.getElementById('dark-mode-toggle-mobile');
+    
+    if (btn) {
+      const iconLeft = btn.querySelector('.icon-left');
+      const iconRight = btn.querySelector('.icon-right');
+      const slider = btn.querySelector('.toggle-slider');
+      
+      if (iconLeft && iconRight && slider) {
+        iconLeft.style.opacity = isDark ? '0.4' : '1';
+        iconRight.style.opacity = isDark ? '1' : '0.4';
+        slider.style.transform = isDark ? 'translateX(24px)' : 'translateX(0)';
+      }
+      
+      btn.setAttribute('aria-label', isDark ? 'Activer le mode clair' : 'Activer le mode sombre');
+      btn.title = isDark ? 'Mode clair' : 'Mode sombre';
     }
-
-    btn.setAttribute('aria-label', isDark ? 'Activer le mode clair' : 'Activer le mode sombre');
-    btn.title = isDark ? 'Mode clair' : 'Mode sombre';
+    
+    if (btnMobile) {
+      const icon = btnMobile.querySelector('.theme-icon');
+      if (icon) {
+        icon.textContent = isDark ? '☀️' : '🌙';
+      }
+      btnMobile.setAttribute('aria-label', isDark ? 'Activer le mode clair' : 'Activer le mode sombre');
+      btnMobile.title = isDark ? 'Mode clair' : 'Mode sombre';
+    }
   }
 
   /**
@@ -75,7 +91,7 @@
   }
 
   /**
-   * Crée le bouton de toggle dans la sidebar
+   * Crée le bouton de toggle dans la sidebar (en bas)
    */
   function createToggleButton() {
     const sidebar = document.querySelector('aside');
@@ -84,19 +100,38 @@
     // Vérifie si le bouton existe déjà
     if (document.getElementById('dark-mode-toggle')) return;
 
+    // Crée le conteneur du toggle
+    const container = document.createElement('div');
+    container.className = 'mt-4 pt-4 border-t border-gray-200';
+    
     const button = document.createElement('button');
     button.id = 'dark-mode-toggle';
-    button.className = 'flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition font-medium w-full text-sm mt-2';
-    button.innerHTML = '<span class="theme-icon">🌙</span> <span>Mode sombre</span>';
+    button.className = 'flex items-center justify-between w-full px-3 py-2 rounded-lg transition group';
     button.setAttribute('aria-label', 'Activer le mode sombre');
+    button.title = 'Mode sombre';
+    
+    // Structure HTML du toggle avec emojis
+    button.innerHTML = `
+      <span class="text-xs text-gray-500 font-medium group-hover:text-gray-700 transition">Thème</span>
+      <div class="flex items-center gap-2">
+        <span class="icon-left text-sm" style="opacity: 1; transition: opacity 0.2s;">☀️</span>
+        <div class="relative inline-block w-12 h-6 bg-gray-200 rounded-full cursor-pointer transition group-hover:bg-gray-300" style="box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);">
+          <div class="toggle-slider absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ease-out" style="transform: translateX(0);"></div>
+        </div>
+        <span class="icon-right text-sm" style="opacity: 0.4; transition: opacity 0.2s;">🌙</span>
+      </div>
+    `;
+    
     button.addEventListener('click', toggleTheme);
-
-    // Insère après la navigation
-    const nav = sidebar.querySelector('nav');
-    if (nav && nav.nextElementSibling) {
-      nav.parentNode.insertBefore(button, nav.nextElementSibling);
-    } else if (nav) {
-      nav.after(button);
+    
+    container.appendChild(button);
+    
+    // Insère en bas de la sidebar, juste avant le footer
+    const footer = sidebar.querySelector('.mt-auto');
+    if (footer) {
+      sidebar.insertBefore(container, footer);
+    } else {
+      sidebar.appendChild(container);
     }
   }
 

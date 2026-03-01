@@ -430,6 +430,8 @@ export async function fetchGDACS(): Promise<Alert[]> {
     }
 
     const xml = await res.text();
+    const now = Date.now();
+    const maxAgeDays = 7;
 
     for (const item of xml.split('<item>').slice(1)) {
       const eventType = gdacsParseEventType(item);
@@ -451,6 +453,19 @@ export async function fetchGDACS(): Promise<Alert[]> {
       const title = gdacsGetTag(item, 'title');
       const description = gdacsGetTag(item, 'description').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
       const pubDate = gdacsGetTag(item, 'pubDate');
+      
+      // Filtre de date : rejeter les événements de plus de 7 jours
+      if (pubDate) {
+        try {
+          const pubTime = new Date(pubDate).getTime();
+          if (!isNaN(pubTime) && now - pubTime > maxAgeDays * 86400000) {
+            continue;
+          }
+        } catch {
+          // Si la date ne peut pas être parsée, on conserve l'alerte
+        }
+      }
+
       const link = gdacsGetTag(item, 'link') || 'https://www.gdacs.org';
       const gdacsCountry = gdacsGetTag(item, 'gdacs:country');
       const eventName = gdacsGetTag(item, 'gdacs:eventname') || '';

@@ -21,9 +21,14 @@ export interface AfFlightArrival {
   timeToArrivalMinutes?: number;
 }
 
+export interface AfFlightsCache {
+  flights: AfFlightArrival[];
+  fetchedAt: number;  // Unix timestamp (ms) du dernier fetch API
+}
+
 const KV_KEY          = 'af_flights_cache';
 const KV_LOCK_KEY     = 'af_flights_lock';
-const KV_TTL_SEC      = 4 * 60 * 60;        // 4h TTL cache (vols futurs)
+const KV_TTL_SEC      = 2 * 60 * 60;        // 2h TTL (was 4h) — 12 refresh/day max = ~24-48 API calls (quota 100/day)
 const KV_EMPTY_TTL    = 5 * 60;             // 5min TTL cache vide (évite re-fetch inutiles)
 const LOCK_TTL        = 60;                 // 60s max pour un fetch
 
@@ -200,24 +205,31 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
  * ✅ Distributed lock — une seule instance fait le fetch à la fois.
  * ✅ Les autres instances attendent que le cache soit rempli.
  * ✅ Stocke [] avec TTL court si aucun vol futur, bloquant les re-fetch.
+ * ✅ Paramètre force pour bypass manuel du cache (via bouton UI).
  */
-export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
+export async function getCachedAfArrivals(force = false): Promise<AfFlightArrival[]> {
 
   const now = Date.now();
 
   // ── 1. Cache KV — hit → retour immédiat, 0 requête AF ────────────────────
-  try {
-    const cached = await kv.get<AfFlightArrival[]>(KV_KEY);
-    if (Array.isArray(cached)) {
-      const futureFlights = cached.filter(f => {
-        const eta = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
-        return eta >= now;
-      });
-      console.log(`[AF Flights] Cache KV HIT — ${futureFlights.length}/${cached.length} vols futurs`);
-      return futureFlights;
+  // ✅ Bypass cache si force=true (bouton Actualiser dans l'UI)
+  if (!force) {
+    try {
+      const cached = await kv.get<AfFlightsCache>(KV_KEY);
+      if (cached && Array.isArray(cached.flights)) {
+        const futureFlights = cached.flights.filter(f => {
+          const eta = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
+          return eta >= now;
+        });
+        const age = Math.round((now - cached.fetchedAt) / 60000);
+        console.log(`[AF Flights] Cache KV HIT — ${futureFlights.length}/${cached.flights.length} vols futurs (âge: ${age}min)`);
+        return futureFlights;
+      }
+    } catch (e) {
+      console.warn('[AF Flights] KV read error:', e);
     }
-  } catch (e) {
-    console.warn('[AF Flights] KV read error:', e);
+  } else {
+    console.log('[AF Flights] Force refresh demandé — bypass cache');
   }
 
   // ── 2. Distributed lock — SET NX (only if not exists) ───────────────────
@@ -229,9 +241,9 @@ export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
     for (let i = 0; i < 20; i++) {
       await new Promise(r => setTimeout(r, 2000));
       try {
-        const cached = await kv.get<AfFlightArrival[]>(KV_KEY);
-        if (Array.isArray(cached)) {
-          const futureFlights = cached.filter(f => {
+        const cached = await kv.get<AfFlightsCache>(KV_KEY);
+        if (cached && Array.isArray(cached.flights)) {
+          const futureFlights = cached.flights.filter(f => {
             const eta = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
             return eta >= now;
           });
@@ -247,6 +259,7 @@ export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
   // ── 3. Lock acquis — on est la seule instance à fetcher ──────────────────
   try {
     const result = await callAfApi();
+    const fetchedAt = Date.now();
 
     const futureFlights = result.filter(f => {
       const eta = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
@@ -254,12 +267,12 @@ export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
     });
 
     if (futureFlights.length > 0) {
-      // Vols futurs présents → TTL long (4h)
-      await kv.set(KV_KEY, futureFlights, { ex: KV_TTL_SEC });
+      // Vols futurs présents → TTL 2h
+      await kv.set(KV_KEY, { flights: futureFlights, fetchedAt }, { ex: KV_TTL_SEC });
       console.log(`[AF Flights] ${futureFlights.length}/${result.length} vols futurs stockés en KV (TTL ${KV_TTL_SEC}s)`);
     } else {
       // ✅ Fix : aucun vol futur → stocke [] avec TTL court (5 min)
-      await kv.set(KV_KEY, [], { ex: KV_EMPTY_TTL });
+      await kv.set(KV_KEY, { flights: [], fetchedAt }, { ex: KV_EMPTY_TTL });
       console.warn(`[AF Flights] Aucun vol futur — [] stocké en KV (TTL ${KV_EMPTY_TTL}s)`);
     }
 
@@ -272,8 +285,21 @@ export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
   }
 }
 
-export async function getArrivalsForAirport(icao: string): Promise<AfFlightArrival[]> {
-  const all = await getCachedAfArrivals();
+/**
+ * Retourne le timestamp du dernier fetch API (pour affichage âge cache dans UI).
+ */
+export async function getCacheFetchedAt(): Promise<number | null> {
+  try {
+    const cached = await kv.get<AfFlightsCache>(KV_KEY);
+    return cached?.fetchedAt ?? null;
+  } catch (e) {
+    console.warn('[AF Flights] Error reading cache timestamp:', e);
+    return null;
+  }
+}
+
+export async function getArrivalsForAirport(icao: string, force = false): Promise<AfFlightArrival[]> {
+  const all = await getCachedAfArrivals(force);
   return all
     .filter(f => f.icao === icao)
     .sort((a, b) =>

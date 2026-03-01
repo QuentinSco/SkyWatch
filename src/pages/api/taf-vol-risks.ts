@@ -3,7 +3,7 @@ import type { APIRoute } from 'astro';
 import type { TafRisk, TafThreat } from '../../lib/tafParser';
 import type { AfFlightArrival } from '../../lib/afFlights';
 import { fetchTafRisks, AF_AIRPORT_ICAOS } from '../../lib/tafParser';
-import { getCachedAfArrivals } from '../../lib/afFlights';
+import { getCachedAfArrivals, getCacheFetchedAt } from '../../lib/afFlights';
 import { Redis } from '@upstash/redis';
 
 // ✅ Mode debug — passe à true pour voir les logs détaillés dans Vercel Functions
@@ -34,7 +34,8 @@ export interface BaseTaf {
 export interface TafVolRisksResponse {
   hits:     TafFlightHit[];
   baseHits: TafFlightHit[];
-  baseTafs: BaseTaf[];   // ← toujours présent, même si vide de menaces
+  baseTafs: BaseTaf[];
+  cacheFetchedAt?: number | null;  // ✅ Timestamp du dernier fetch API AF (pour affichage âge cache)
 }
 
 // ✅ Cache Redis partagé — remplace le cache in-memory inopérant sur Vercel (cold-start)
@@ -70,25 +71,34 @@ function overlapsThreatWindow(
 
 export const prerender = false;
 
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({ url }) => {
+  // ✅ Paramètre force pour bypass cache (bouton Actualiser dans UI)
+  const force = url.searchParams.get('force') === '1';
+  
+  if (force) {
+    dbg('Force refresh demandé — bypass cache TAF+VOL');
+  }
+
   // ── Cache KV — hit → retour immédiat, 0 calcul ──────────────────────────
-  try {
-    const cached = await kv.get<TafVolRisksResponse>(TAF_VOL_CACHE_KEY);
-    if (cached) {
-      dbg('Cache KV HIT — retour immédiat');
-      return new Response(JSON.stringify(cached), {
-        headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' },
-      });
+  if (!force) {
+    try {
+      const cached = await kv.get<TafVolRisksResponse>(TAF_VOL_CACHE_KEY);
+      if (cached) {
+        dbg('Cache KV HIT — retour immédiat');
+        return new Response(JSON.stringify(cached), {
+          headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' },
+        });
+      }
+    } catch (e) {
+      console.warn('[taf-vol-risks] KV read error:', e);
     }
-  } catch (e) {
-    console.warn('[taf-vol-risks] KV read error:', e);
   }
 
   try {
     // Fetch TAF bruts (tous aéroports AF) + vols en parallèle
     const [tafRisks, allFlights, rawBaseTafsResult] = await Promise.all([
       fetchTafRisks(),
-      getCachedAfArrivals(),
+      getCachedAfArrivals(force),  // ✅ Passe le paramètre force
       fetch(
         `https://aviationweather.gov/api/data/taf?ids=LFPG,LFPO&format=json&metar=false`,
         {
@@ -97,6 +107,9 @@ export const GET: APIRoute = async () => {
         }
       ).then(r => r.ok ? r.json() : Promise.resolve([])).catch(() => []),
     ]);
+
+    // ✅ Récupération du timestamp du cache AF pour affichage dans l'UI
+    const cacheFetchedAt = await getCacheFetchedAt();
 
     // ── Diagnostics généraux ────────────────────────────────────────────────────
     dbg(`TAF risques : ${tafRisks.length} aéroports`);
@@ -122,7 +135,6 @@ export const GET: APIRoute = async () => {
 
     // ── Filtrage vols invalides ────────────────────────────────────────────────────
     const now = Date.now();
-    // ✅ Fix : estimatedTouchDownTime (était estimatedArrival, champ inexistant sur AfFlightArrival)
     const cleanedFlights = allFlights.filter(f => {
       if (f.aircraftType === 'BUS') return false;
       if (!f.registration?.trim()) return false;
@@ -152,7 +164,6 @@ export const GET: APIRoute = async () => {
       for (const threat of taf.threats) {
         for (const flight of flights) {
           totalFlightsChecked++;
-          // ✅ Fix : estimatedTouchDownTime (était estimatedArrival, champ inexistant)
           const etaIso = flight.estimatedTouchDownTime ?? flight.scheduledArrival;
           if (!etaIso) continue;
 
@@ -224,7 +235,6 @@ export const GET: APIRoute = async () => {
       const sev: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
       if (sev[a.threat.severity] !== sev[b.threat.severity])
         return sev[a.threat.severity] - sev[b.threat.severity];
-      // ✅ Fix : estimatedTouchDownTime (était estimatedArrival)
       return new Date(a.flight.estimatedTouchDownTime ?? a.flight.scheduledArrival).getTime() -
              new Date(b.flight.estimatedTouchDownTime ?? b.flight.scheduledArrival).getTime();
     });
@@ -232,7 +242,12 @@ export const GET: APIRoute = async () => {
     sortHits(filteredHits);
     sortHits(baseHits);
 
-    const response: TafVolRisksResponse = { hits: filteredHits, baseHits, baseTafs };
+    const response: TafVolRisksResponse = { 
+      hits: filteredHits, 
+      baseHits, 
+      baseTafs,
+      cacheFetchedAt,  // ✅ Timestamp pour calcul âge cache dans UI
+    };
 
     // ✅ Stockage en KV Redis (TTL 20 min) — partagé entre toutes les instances Vercel
     try {

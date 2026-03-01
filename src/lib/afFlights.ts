@@ -155,23 +155,32 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
     }
   }
 
-  // ── Mapping — filtre haul LC uniquement ───────────────────────────────────
+  // ── Mapping — filtre haul LC + airline AF uniquement ──────────────────────
   const arrivals: AfFlightArrival[] = [];
   let skippedHaul = 0;
+  let skippedAirline = 0;
 
   for (const op of ops) {
-    // ✅ Filtre long-courrier : on ignore MC (medium-haul) et CC (court-courrier)
+    // ✅ Filtre 1 : long-courrier uniquement (ignore MC/CC)
     if (!isLongHaul(op.haul)) {
       skippedHaul++;
       continue;
     }
+
+    // ✅ Filtre 2 : vols opérés par Air France uniquement (ignore partenaires WY, EY, HU, LA, SV, AA...)
+    const airlineCode = op.airline?.code ?? '';
+    if (airlineCode !== 'AF') {
+      skippedAirline++;
+      continue;
+    }
+
     for (const leg of (op.flightLegs ?? [])) {
       const mapped = mapLegToArrival(op, leg);
       if (mapped) arrivals.push(mapped);
     }
   }
 
-  console.log(`[AF Flights] ${arrivals.length} legs LC retenus — ${skippedHaul} vols MC/CC filtrés (haul non-L)`);
+  console.log(`[AF Flights] ${arrivals.length} legs LC retenus — ${skippedHaul} vols MC/CC filtrés — ${skippedAirline} vols partenaires filtrés`);
 
   // ── Dé-doublonnage ────────────────────────────────────────────────────────
   const dedup = new Map<string, AfFlightArrival>();

@@ -15,34 +15,38 @@ export interface AfFlightArrival {
   icao: string;
   registration?: string;
   aircraftType?: string;
-  haul?: string;              // raw haul value from AF API — useful for debugging
+  haul?: string;              // raw haul value from AF API — kept for debugging
   scheduledArrival: string;
   estimatedTouchDownTime?: string;
   timeToArrivalMinutes?: number;
 }
 
 const KV_KEY          = 'af_flights_cache';
-const KV_LOCK_KEY     = 'af_flights_lock';  // ✅ Distributed lock
+const KV_LOCK_KEY     = 'af_flights_lock';
 const KV_TTL_SEC      = 4 * 60 * 60;        // 4h TTL cache (vols futurs)
 const KV_EMPTY_TTL    = 5 * 60;             // 5min TTL cache vide (évite re-fetch inutiles)
 const LOCK_TTL        = 60;                 // 60s max pour un fetch
 
 /**
- * Returns true for long-haul flights only.
- *
- * The AF OpenData API returns 'haul' as a free string. Known values:
- *   'L'        — most common long-haul code
- *   'LONG'     — alternate form observed in some responses
- *   'LC'       — Air France internal code (Long-Courrier)
- *   'LONGHAUL' — defensive match
- *
- * Any other value (M, MC, MEDIUM, S, SC, SHORT, …) is treated as non-long-haul
- * and excluded from the cache.
+ * Air France long-haul aircraft types.
+ * These are the only wide-body aircraft used on intercontinental routes.
+ * 
+ * List:
+ *   332 — Airbus A330-200
+ *   77W — Boeing 777-300ER
+ *   772 — Boeing 777-200ER
+ *   789 — Boeing 787-9
+ *   359 — Airbus A350-900
  */
-function isLongHaul(haul: string | undefined | null): boolean {
-  if (!haul) return false;
-  const h = haul.trim().toUpperCase();
-  return h === 'L' || h === 'LONG' || h === 'LC' || h === 'LONGHAUL';
+const LC_AIRCRAFT_TYPES = new Set(['332', '77W', '772', '789', '359']);
+
+/**
+ * Returns true if the aircraft type is a long-haul wide-body.
+ * The API's 'haul' field is unreliable (e.g., AF1116 DUB-CDG flagged as 'LONG').
+ */
+function isLongHaulAircraft(typeCode: string | undefined | null): boolean {
+  if (!typeCode) return false;
+  return LC_AIRCRAFT_TYPES.has(typeCode.trim().toUpperCase());
 }
 
 function minutesToArrival(etaIso: string | undefined): number | undefined {
@@ -93,7 +97,6 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
   }
 
   const now = new Date();
-  // ✅ Fenêtre réduite : J+0 00:00 UTC → J+1 23:59 UTC (48h, était J-1→J+2 = 4 jours)
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
   const end   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 23, 59, 59));
 
@@ -134,7 +137,7 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
   const ops: any[] = Array.isArray(json.operationalFlights) ? json.operationalFlights : [];
   const totalPages = json.page?.totalPages ?? 1;
 
-  console.log(`[AF Flights] page 0/${totalPages} — ${ops.length} vols (avant filtre haul)`);
+  console.log(`[AF Flights] page 0/${totalPages} — ${ops.length} vols (avant filtre LC)`);
 
   // ── Pagination avec délai 1.1s (respect QPS 1 req/s) ─────────────────────
   for (let p = 1; p < totalPages; p++) {
@@ -155,19 +158,13 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
     }
   }
 
-  // ── Mapping — filtre haul LC + airline AF uniquement ──────────────────────
+  // ── Mapping — filtre airline AF + aircraft LC uniquement ──────────────────
   const arrivals: AfFlightArrival[] = [];
-  let skippedHaul = 0;
   let skippedAirline = 0;
+  let skippedAircraft = 0;
 
   for (const op of ops) {
-    // ✅ Filtre 1 : long-courrier uniquement (ignore MC/CC)
-    if (!isLongHaul(op.haul)) {
-      skippedHaul++;
-      continue;
-    }
-
-    // ✅ Filtre 2 : vols opérés par Air France uniquement (ignore partenaires WY, EY, HU, LA, SV, AA...)
+    // ✅ Filtre 1 : vols opérés par Air France uniquement
     const airlineCode = op.airline?.code ?? '';
     if (airlineCode !== 'AF') {
       skippedAirline++;
@@ -175,12 +172,19 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
     }
 
     for (const leg of (op.flightLegs ?? [])) {
+      // ✅ Filtre 2 : type avion long-courrier uniquement (332, 77W, 772, 789, 359)
+      const aircraftType = leg.aircraft?.typeCode ?? '';
+      if (!isLongHaulAircraft(aircraftType)) {
+        skippedAircraft++;
+        continue;
+      }
+
       const mapped = mapLegToArrival(op, leg);
       if (mapped) arrivals.push(mapped);
     }
   }
 
-  console.log(`[AF Flights] ${arrivals.length} legs LC retenus — ${skippedHaul} vols MC/CC filtrés — ${skippedAirline} vols partenaires filtrés`);
+  console.log(`[AF Flights] ${arrivals.length} legs LC retenus — ${skippedAirline} vols partenaires filtrés — ${skippedAircraft} avions non-LC filtrés`);
 
   // ── Dé-doublonnage ────────────────────────────────────────────────────────
   const dedup = new Map<string, AfFlightArrival>();
@@ -202,9 +206,6 @@ export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
   const now = Date.now();
 
   // ── 1. Cache KV — hit → retour immédiat, 0 requête AF ────────────────────
-  // ✅ Fix : Array.isArray() au lieu de cached && cached.length > 0
-  //    Un tableau vide [] est un HIT valide (résultat d'un fetch sans vol futur)
-  //    et doit bloquer les re-fetch jusqu'à expiration du TTL court (5 min).
   try {
     const cached = await kv.get<AfFlightArrival[]>(KV_KEY);
     if (Array.isArray(cached)) {
@@ -258,7 +259,6 @@ export async function getCachedAfArrivals(): Promise<AfFlightArrival[]> {
       console.log(`[AF Flights] ${futureFlights.length}/${result.length} vols futurs stockés en KV (TTL ${KV_TTL_SEC}s)`);
     } else {
       // ✅ Fix : aucun vol futur → stocke [] avec TTL court (5 min)
-      // Bloque les re-fetch inutiles jusqu'à expiration, évite le throttle AF.
       await kv.set(KV_KEY, [], { ex: KV_EMPTY_TTL });
       console.warn(`[AF Flights] Aucun vol futur — [] stocké en KV (TTL ${KV_EMPTY_TTL}s)`);
     }

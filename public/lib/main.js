@@ -6,9 +6,9 @@
     yellow: 'bg-yellow-400 text-black',
   };
   const SEVERITY_LABEL = {
-    red:    '🔴 ROUGE',
-    orange: '🟠 ORANGE',
-    yellow: '🟡 JAUNE',
+    red:    '🔴',
+    orange: '🟠',
+    yellow: '🟡',
   };
   const SEVERITY_DOT = {
     red:    '#dc2626',

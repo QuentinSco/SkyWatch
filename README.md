@@ -412,7 +412,7 @@ Ce projet est sous license **MIT**. Voir [LICENSE](LICENSE) pour plus de détail
 
 ## 👥 Auteurs
 
-- **Quentin Scozzafave** - *Initial work* - [@QuentinSco](https://github.com/QuentinSco)
+- **Quentin S** - *Initial work* - [@QuentinSco](https://github.com/QuentinSco)
 
 ---
 
@@ -430,8 +430,6 @@ Ce projet est sous license **MIT**. Voir [LICENSE](LICENSE) pour plus de détail
 
 Pour toute question ou problème :
 - **Issues GitHub** : [github.com/QuentinSco/SkyWatch/issues](https://github.com/QuentinSco/SkyWatch/issues)
-- **Email** : q.scozzafave@gmail.com
-
 ---
 
 <div align="center">

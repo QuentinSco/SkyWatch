@@ -15,6 +15,7 @@ export interface AfFlightArrival {
   icao: string;
   registration?: string;
   aircraftType?: string;
+  haul?: string;              // raw haul value from AF API — useful for debugging
   scheduledArrival: string;
   estimatedTouchDownTime?: string;
   timeToArrivalMinutes?: number;
@@ -25,6 +26,24 @@ const KV_LOCK_KEY     = 'af_flights_lock';  // ✅ Distributed lock
 const KV_TTL_SEC      = 4 * 60 * 60;        // 4h TTL cache (vols futurs)
 const KV_EMPTY_TTL    = 5 * 60;             // 5min TTL cache vide (évite re-fetch inutiles)
 const LOCK_TTL        = 60;                 // 60s max pour un fetch
+
+/**
+ * Returns true for long-haul flights only.
+ *
+ * The AF OpenData API returns 'haul' as a free string. Known values:
+ *   'L'        — most common long-haul code
+ *   'LONG'     — alternate form observed in some responses
+ *   'LC'       — Air France internal code (Long-Courrier)
+ *   'LONGHAUL' — defensive match
+ *
+ * Any other value (M, MC, MEDIUM, S, SC, SHORT, …) is treated as non-long-haul
+ * and excluded from the cache.
+ */
+function isLongHaul(haul: string | undefined | null): boolean {
+  if (!haul) return false;
+  const h = haul.trim().toUpperCase();
+  return h === 'L' || h === 'LONG' || h === 'LC' || h === 'LONGHAUL';
+}
 
 function minutesToArrival(etaIso: string | undefined): number | undefined {
   if (!etaIso) return undefined;
@@ -55,6 +74,7 @@ function mapLegToArrival(operationalFlight: any, leg: any): AfFlightArrival | nu
       icao,
       registration:           leg.aircraft?.registration ?? undefined,
       aircraftType:           leg.aircraft?.typeCode ?? undefined,
+      haul:                   operationalFlight.haul ?? undefined,
       scheduledArrival:       scheduled,
       estimatedTouchDownTime: estimated,
       timeToArrivalMinutes:   minutesToArrival(estimated ?? scheduled),
@@ -114,7 +134,7 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
   const ops: any[] = Array.isArray(json.operationalFlights) ? json.operationalFlights : [];
   const totalPages = json.page?.totalPages ?? 1;
 
-  console.log(`[AF Flights] page 0/${totalPages} — ${ops.length} vols`);
+  console.log(`[AF Flights] page 0/${totalPages} — ${ops.length} vols (avant filtre haul)`);
 
   // ── Pagination avec délai 1.1s (respect QPS 1 req/s) ─────────────────────
   for (let p = 1; p < totalPages; p++) {
@@ -135,14 +155,23 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
     }
   }
 
-  // ── Mapping ───────────────────────────────────────────────────────────────
+  // ── Mapping — filtre haul LC uniquement ───────────────────────────────────
   const arrivals: AfFlightArrival[] = [];
+  let skippedHaul = 0;
+
   for (const op of ops) {
+    // ✅ Filtre long-courrier : on ignore MC (medium-haul) et CC (court-courrier)
+    if (!isLongHaul(op.haul)) {
+      skippedHaul++;
+      continue;
+    }
     for (const leg of (op.flightLegs ?? [])) {
       const mapped = mapLegToArrival(op, leg);
       if (mapped) arrivals.push(mapped);
     }
   }
+
+  console.log(`[AF Flights] ${arrivals.length} legs LC retenus — ${skippedHaul} vols MC/CC filtrés (haul non-L)`);
 
   // ── Dé-doublonnage ────────────────────────────────────────────────────────
   const dedup = new Map<string, AfFlightArrival>();

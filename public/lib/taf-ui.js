@@ -6,11 +6,18 @@
     yellow: 'bg-yellow-400 text-black',
     none:   'bg-green-500 text-white',
   };
+  // Text-only severity style — used in table cells (no background pill)
+  const SEVERITY_TEXT = {
+    red:    'text-red-600',
+    orange: 'text-orange-500',
+    yellow: 'text-yellow-500',
+    none:   'text-green-600',
+  };
   const SEVERITY_LABEL = {
-    red:    '\uD83D\uDD34 ROUGE',
-    orange: '\uD83D\uDFE0 ORANGE',
-    yellow: '\uD83D\uDFE1 JAUNE',
-    none:   '\u2705 D\u00c9GAG\u00c9',
+    red:    '\uD83D\uDD34 Rouge',
+    orange: '\uD83D\uDFE0 Orange',
+    yellow: '\uD83D\uDFE1 Jaune',
+    none:   '\u2705 D\u00e9gag\u00e9',
   };
   const THREAT_ICONS = {
     THUNDERSTORM: '\u26C8',
@@ -21,7 +28,7 @@
     CB_TCU:       '\u26C5',
     LOW_VIS:      '\uD83C\uDF2B',
     FUNNEL_CLOUD: '\uD83C\uDF2A',
-    LOW_CEILING:  '\u2601\uFE0F',   // ☁️  — plafond bas BKN/OVC
+    LOW_CEILING:  '\u2601\uFE0F',
   };
   const CI_LABEL = {
     'TEMPO':       { text: 'TEMPO',         cls: 'bg-purple-100 text-purple-700 border border-purple-300' },
@@ -40,7 +47,7 @@
     none:   '#22c55e',
   };
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────────────────────────
   function formatUTC(ts) {
     return new Date(ts * 1000).toLocaleString('fr-FR', {
       day: '2-digit', month: '2-digit',
@@ -98,7 +105,7 @@
       ?.addEventListener('click', loadTafVolRisks);
   }
 
-  // ── TAF : badge menace ────────────────────────────────────────────────────────────────────────────────────────
+  // ── TAF : badge menace (utilisé dans les lignes détail — conserve le fond coloré) ────────────────────────────────────
   function renderThreatBadge(threat) {
     const icon   = THREAT_ICONS[threat.type] ?? '\u26A0\uFE0F';
     const badge  = SEVERITY_BADGE[threat.severity];
@@ -117,9 +124,10 @@
       </div>`;
   }
 
-  // ── TAF : ligne tableau ───────────────────────────────────────────────────────────────────────────────────────
+  // ── TAF : ligne tableau ─────────────────────────────────────────────────────────────────────────────────────────
   function renderTafRiskCard(risk) {
-    const badgeCls    = SEVERITY_BADGE[risk.worstSeverity];
+    // NIVEAU : texte coloré seul, sans fond
+    const badgeCls    = SEVERITY_TEXT[risk.worstSeverity];
     const threatsHtml = risk.threats.map(t => `
       <div class="mb-2 pb-2 border-b border-gray-100 last:border-0">${renderThreatBadge(t)}</div>`
     ).join('');
@@ -127,12 +135,12 @@
       <tr class="border-b border-gray-100 hover:bg-blue-50 transition cursor-pointer"
           onclick="this.nextElementSibling.classList.toggle('hidden')">
         <td class="py-2 px-4">
-          <span class="${badgeCls} inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase">${SEVERITY_LABEL[risk.worstSeverity]}</span>
+          <span class="${badgeCls} text-xs font-bold">${SEVERITY_LABEL[risk.worstSeverity]}</span>
         </td>
         <td class="py-2 px-4 font-mono font-bold text-gray-800">${risk.icao}</td>
         <td class="py-2 px-4 text-gray-600">${risk.name}</td>
         <td class="py-2 px-4">
-          <div class="flex flex-wrap gap-1">
+          <div class="flex flex-wrap gap-2">
             ${Object.values(
               risk.threats.reduce((acc, t) => {
                 if (!acc[t.type] || SEVERITY_ORDER[t.severity] < SEVERITY_ORDER[acc[t.type].severity]) acc[t.type] = t;
@@ -140,8 +148,9 @@
               }, {})
             ).map(t => {
               const icon = THREAT_ICONS[t.type] ?? '\u26A0\uFE0F';
-              const cls  = SEVERITY_BADGE[t.severity];
-              return `<span class="${cls} text-xs px-1.5 py-0.5 rounded font-semibold">${icon} ${t.label}</span>`;
+              // Menaces : texte coloré seul, sans fond
+              const cls  = SEVERITY_TEXT[t.severity];
+              return `<span class="${cls} text-xs font-semibold whitespace-nowrap">${icon} ${t.label}</span>`;
             }).join('')}
           </div>
         </td>
@@ -158,7 +167,7 @@
       </tr>`;
   }
 
-  // ── TAF : chargement section ───────────────────────────────────────────────────────────────────────────────────────────
+  // ── TAF : chargement section ─────────────────────────────────────────────────────────────────────────────────────────────────────
   async function loadTafRisks() {
     const container  = document.getElementById('taf-main');
     const countersEl = document.getElementById('taf-counters');
@@ -234,7 +243,8 @@
     const flight = hit.flight;
     const taf    = hit.taf;
     const icon   = THREAT_ICONS[threat.type] ?? '\u26A0\uFE0F';
-    const badge  = SEVERITY_BADGE[threat.severity];
+    const badge  = SEVERITY_BADGE[threat.severity];  // conservé pour le détail expandable
+    const badgeText = SEVERITY_TEXT[threat.severity]; // texte seul pour la cellule tableau
     const ci     = CI_LABEL[threat.changeIndicator] ?? null;
     const etaIso = flight.estimatedTouchDownTime || flight.scheduledArrival;
     const etaStr = formatIsoToLocalShort(etaIso);
@@ -257,7 +267,7 @@
       <tr class="border-b border-gray-100 hover:bg-blue-50/70 transition cursor-pointer"
           onclick="document.getElementById('${rowId}').classList.toggle('hidden')">
         <td class="py-2 px-3">
-          <span class="${badge} px-2 py-0.5 rounded text-xs font-bold uppercase">${SEVERITY_LABEL[threat.severity]}</span>
+          <span class="${badgeText} text-xs font-bold">${SEVERITY_LABEL[threat.severity]}</span>
         </td>
         <td class="py-2 px-3 font-mono font-semibold text-gray-800">AF${flight.flightNumber}</td>
         <td class="py-2 px-3 text-xs text-gray-500">
@@ -352,7 +362,6 @@
     if (fcst.visib && fcst.visib !== '9999' && fcst.visib !== '6+') {
       parts.push(`VIS ${fcst.visib}`);
     }
-    // ✅ Fix : base en centaines de pieds (format TAF) plut\u00f4t qu'en pieds bruts
     const cbs = (fcst.clouds || []).filter(c => c.type === 'CB' || c.type === 'TCU');
     if (cbs.length) {
       parts.push(cbs.map(c => {
@@ -521,7 +530,7 @@
       </div>`;
   }
 
-  // ── Section CDG/ORY ────────────────────────────────────────────────────────────────────────────────────
+  // ── Section CDG/ORY ───────────────────────────────────────────────────────────────────────────────────────────────────────
   function renderBaseSection(baseHits, baseTafs) {
     const tafsToRender = (baseTafs && baseTafs.length > 0)
       ? baseTafs
@@ -550,7 +559,8 @@
 
     const cards = tafsToRender.map(taf => {
       const sev   = taf.worstSeverity ?? 'none';
-      const badge = SEVERITY_BADGE[sev];
+      // Texte coloré seul pour le header de carte CDG/ORY
+      const badgeText = SEVERITY_TEXT[sev];
       const label = SEVERITY_LABEL[sev];
 
       const threatsList = taf.threats.length > 0
@@ -564,7 +574,7 @@
       return `
         <div class="bg-white border ${sev === 'none' ? 'border-green-200' : sev === 'red' ? 'border-red-300' : 'border-orange-200'} rounded-xl p-4 shadow-sm">
           <div class="flex items-center gap-3 mb-2 flex-wrap">
-            <span class="${badge} px-2 py-0.5 rounded text-xs font-bold">${label}</span>
+            <span class="${badgeText} text-xs font-bold">${label}</span>
             <span class="font-mono font-bold text-gray-800 text-base">${taf.iata}</span>
             <span class="text-gray-400 font-mono text-sm">${taf.icao}</span>
             <span class="text-gray-600 text-sm">${taf.name}</span>
@@ -609,7 +619,7 @@
       </section>`;
   }
 
-  // ── Vols AF : chargement section ──────────────────────────────────────────────────────────────────────────
+  // ── Vols AF : chargement section ──────────────────────────────────────────────────────────────────────────────────────
   async function loadTafVolRisks() {
     _rowIdx = 0;
     const container  = document.getElementById('taf-vol-main');
@@ -693,7 +703,7 @@
     }
   }
 
-  // ── Init ───────────────────────────────────────────────────────────────────────────────────────────
+  // ── Init ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
     loadTafRisks();
     loadTafVolRisks();

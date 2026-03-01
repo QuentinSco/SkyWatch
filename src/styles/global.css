@@ -14,6 +14,8 @@
   --border-color: #e2e8f0;
   --hover-bg: #eff6ff;
   --hover-text: #1e40af;
+  --toggle-bg: #e5e7eb;
+  --toggle-bg-hover: #d1d5db;
 }
 
 .dark {
@@ -26,6 +28,8 @@
   --border-color: #334155;
   --hover-bg: #1e3a5f;
   --hover-text: #60a5fa;
+  --toggle-bg: #475569;
+  --toggle-bg-hover: #64748b;
 }
 
 /* Smooth transitions for theme switching */
@@ -36,6 +40,39 @@ section,
 .rounded-xl,
 button {
   transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+/* ================================
+   Dark Mode Toggle Button Styles
+   ================================ */
+
+#dark-mode-toggle .toggle-slider {
+  transition: transform 0.2s ease-out, background-color 0.2s ease;
+}
+
+#dark-mode-toggle:hover .toggle-slider {
+  background-color: #f9fafb;
+}
+
+.dark #dark-mode-toggle:hover .toggle-slider {
+  background-color: #e5e7eb;
+}
+
+/* Toggle background color transitions */
+#dark-mode-toggle > div > div {
+  background-color: var(--toggle-bg);
+}
+
+#dark-mode-toggle:hover > div > div {
+  background-color: var(--toggle-bg-hover);
+}
+
+.dark #dark-mode-toggle > div > div {
+  background-color: var(--toggle-bg);
+}
+
+.dark #dark-mode-toggle:hover > div > div {
+  background-color: var(--toggle-bg-hover);
 }
 
 /* ================================

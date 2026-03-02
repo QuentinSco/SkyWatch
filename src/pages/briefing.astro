@@ -98,7 +98,7 @@ import '../styles/global.css';
         </div>`;
     }
 
-    // ── Rendu de la trame ─────────────────────────────────────────────────────
+    // ── Rendu de la trame (UI) ─────────────────────────────────────────────────
     function renderBriefing(data) {
       const form = document.getElementById('briefing-form');
       if (!form) return;
@@ -218,16 +218,33 @@ import '../styles/global.css';
       form.innerHTML = html;
     }
 
-    // ── Génération du texte à copier ──────────────────────────────────────────
-    // Headers en MAJUSCULES : format universel, compatible tout portail
-    function buildCopyText() {
-      if (!window._briefingData) return '';
+    // ── Génération du contenu à copier (dual-format) ───────────────────────────
+    // Retourne { plain: string, html: string }
+    // • text/html  → portails rich-text (Teams, Outlook, Word…) : headers en <b>
+    // • text/plain → éditeurs plain-text : headers en titre normal
+    function buildCopyContent() {
+      if (!window._briefingData) return { plain: '', html: '' };
       const d = window._briefingData;
-      const lines = [];
 
-      lines.push('MÉTÉO HORS EUROPE :');
+      const plainLines = [];
+      const htmlLines  = ['<meta charset="utf-8">'];
+
+      // Helper : ajoute une section dans les deux formats
+      function section(header, items) {
+        plainLines.push(header);
+        htmlLines.push(`<b>${header}</b>`);
+        items.forEach(line => {
+          plainLines.push(line);
+          htmlLines.push(line);
+        });
+        plainLines.push('');
+        htmlLines.push('');
+      }
+
+      // ── Météo hors Europe ───────────────────────────────────────────
+      const meteoItems = [];
       if (!d.meteoHorsEurope.length) {
-        lines.push('-NIL');
+        meteoItems.push('-NIL');
       } else {
         d.meteoHorsEurope.forEach((line, i) => {
           const capaEl = document.querySelector(`[data-field="capa"][data-idx="${i}"]`);
@@ -235,31 +252,28 @@ import '../styles/global.css';
           const infos  = [`ETA ${line.etaZ}`, `Fenêtre ${line.fenetreZ}`];
           if (capaEl?.value?.trim()) infos.push(`Capa attente ~${capaEl.value.trim()}min`);
           if (degEl?.value?.trim())  infos.push(`Dégagement ${degEl.value.trim().toUpperCase()}`);
-          lines.push(`-${line.phenomenon} ${line.iata} ${line.flight} (${infos.join(' - ')})`);
+          meteoItems.push(`-${line.phenomenon} ${line.iata} ${line.flight} (${infos.join(' - ')})`);
         });
       }
+      section('Météo hors Europe :', meteoItems);
 
-      lines.push('PERTURBATION TROPICALE :');
-      if (!d.tropicale.length) {
-        lines.push('-NIL');
-      } else {
-        d.tropicale.forEach(tc => lines.push(`-${tc.name} — ${tc.basin} — ${tc.category} — ${tc.windKt}kt`));
-      }
+      // ── Perturbation tropicale ────────────────────────────────────────
+      const tropiItems = !d.tropicale.length
+        ? ['-NIL']
+        : d.tropicale.map(tc => `-${tc.name} — ${tc.basin} — ${tc.category} — ${tc.windKt}kt`);
+      section('Perturbation tropicale :', tropiItems);
 
-      lines.push('ACTIVITÉ VOLCANIQUE :');
-      if (!d.volcanique.length) {
-        lines.push('-NIL');
-      } else {
-        d.volcanique.forEach(v => {
-          const fl = v.flLevel ? ` ${v.flLevel}` : '';
-          lines.push(`-${v.volcanoName}${fl} (VAAC ${v.vaac})`);
-        });
-      }
+      // ── Activité volcanique ────────────────────────────────────────────
+      const volcaItems = !d.volcanique.length
+        ? ['-NIL']
+        : d.volcanique.map(v => `-${v.volcanoName}${v.flLevel ? ' ' + v.flLevel : ''} (VAAC ${v.vaac})`);
+      section('Activité volcanique :', volcaItems);
 
-      lines.push('VENT ARRIÈRE :');
+      // ── Vent arrière ────────────────────────────────────────────────────
       const twAlerts = (d.tailwindWatch || []).filter(tw => tw.alert || tw.forecastAlerts.length);
+      const twItems  = [];
       if (!twAlerts.length) {
-        lines.push('-NIL');
+        twItems.push('-NIL');
       } else {
         twAlerts.forEach(tw => {
           const parts = [];
@@ -268,23 +282,28 @@ import '../styles/global.css';
             const hh = s => { const x = new Date(s * 1000); return `${String(x.getUTCHours()).padStart(2,'0')}${String(x.getUTCMinutes()).padStart(2,'0')}z`; };
             parts.push(`prévu ${fa.tailwindKt}kt ${fa.runway} (${hh(fa.periodStart)}/${hh(fa.periodEnd)})`);
           });
-          lines.push(`-${tw.iata} — ${parts.join(' / ')}`);
+          twItems.push(`-${tw.iata} — ${parts.join(' / ')}`);
         });
       }
+      section('Vent arrière :', twItems);
 
-      lines.push('CARBURANT :');
+      // ── Carburant ───────────────────────────────────────────────────────
       const carb = document.getElementById('field-carburant')?.value?.trim();
-      lines.push(carb ? `-${carb}` : '-NIL');
+      section('Carburant :', [carb ? `-${carb}` : '-NIL']);
 
-      lines.push('GÉOPOLITIQUE :');
+      // ── Géopolitique ──────────────────────────────────────────────────
       const geo = document.getElementById('field-geopolitique')?.value?.trim();
-      lines.push(geo ? `-${geo}` : '-NIL');
+      section('Géopolitique :', [geo ? `-${geo}` : '-NIL']);
 
-      lines.push('EFFECTIF DSP :');
+      // ── Effectif DSP ───────────────────────────────────────────────────
       const dsp = document.getElementById('field-dsp')?.value?.trim();
-      lines.push(`-${dsp || 'OK'}`);
+      section('Effectif DSP :', [`-${dsp || 'OK'}`]);
 
-      return lines.join('\n');
+      // Assemblage : HTML utilise <br> pour les sauts de ligne
+      const plain = plainLines.join('\n').trimEnd();
+      const html  = htmlLines.join('<br>\n').trimEnd();
+
+      return { plain, html };
     }
 
     // ── Fetch + render ────────────────────────────────────────────────────────
@@ -312,19 +331,34 @@ import '../styles/global.css';
 
     // ── Boutons ───────────────────────────────────────────────────────────────
     document.getElementById('btn-refresh')?.addEventListener('click', () => load(true));
+
     document.getElementById('btn-copy')?.addEventListener('click', async () => {
-      const text = buildCopyText();
+      const { plain, html } = buildCopyContent();
       try {
-        await navigator.clipboard.writeText(text);
+        // Dual-format : HTML pour les éditeurs rich-text, plain pour le reste
+        if (typeof ClipboardItem !== 'undefined') {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              'text/html':  new Blob([html],  { type: 'text/html' }),
+              'text/plain': new Blob([plain], { type: 'text/plain' }),
+            }),
+          ]);
+        } else {
+          // Fallback navigateurs anciens
+          await navigator.clipboard.writeText(plain);
+        }
         const toast = document.getElementById('toast-copy');
         if (toast) {
           toast.classList.remove('opacity-0');
           toast.classList.add('opacity-100');
           setTimeout(() => { toast.classList.remove('opacity-100'); toast.classList.add('opacity-0'); }, 2500);
         }
-      } catch (_) { prompt('Copier ce texte :', text); }
+      } catch (_) {
+        prompt('Copier ce texte :', plain);
+      }
     });
 
+    // ── Init ──────────────────────────────────────────────────────────────────
     load();
     setInterval(() => load(), 10 * 60 * 1000);
 

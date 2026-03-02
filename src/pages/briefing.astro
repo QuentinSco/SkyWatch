@@ -12,7 +12,7 @@ import '../styles/global.css';
 
 <body class="text-gray-900 min-h-screen flex" style="background:#f8fafc">
 
-  <!-- ─── Sidebar ─────────────────────────────────────────────────────── -->
+  <!-- ─── Sidebar -->
   <aside class="hidden lg:flex flex-col w-56 shrink-0 sticky top-0 h-screen border-r border-gray-200 bg-white px-4 py-6 overflow-y-auto">
     <div class="mb-6">
       <div class="text-2xl font-bold tracking-tight text-gray-900">🛡 SkyWatch</div>
@@ -29,11 +29,10 @@ import '../styles/global.css';
     </div>
   </aside>
 
-  <!-- ─── Contenu principal ──────────────────────────────────────────── -->
+  <!-- ─── Contenu principal -->
   <div class="flex-1 min-w-0 overflow-y-auto">
     <div class="max-w-3xl mx-auto px-4 py-6 xl:px-8">
 
-      <!-- Header -->
       <div class="flex items-center justify-between flex-wrap gap-4 mb-6">
         <div>
           <h1 class="text-2xl font-bold tracking-tight text-gray-900">🗒 Trame Briefing CCO</h1>
@@ -41,28 +40,22 @@ import '../styles/global.css';
         </div>
         <div class="flex items-center gap-2">
           <span id="briefing-age" class="text-xs text-gray-400">Chargement…</span>
-          <button id="btn-refresh"
-            class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 transition">
+          <button id="btn-refresh" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 transition">
             🔄 Actualiser
           </button>
-          <button id="btn-copy"
-            class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition">
+          <button id="btn-copy" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition">
             📋 Copier
           </button>
         </div>
       </div>
 
-      <!-- Trame -->
       <div id="briefing-form" class="space-y-0 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
         <div class="text-gray-400 text-sm italic px-6 py-8 text-center">Chargement de la trame…</div>
       </div>
 
-      <!-- Toast copy -->
-      <div id="toast-copy"
-        class="fixed bottom-6 right-6 bg-gray-900 text-white text-xs font-medium px-4 py-2.5 rounded-xl shadow-lg opacity-0 transition-opacity duration-300 pointer-events-none">
+      <div id="toast-copy" class="fixed bottom-6 right-6 bg-gray-900 text-white text-xs font-medium px-4 py-2.5 rounded-xl shadow-lg opacity-0 transition-opacity duration-300 pointer-events-none">
         ✅ Trame copiée dans le presse-papier
       </div>
-
     </div>
   </div>
 
@@ -76,237 +69,214 @@ import '../styles/global.css';
     };
 
     function sectionHeader(icon, title, badge) {
-      return `
-        <div class="flex items-center justify-between px-6 py-3 bg-gray-50 border-b border-gray-100">
-          <span class="text-sm font-semibold text-gray-700">${icon} ${title}</span>
-          <span class="text-[10px] font-medium px-2 py-0.5 rounded-full ${badge.cls}">${badge.label}</span>
-        </div>`;
+      return `<div class="flex items-center justify-between px-6 py-3 bg-gray-50 border-b border-gray-100">
+        <span class="text-sm font-semibold text-gray-700">${icon} ${title}</span>
+        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full ${badge.cls}">${badge.label}</span>
+      </div>`;
     }
-
-    function nilLine() {
-      return `<div class="px-6 py-3 text-sm text-gray-400 italic">- NIL</div>`;
-    }
-
+    function nilLine() { return `<div class="px-6 py-3 text-sm text-gray-400 italic">- NIL</div>`; }
     function manualTextarea(id, placeholder, value = '') {
-      return `
-        <div class="px-6 py-3">
-          <textarea id="${id}" rows="2" placeholder="${placeholder}"
-            class="w-full text-sm border border-orange-200 rounded-lg px-3 py-2 bg-orange-50
-                   placeholder-orange-300 focus:outline-none focus:ring-2 focus:ring-orange-300
-                   resize-none font-mono"
-          >${value}</textarea>
-        </div>`;
+      return `<div class="px-6 py-3"><textarea id="${id}" rows="2" placeholder="${placeholder}"
+        class="w-full text-sm border border-orange-200 rounded-lg px-3 py-2 bg-orange-50 placeholder-orange-300 focus:outline-none focus:ring-2 focus:ring-orange-300 resize-none font-mono"
+      >${value}</textarea></div>`;
     }
 
-    // ── Rendu de la trame (UI) ─────────────────────────────────────────────────
+    // Helper UTC
+    const utcZ = ms => {
+      const d = new Date(typeof ms === 'number' && ms < 1e12 ? ms * 1000 : ms);
+      return String(d.getUTCHours()).padStart(2,'0') + String(d.getUTCMinutes()).padStart(2,'0') + 'z';
+    };
+
+    // ── Rendu UI ────────────────────────────────────────────────────────────
     function renderBriefing(data) {
       const form = document.getElementById('briefing-form');
       if (!form) return;
       let html = '';
 
+      // Météo hors Europe
       html += sectionHeader('🌩', 'Météo hors Europe', { cls: 'bg-green-100 text-green-700', label: '✓ Auto · 6h' });
-      if (!data.meteoHorsEurope.length) {
-        html += nilLine();
-      } else {
-        data.meteoHorsEurope.forEach((line, i) => {
-          const c = SEV_COLORS[line.severity] || SEV_COLORS.yellow;
-          html += `
-            <div class="px-6 py-3 border-b border-gray-50 last:border-b-0">
-              <div class="flex items-start gap-3">
-                <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${c.dot}"></span>
-                <div class="flex-1 min-w-0">
-                  <div class="flex flex-wrap items-center gap-2 text-sm font-medium text-gray-800">
-                    <span>${line.phenomenon}</span>
-                    <span class="font-bold">${line.iata}</span>
-                    <span class="text-blue-700 font-bold">${line.flight}</span>
-                    <span class="text-gray-500 text-xs">(ETA <span class="font-mono font-semibold text-gray-700">${line.etaZ}</span> · Fenêtre <span class="font-mono text-gray-700">${line.fenetreZ}</span>)</span>
-                  </div>
-                  <div class="mt-2 flex flex-wrap items-center gap-3">
-                    <label class="flex items-center gap-1.5 text-xs text-gray-500">
-                      Capa attente
-                      <input type="number" min="0" placeholder="min"
-                        data-field="capa" data-idx="${i}"
-                        class="w-16 border border-orange-200 rounded-md px-2 py-0.5 bg-orange-50
-                               text-xs font-mono focus:outline-none focus:ring-1 focus:ring-orange-300 text-center"
-                      />
-                    </label>
-                    <label class="flex items-center gap-1.5 text-xs text-gray-500">
-                      Dégagement
-                      <input type="text" placeholder="ICAO / IATA"
-                        data-field="deg" data-idx="${i}"
-                        class="w-24 border border-orange-200 rounded-md px-2 py-0.5 bg-orange-50
-                               text-xs font-mono uppercase focus:outline-none focus:ring-1 focus:ring-orange-300"
-                      />
-                    </label>
-                  </div>
-                </div>
+      if (!data.meteoHorsEurope.length) { html += nilLine(); }
+      else data.meteoHorsEurope.forEach((line, i) => {
+        const c = SEV_COLORS[line.severity] || SEV_COLORS.yellow;
+        html += `<div class="px-6 py-3 border-b border-gray-50 last:border-b-0">
+          <div class="flex items-start gap-3">
+            <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${c.dot}"></span>
+            <div class="flex-1 min-w-0">
+              <div class="flex flex-wrap items-center gap-2 text-sm font-medium text-gray-800">
+                <span>${line.phenomenon}</span>
+                <span class="font-bold">${line.iata}</span>
+                <span class="text-blue-700 font-bold">${line.flight}</span>
+                <span class="text-gray-500 text-xs">(ETA <span class="font-mono font-semibold text-gray-700">${line.etaZ}</span> · Fenêtre <span class="font-mono text-gray-700">${line.fenetreZ}</span>)</span>
               </div>
-            </div>`;
-        });
-      }
+              <div class="mt-2 flex flex-wrap items-center gap-3">
+                <label class="flex items-center gap-1.5 text-xs text-gray-500">Capa attente
+                  <input type="number" min="0" placeholder="min" data-field="capa" data-idx="${i}"
+                    class="w-16 border border-orange-200 rounded-md px-2 py-0.5 bg-orange-50 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-orange-300 text-center" />
+                </label>
+                <label class="flex items-center gap-1.5 text-xs text-gray-500">Dégagement
+                  <input type="text" placeholder="ICAO / IATA" data-field="deg" data-idx="${i}"
+                    class="w-24 border border-orange-200 rounded-md px-2 py-0.5 bg-orange-50 text-xs font-mono uppercase focus:outline-none focus:ring-1 focus:ring-orange-300" />
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      });
 
+      // Perturbation tropicale
       html += sectionHeader('🌀', 'Perturbation tropicale', { cls: 'bg-green-100 text-green-700', label: '✓ Auto' });
-      if (!data.tropicale.length) {
-        html += nilLine();
-      } else {
-        data.tropicale.forEach(tc => {
-          const affected = tc.affected.length ? ` — Terrains AF : ${tc.affected.join(', ')}` : '';
-          html += `
-            <div class="px-6 py-3 text-sm text-gray-800 border-b border-gray-50 last:border-b-0">
-              <span class="font-bold text-red-700">${tc.name}</span>
-              <span class="ml-2 text-gray-500">${tc.basin} · ${tc.category} · ${tc.windKt}kt${affected}</span>
-            </div>`;
-        });
-      }
+      if (!data.tropicale.length) { html += nilLine(); }
+      else data.tropicale.forEach(tc => {
+        const affected = tc.affected.length ? ` — Terrains AF : ${tc.affected.join(', ')}` : '';
+        html += `<div class="px-6 py-3 text-sm text-gray-800 border-b border-gray-50 last:border-b-0">
+          <span class="font-bold text-red-700">${tc.name}</span>
+          <span class="ml-2 text-gray-500">${tc.basin} · ${tc.category} · ${tc.windKt}kt${affected}</span>
+        </div>`;
+      });
 
+      // Volcanique
       html += sectionHeader('🌋', 'Activité volcanique', { cls: 'bg-green-100 text-green-700', label: '✓ Auto · VAAC' });
-      if (!data.volcanique.length) {
-        html += nilLine();
-      } else {
-        data.volcanique.forEach(v => {
-          const fl = v.flLevel ? ` — ${v.flLevel}` : '';
-          html += `
-            <div class="px-6 py-3 text-sm text-gray-800 border-b border-gray-50 last:border-b-0">
-              <span class="font-bold">${v.volcanoName}</span>
-              <span class="text-gray-500 ml-2">${v.country}${fl} (VAAC ${v.vaac})</span>
-            </div>`;
-        });
-      }
+      if (!data.volcanique.length) { html += nilLine(); }
+      else data.volcanique.forEach(v => {
+        const fl = v.flLevel ? ` — ${v.flLevel}` : '';
+        html += `<div class="px-6 py-3 text-sm text-gray-800 border-b border-gray-50 last:border-b-0">
+          <span class="font-bold">${v.volcanoName}</span>
+          <span class="text-gray-500 ml-2">${v.country}${fl} (VAAC ${v.vaac})</span>
+        </div>`;
+      });
 
+      // Vent arrière — refonte de la mise en forme UI
       html += sectionHeader('💨', 'Vent arrière (charge offerte)', { cls: 'bg-green-100 text-green-700', label: '✓ Auto · METAR+TAF' });
-      if (!data.tailwindWatch.length) {
-        html += nilLine();
-      } else {
-        data.tailwindWatch.forEach(tw => {
-          let content = '';
-          if (!tw.alert && !tw.forecastAlerts.length) {
-            content = `<span class="text-gray-400 italic">NIL</span>`;
-          } else {
-            const parts = [];
-            if (tw.alert && tw.currentTW !== null)
-              parts.push(`<span class="font-semibold text-orange-600">Vent arrière actuel ${tw.currentTW}kt ${tw.runway ?? ''}</span>`);
-            tw.forecastAlerts.forEach(fa => {
-              const hh = d => { const x = new Date(d * 1000); return `${String(x.getUTCHours()).padStart(2,'0')}${String(x.getUTCMinutes()).padStart(2,'0')}z`; };
-              parts.push(`Prévu ${fa.tailwindKt}kt ${fa.runway} (${hh(fa.periodStart)}/${hh(fa.periodEnd)})`);
-            });
-            content = parts.join(' · ');
-          }
-          html += `
-            <div class="px-6 py-3 text-sm border-b border-gray-50 last:border-b-0 flex items-center gap-2">
-              <span class="font-bold text-gray-800 w-10">${tw.iata}</span>
-              <span class="text-gray-500">${tw.name}</span>
-              <span class="ml-auto text-right">${content}</span>
-            </div>`;
-        });
-      }
+      if (!data.tailwindWatch.length) { html += nilLine(); }
+      else data.tailwindWatch.forEach(tw => {
+        const hasAlert    = tw.alert && tw.currentTW !== null;
+        const hasForecasts = tw.forecastAlerts.length > 0;
 
+        if (!hasAlert && !hasForecasts) {
+          html += `<div class="px-6 py-3 text-sm border-b border-gray-50 last:border-b-0 flex items-center gap-3">
+            <span class="font-bold text-gray-800 w-10">${tw.iata}</span>
+            <span class="text-gray-300 text-xs">|</span>
+            <span class="text-gray-400 text-xs italic">NIL</span>
+          </div>`;
+          return;
+        }
+
+        // Piste dominante (actuel prioritaire, sinon premier TAF)
+        const runway = tw.runway ?? tw.forecastAlerts[0]?.runway ?? '';
+
+        let actuelHtml = '';
+        if (hasAlert) {
+          actuelHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-xs font-bold">
+            ⚠️ ${tw.currentTW}kt actuel
+          </span>`;
+        }
+
+        let tafHtml = '';
+        if (hasForecasts) {
+          const tafItems = tw.forecastAlerts.map(fa =>
+            `<span class="inline-flex items-center px-2 py-0.5 rounded bg-yellow-50 border border-yellow-200 text-yellow-700 text-xs font-mono">
+              ${fa.tailwindKt}kt&nbsp;<span class="font-normal text-yellow-600">${utcZ(fa.periodStart)}→${utcZ(fa.periodEnd)}</span>
+            </span>`
+          ).join(' ');
+          tafHtml = `<span class="text-xs text-gray-400 mr-1">TAF :</span>${tafItems}`;
+        }
+
+        html += `<div class="px-6 py-3 border-b border-gray-50 last:border-b-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="font-bold text-gray-900 text-sm w-10">${tw.iata}</span>
+            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-mono">${runway}</span>
+            ${actuelHtml}
+            ${tafHtml}
+          </div>
+        </div>`;
+      });
+
+      // Sections manuelles
       html += sectionHeader('⛽', 'Carburant', { cls: 'bg-orange-100 text-orange-700', label: '✏️ Manuel' });
       html += manualTextarea('field-carburant', 'Ex : Afrique + BZV + HAV', data.carburant);
-
       html += sectionHeader('🌐', 'Géopolitique', { cls: 'bg-orange-100 text-orange-700', label: '✏️ Manuel' });
       html += manualTextarea('field-geopolitique', 'Ex : Survol Afghanistan ok', data.geopolitique);
-
       html += sectionHeader('👥', 'Effectif DSP', { cls: 'bg-orange-100 text-orange-700', label: '✏️ Manuel' });
-      html += `
-        <div class="px-6 py-3">
-          <input id="field-dsp" type="text" value="${data.effectifDsp || 'OK'}"
-            class="w-40 border border-orange-200 rounded-lg px-3 py-1.5 bg-orange-50
-                   text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-300"
-          />
-        </div>`;
+      html += `<div class="px-6 py-3">
+        <input id="field-dsp" type="text" value="${data.effectifDsp || 'OK'}"
+          class="w-40 border border-orange-200 rounded-lg px-3 py-1.5 bg-orange-50 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-300" />
+      </div>`;
 
       form.innerHTML = html;
     }
 
-    // ── Génération du contenu à copier (dual-format) ───────────────────────────
-    // Retourne { plain: string, html: string }
-    // • text/html  → portails rich-text (Teams, Outlook, Word…) : headers en <b>
-    // • text/plain → éditeurs plain-text : headers en titre normal
+    // ── Génération du contenu à copier (dual-format HTML + plain) ────────────
     function buildCopyContent() {
       if (!window._briefingData) return { plain: '', html: '' };
       const d = window._briefingData;
-
       const plainLines = [];
       const htmlLines  = ['<meta charset="utf-8">'];
 
-      // Helper : ajoute une section dans les deux formats
       function section(header, items) {
         plainLines.push(header);
         htmlLines.push(`<b>${header}</b>`);
-        items.forEach(line => {
-          plainLines.push(line);
-          htmlLines.push(line);
-        });
+        items.forEach(line => { plainLines.push(line); htmlLines.push(line); });
         plainLines.push('');
         htmlLines.push('');
       }
 
-      // ── Météo hors Europe ───────────────────────────────────────────
-      const meteoItems = [];
-      if (!d.meteoHorsEurope.length) {
-        meteoItems.push('-NIL');
-      } else {
-        d.meteoHorsEurope.forEach((line, i) => {
+      // Météo hors Europe
+      const meteoItems = !d.meteoHorsEurope.length ? ['-NIL'] :
+        d.meteoHorsEurope.map((line, i) => {
           const capaEl = document.querySelector(`[data-field="capa"][data-idx="${i}"]`);
           const degEl  = document.querySelector(`[data-field="deg"][data-idx="${i}"]`);
           const infos  = [`ETA ${line.etaZ}`, `Fenêtre ${line.fenetreZ}`];
           if (capaEl?.value?.trim()) infos.push(`Capa attente ~${capaEl.value.trim()}min`);
           if (degEl?.value?.trim())  infos.push(`Dégagement ${degEl.value.trim().toUpperCase()}`);
-          meteoItems.push(`-${line.phenomenon} ${line.iata} ${line.flight} (${infos.join(' - ')})`);
+          return `-${line.phenomenon} ${line.iata} ${line.flight} (${infos.join(' - ')})`;
         });
-      }
       section('Météo hors Europe :', meteoItems);
 
-      // ── Perturbation tropicale ────────────────────────────────────────
-      const tropiItems = !d.tropicale.length
-        ? ['-NIL']
-        : d.tropicale.map(tc => `-${tc.name} — ${tc.basin} — ${tc.category} — ${tc.windKt}kt`);
+      // Perturbation tropicale
+      const tropiItems = !d.tropicale.length ? ['-NIL'] :
+        d.tropicale.map(tc => `-${tc.name} — ${tc.basin} — ${tc.category} — ${tc.windKt}kt`);
       section('Perturbation tropicale :', tropiItems);
 
-      // ── Activité volcanique ────────────────────────────────────────────
-      const volcaItems = !d.volcanique.length
-        ? ['-NIL']
-        : d.volcanique.map(v => `-${v.volcanoName}${v.flLevel ? ' ' + v.flLevel : ''} (VAAC ${v.vaac})`);
+      // Volcanique
+      const volcaItems = !d.volcanique.length ? ['-NIL'] :
+        d.volcanique.map(v => `-${v.volcanoName}${v.flLevel ? ' ' + v.flLevel : ''} (VAAC ${v.vaac})`);
       section('Activité volcanique :', volcaItems);
 
-      // ── Vent arrière ────────────────────────────────────────────────────
+      // Vent arrière — format restructuré :
+      // -IATA RWY XX — actuel Xkt — TAF : Xkt (HHMMz→HHMMz), Xkt (HHMMz→HHMMz)
       const twAlerts = (d.tailwindWatch || []).filter(tw => tw.alert || tw.forecastAlerts.length);
-      const twItems  = [];
-      if (!twAlerts.length) {
-        twItems.push('-NIL');
-      } else {
-        twAlerts.forEach(tw => {
-          const parts = [];
-          if (tw.alert && tw.currentTW !== null) parts.push(`${tw.currentTW}kt actuel ${tw.runway}`);
-          tw.forecastAlerts.forEach(fa => {
-            const hh = s => { const x = new Date(s * 1000); return `${String(x.getUTCHours()).padStart(2,'0')}${String(x.getUTCMinutes()).padStart(2,'0')}z`; };
-            parts.push(`prévu ${fa.tailwindKt}kt ${fa.runway} (${hh(fa.periodStart)}/${hh(fa.periodEnd)})`);
-          });
-          twItems.push(`-${tw.iata} — ${parts.join(' / ')}`);
-        });
-      }
+      const twItems  = !twAlerts.length ? ['-NIL'] : twAlerts.map(tw => {
+        const runway = tw.runway ?? tw.forecastAlerts[0]?.runway ?? '';
+        const parts  = [];
+
+        if (tw.alert && tw.currentTW !== null) {
+          parts.push(`actuel ${tw.currentTW}kt`);
+        }
+        if (tw.forecastAlerts.length) {
+          const fcsts = tw.forecastAlerts
+            .map(fa => `${fa.tailwindKt}kt (${utcZ(fa.periodStart)}→${utcZ(fa.periodEnd)})`);
+          parts.push(`TAF : ${fcsts.join(', ')}`);
+        }
+
+        return `-${tw.iata} ${runway} — ${parts.join(' — ')}`;
+      });
       section('Vent arrière :', twItems);
 
-      // ── Carburant ───────────────────────────────────────────────────────
+      // Sections manuelles
       const carb = document.getElementById('field-carburant')?.value?.trim();
       section('Carburant :', [carb ? `-${carb}` : '-NIL']);
-
-      // ── Géopolitique ──────────────────────────────────────────────────
       const geo = document.getElementById('field-geopolitique')?.value?.trim();
       section('Géopolitique :', [geo ? `-${geo}` : '-NIL']);
-
-      // ── Effectif DSP ───────────────────────────────────────────────────
       const dsp = document.getElementById('field-dsp')?.value?.trim();
       section('Effectif DSP :', [`-${dsp || 'OK'}`]);
 
-      // Assemblage : HTML utilise <br> pour les sauts de ligne
-      const plain = plainLines.join('\n').trimEnd();
-      const html  = htmlLines.join('<br>\n').trimEnd();
-
-      return { plain, html };
+      return {
+        plain: plainLines.join('\n').trimEnd(),
+        html:  htmlLines.join('<br>\n').trimEnd(),
+      };
     }
 
-    // ── Fetch + render ────────────────────────────────────────────────────────
+    // ── Fetch + render ─────────────────────────────────────────────────────
     async function load(force = false) {
       const age = document.getElementById('briefing-age');
       if (age) age.textContent = 'Actualisation…';
@@ -318,9 +288,7 @@ import '../styles/global.css';
         renderBriefing(data);
         if (age) {
           const gen = new Date(data.generatedAt);
-          const hh  = String(gen.getUTCHours()).padStart(2, '0');
-          const mm  = String(gen.getUTCMinutes()).padStart(2, '0');
-          age.textContent = `Données à ${hh}${mm}z`;
+          age.textContent = `Données à ${String(gen.getUTCHours()).padStart(2,'0')}${String(gen.getUTCMinutes()).padStart(2,'0')}z`;
         }
       } catch (e) {
         const form = document.getElementById('briefing-form');
@@ -329,13 +297,11 @@ import '../styles/global.css';
       }
     }
 
-    // ── Boutons ───────────────────────────────────────────────────────────────
+    // ── Boutons ─────────────────────────────────────────────────────────
     document.getElementById('btn-refresh')?.addEventListener('click', () => load(true));
-
     document.getElementById('btn-copy')?.addEventListener('click', async () => {
       const { plain, html } = buildCopyContent();
       try {
-        // Dual-format : HTML pour les éditeurs rich-text, plain pour le reste
         if (typeof ClipboardItem !== 'undefined') {
           await navigator.clipboard.write([
             new ClipboardItem({
@@ -344,21 +310,16 @@ import '../styles/global.css';
             }),
           ]);
         } else {
-          // Fallback navigateurs anciens
           await navigator.clipboard.writeText(plain);
         }
         const toast = document.getElementById('toast-copy');
         if (toast) {
-          toast.classList.remove('opacity-0');
-          toast.classList.add('opacity-100');
+          toast.classList.remove('opacity-0'); toast.classList.add('opacity-100');
           setTimeout(() => { toast.classList.remove('opacity-100'); toast.classList.add('opacity-0'); }, 2500);
         }
-      } catch (_) {
-        prompt('Copier ce texte :', plain);
-      }
+      } catch (_) { prompt('Copier ce texte :', plain); }
     });
 
-    // ── Init ──────────────────────────────────────────────────────────────────
     load();
     setInterval(() => load(), 10 * 60 * 1000);
 

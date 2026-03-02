@@ -69,11 +69,10 @@ import '../styles/global.css';
   <script is:inline>
   (function () {
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
     const SEV_COLORS = {
-      red:    { dot: 'bg-red-500',    badge: 'bg-red-100 text-red-700',    border: 'border-red-200' },
-      orange: { dot: 'bg-orange-400', badge: 'bg-orange-100 text-orange-700', border: 'border-orange-200' },
-      yellow: { dot: 'bg-yellow-400', badge: 'bg-yellow-100 text-yellow-700', border: 'border-yellow-200' },
+      red:    { dot: 'bg-red-500',    badge: 'bg-red-100 text-red-700' },
+      orange: { dot: 'bg-orange-400', badge: 'bg-orange-100 text-orange-700' },
+      yellow: { dot: 'bg-yellow-400', badge: 'bg-yellow-100 text-yellow-700' },
     };
 
     function sectionHeader(icon, title, badge) {
@@ -105,9 +104,7 @@ import '../styles/global.css';
       if (!form) return;
       let html = '';
 
-      // ── Météo hors Europe ──────────────────────────────────────────────────
       html += sectionHeader('🌩', 'Météo hors Europe', { cls: 'bg-green-100 text-green-700', label: '✓ Auto · 6h' });
-
       if (!data.meteoHorsEurope.length) {
         html += nilLine();
       } else {
@@ -148,7 +145,6 @@ import '../styles/global.css';
         });
       }
 
-      // ── Perturbation tropicale ─────────────────────────────────────────────
       html += sectionHeader('🌀', 'Perturbation tropicale', { cls: 'bg-green-100 text-green-700', label: '✓ Auto' });
       if (!data.tropicale.length) {
         html += nilLine();
@@ -163,7 +159,6 @@ import '../styles/global.css';
         });
       }
 
-      // ── Activité volcanique ────────────────────────────────────────────────
       html += sectionHeader('🌋', 'Activité volcanique', { cls: 'bg-green-100 text-green-700', label: '✓ Auto · VAAC' });
       if (!data.volcanique.length) {
         html += nilLine();
@@ -178,7 +173,6 @@ import '../styles/global.css';
         });
       }
 
-      // ── Vent arrière SXM / SJO ─────────────────────────────────────────────
       html += sectionHeader('💨', 'Vent arrière (charge offerte)', { cls: 'bg-green-100 text-green-700', label: '✓ Auto · METAR+TAF' });
       if (!data.tailwindWatch.length) {
         html += nilLine();
@@ -189,9 +183,8 @@ import '../styles/global.css';
             content = `<span class="text-gray-400 italic">NIL</span>`;
           } else {
             const parts = [];
-            if (tw.alert && tw.currentTW !== null) {
+            if (tw.alert && tw.currentTW !== null)
               parts.push(`<span class="font-semibold text-orange-600">Vent arrière actuel ${tw.currentTW}kt ${tw.runway ?? ''}</span>`);
-            }
             tw.forecastAlerts.forEach(fa => {
               const hh = d => { const x = new Date(d * 1000); return `${String(x.getUTCHours()).padStart(2,'0')}${String(x.getUTCMinutes()).padStart(2,'0')}z`; };
               parts.push(`Prévu ${fa.tailwindKt}kt ${fa.runway} (${hh(fa.periodStart)}/${hh(fa.periodEnd)})`);
@@ -207,15 +200,12 @@ import '../styles/global.css';
         });
       }
 
-      // ── Carburant (manuel) ─────────────────────────────────────────────────
       html += sectionHeader('⛽', 'Carburant', { cls: 'bg-orange-100 text-orange-700', label: '✏️ Manuel' });
       html += manualTextarea('field-carburant', 'Ex : Afrique + BZV + HAV', data.carburant);
 
-      // ── Géopolitique (manuel) ──────────────────────────────────────────────
       html += sectionHeader('🌐', 'Géopolitique', { cls: 'bg-orange-100 text-orange-700', label: '✏️ Manuel' });
       html += manualTextarea('field-geopolitique', 'Ex : Survol Afghanistan ok', data.geopolitique);
 
-      // ── Effectif DSP (manuel) ──────────────────────────────────────────────
       html += sectionHeader('👥', 'Effectif DSP', { cls: 'bg-orange-100 text-orange-700', label: '✏️ Manuel' });
       html += `
         <div class="px-6 py-3">
@@ -229,37 +219,34 @@ import '../styles/global.css';
     }
 
     // ── Génération du texte à copier ──────────────────────────────────────────
+    // Headers en MAJUSCULES : format universel, compatible tout portail
     function buildCopyText() {
       if (!window._briefingData) return '';
       const d = window._briefingData;
       const lines = [];
 
-      // ── Météo hors Europe ────────────────────────────────────────────
-      lines.push('**Météo hors Europe :**');
+      lines.push('MÉTÉO HORS EUROPE :');
       if (!d.meteoHorsEurope.length) {
         lines.push('-NIL');
       } else {
         d.meteoHorsEurope.forEach((line, i) => {
           const capaEl = document.querySelector(`[data-field="capa"][data-idx="${i}"]`);
           const degEl  = document.querySelector(`[data-field="deg"][data-idx="${i}"]`);
-          // On ne construit que les parties renseignées
-          const infos = [`ETA ${line.etaZ}`, `Fenêtre ${line.fenetreZ}`];
+          const infos  = [`ETA ${line.etaZ}`, `Fenêtre ${line.fenetreZ}`];
           if (capaEl?.value?.trim()) infos.push(`Capa attente ~${capaEl.value.trim()}min`);
           if (degEl?.value?.trim())  infos.push(`Dégagement ${degEl.value.trim().toUpperCase()}`);
           lines.push(`-${line.phenomenon} ${line.iata} ${line.flight} (${infos.join(' - ')})`);
         });
       }
 
-      // ── Perturbation tropicale ─────────────────────────────────────────
-      lines.push('**Perturbation tropicale :**');
+      lines.push('PERTURBATION TROPICALE :');
       if (!d.tropicale.length) {
         lines.push('-NIL');
       } else {
         d.tropicale.forEach(tc => lines.push(`-${tc.name} — ${tc.basin} — ${tc.category} — ${tc.windKt}kt`));
       }
 
-      // ── Activité volcanique ────────────────────────────────────────────
-      lines.push('**Activité volcanique :**');
+      lines.push('ACTIVITÉ VOLCANIQUE :');
       if (!d.volcanique.length) {
         lines.push('-NIL');
       } else {
@@ -269,8 +256,7 @@ import '../styles/global.css';
         });
       }
 
-      // ── Vent arrière ────────────────────────────────────────────────────
-      lines.push('**Vent arrière :**');
+      lines.push('VENT ARRIÈRE :');
       const twAlerts = (d.tailwindWatch || []).filter(tw => tw.alert || tw.forecastAlerts.length);
       if (!twAlerts.length) {
         lines.push('-NIL');
@@ -286,18 +272,15 @@ import '../styles/global.css';
         });
       }
 
-      // ── Carburant ───────────────────────────────────────────────────────
-      lines.push('**Carburant :**');
+      lines.push('CARBURANT :');
       const carb = document.getElementById('field-carburant')?.value?.trim();
       lines.push(carb ? `-${carb}` : '-NIL');
 
-      // ── Géopolitique ──────────────────────────────────────────────────
-      lines.push('**Géopolitique :**');
+      lines.push('GÉOPOLITIQUE :');
       const geo = document.getElementById('field-geopolitique')?.value?.trim();
       lines.push(geo ? `-${geo}` : '-NIL');
 
-      // ── Effectif DSP ───────────────────────────────────────────────────
-      lines.push('**Effectif DSP :**');
+      lines.push('EFFECTIF DSP :');
       const dsp = document.getElementById('field-dsp')?.value?.trim();
       lines.push(`-${dsp || 'OK'}`);
 
@@ -308,14 +291,12 @@ import '../styles/global.css';
     async function load(force = false) {
       const age = document.getElementById('briefing-age');
       if (age) age.textContent = 'Actualisation…';
-
       try {
         const r = await fetch(`/api/briefing${force ? '?force=1' : ''}`);
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data = await r.json();
         window._briefingData = data;
         renderBriefing(data);
-
         if (age) {
           const gen = new Date(data.generatedAt);
           const hh  = String(gen.getUTCHours()).padStart(2, '0');
@@ -324,14 +305,13 @@ import '../styles/global.css';
         }
       } catch (e) {
         const form = document.getElementById('briefing-form');
-        if (form) form.innerHTML = `<div class="px-6 py-8 text-center text-red-500 text-sm">⚠️ Erreur de chargement : ${e.message}</div>`;
+        if (form) form.innerHTML = `<div class="px-6 py-8 text-center text-red-500 text-sm">⚠️ Erreur : ${e.message}</div>`;
         if (age) age.textContent = 'Erreur';
       }
     }
 
     // ── Boutons ───────────────────────────────────────────────────────────────
     document.getElementById('btn-refresh')?.addEventListener('click', () => load(true));
-
     document.getElementById('btn-copy')?.addEventListener('click', async () => {
       const text = buildCopyText();
       try {
@@ -342,12 +322,9 @@ import '../styles/global.css';
           toast.classList.add('opacity-100');
           setTimeout(() => { toast.classList.remove('opacity-100'); toast.classList.add('opacity-0'); }, 2500);
         }
-      } catch (_) {
-        prompt('Copier ce texte :', text);
-      }
+      } catch (_) { prompt('Copier ce texte :', text); }
     });
 
-    // ── Init ──────────────────────────────────────────────────────────────────
     load();
     setInterval(() => load(), 10 * 60 * 1000);
 

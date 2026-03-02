@@ -1,17 +1,13 @@
 // src/lib/tailwindMonitor.ts
 // ─── Vent arrière — SXM (TNCM) + SJO (MROC) ──────────────────────────────────
-// Calcule la composante vent arrière sur les pistes AF pour les terrains
-// sensibles à la restriction de charge offerte.
-// Source : AviationWeather.gov METAR+TAF API (gratuit, sans clé)
-
 import { redis } from './redis';
 
 export interface RunwayWindComponents {
-  runway:      string;  // "RWY 10"
-  heading:     number;  // cap piste °
-  headwindKt:  number;  // + = vent face
-  tailwindKt:  number;  // + = vent arrière (restriction)
-  crosswindKt: number;
+  runway:      string;
+  heading:     number;
+  headwindKt:  number;   // + = vent face (1 décimale)
+  tailwindKt:  number;   // + = vent arrière — arrondi à l'entier supérieur
+  crosswindKt: number;   // 1 décimale
 }
 
 export interface TailwindStatus {
@@ -20,10 +16,10 @@ export interface TailwindStatus {
   name:         string;
   metar: {
     raw:        string;
-    windDir:    number | null;  // null = variable
+    windDir:    number | null;
     windSpdKt:  number;
     windGstKt:  number | null;
-    obsTime:    string;         // ISO
+    obsTime:    string;
   } | null;
   worstRunway:    RunwayWindComponents | null;
   tailwindAlert:  boolean;
@@ -38,11 +34,9 @@ export interface TailwindStatus {
   }[];
 }
 
-// ─── Terrains sensibles ────────────────────────────────────────────────────────
 const TAILWIND_AIRPORTS = [
   {
     icao: 'TNCM', iata: 'SXM', name: 'Sint Maarten',
-    // Piste unique 10/28 — AF atterrit généralement RWY10 (cap 100°)
     runways: [
       { heading: 100, name: 'RWY 10' },
       { heading: 280, name: 'RWY 28' },
@@ -59,7 +53,6 @@ const TAILWIND_AIRPORTS = [
   },
 ] as const;
 
-// ─── Calcul composante ────────────────────────────────────────────────────────
 function computeRunwayWind(
   windDir: number,
   windSpd: number,
@@ -67,13 +60,14 @@ function computeRunwayWind(
 ): RunwayWindComponents {
   const angle       = ((windDir - rwy.heading) + 360) % 360;
   const rad         = angle * Math.PI / 180;
-  const headwindKt  = Math.round(windSpd * Math.cos(rad) * 10) / 10;
-  const tailwindKt  = Math.round(-headwindKt * 10) / 10;
+  const headwindRaw = windSpd * Math.cos(rad);
+  const headwindKt  = Math.round(headwindRaw * 10) / 10;
+  // Arrondi à l'entier supérieur pour être conservateur (sécurité)
+  const tailwindKt  = Math.ceil(-headwindRaw);
   const crosswindKt = Math.round(Math.abs(windSpd * Math.sin(rad)) * 10) / 10;
   return { runway: rwy.name, heading: rwy.heading, headwindKt, tailwindKt, crosswindKt };
 }
 
-/** Retourne la piste avec le vent arrière maximum (situation la plus défavorable) */
 function worstCaseRunway(
   windDir: number | null,
   windSpd: number,
@@ -85,7 +79,6 @@ function worstCaseRunway(
     .sort((a, b) => b.tailwindKt - a.tailwindKt)[0];
 }
 
-// ─── Parse vent METAR ─────────────────────────────────────────────────────────
 function parseMetarWind(raw: string) {
   const m = raw.match(/\b(VRB|\d{3})(\d{2,3})(G(\d{2,3}))?KT\b/);
   if (!m) return { windDir: null as number | null, windSpdKt: 0, windGstKt: null as number | null };
@@ -96,11 +89,9 @@ function parseMetarWind(raw: string) {
   };
 }
 
-// ─── Cache ────────────────────────────────────────────────────────────────────
 const KV_KEY = 'tailwind_status_cache';
-const KV_TTL = 15 * 60; // 15 min
+const KV_TTL = 15 * 60;
 
-// ─── Fetch principal ──────────────────────────────────────────────────────────
 export async function fetchTailwindStatus(): Promise<TailwindStatus[]> {
   if (redis) {
     try {
@@ -116,7 +107,6 @@ export async function fetchTailwindStatus(): Promise<TailwindStatus[]> {
       `https://aviationweather.gov/api/data/metar?ids=${icaos}&format=json&hours=2`,
       { headers: { 'User-Agent': 'SkyWatch/1.0 dispatch-tool' }, signal: AbortSignal.timeout(10000) }
     ).then(r => r.ok ? r.json() as Promise<any[]> : Promise.resolve([])).catch(() => [] as any[]),
-
     fetch(
       `https://aviationweather.gov/api/data/taf?ids=${icaos}&format=json&metar=false`,
       { headers: { 'User-Agent': 'SkyWatch/1.0 dispatch-tool' }, signal: AbortSignal.timeout(10000) }

@@ -30,8 +30,8 @@ export interface BriefingData {
   effectifDsp:     string;
 }
 
-// ─── Cache mémoire (survit entre requêtes sur la même instance) ───────────────
-const CACHE_TTL = 5 * 60 * 1000; // 5 min
+// ─── Cache mémoire ───────────────────────────────────────────────────────────────
+const CACHE_TTL = 5 * 60 * 1000;
 let _cache: { ts: number; data: BriefingData } | null = null;
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -62,7 +62,6 @@ function fmtZ(isoOrUnix: string | number): string {
 export const prerender = false;
 
 export const GET: APIRoute = async () => {
-  // Cache mémoire — évite de refetcher toutes les sources à chaque frappe
   if (_cache && Date.now() - _cache.ts < CACHE_TTL) {
     return new Response(JSON.stringify(_cache.data), {
       headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' },
@@ -124,27 +123,30 @@ export const GET: APIRoute = async () => {
       }
     }
 
+    // Tri par sévérité desc puis ETA croissant
     meteoLines.sort((a, b) =>
       SEV_ORDER[a.severity] - SEV_ORDER[b.severity] ||
       a.etaZ.localeCompare(b.etaZ)
     );
 
-    // ── Perturbations tropicales ────────────────────────────────────────────
-    // Filtres : exclure les marqueurs de saison (SEASON), les INVEST,
-    //           et tout système avec 0kt (pas de vent = pas de perturbation réelle)
-    const tropicale = cyclones
-      .filter(c =>
-        c.name !== 'SEASON' &&
-        c.category !== 'INVEST' &&
-        c.windKt > 0
-      )
-      .map(c => ({
-        name: c.name, basin: c.basin,
-        category: c.category, windKt: c.windKt,
-        affected: c.affectedAirports,
-      }));
+    // Déduplication par vol + destination :
+    // Plusieurs phénomènes peuvent toucher le même vol (Orages + CB/TCU + Vis réduite).
+    // On garde uniquement le plus sévère. Comme le tableau est déjà trié rouge en premier,
+    // la première occurrence de chaque clé vol+dest est forcément la plus impactante.
+    const dedupKeys = new Set<string>();
+    const meteoHorsEurope = meteoLines.filter(line => {
+      const k = `${line.flight}-${line.iata}`;
+      if (dedupKeys.has(k)) return false;
+      dedupKeys.add(k);
+      return true;
+    });
 
-    // ── Volcanique ───────────────────────────────────────────────────────
+    // ── Perturbations tropicales ────────────────────────────────────────────
+    const tropicale = cyclones
+      .filter(c => c.name !== 'SEASON' && c.category !== 'INVEST' && c.windKt > 0)
+      .map(c => ({ name: c.name, basin: c.basin, category: c.category, windKt: c.windKt, affected: c.affectedAirports }));
+
+    // ── Volcanique ────────────────────────────────────────────────────────
     const volcanique = (vaacAlerts as any[]).map(a => ({
       volcanoName: a.volcanoName ?? 'Volcan',
       country:     a.country    ?? '',
@@ -164,7 +166,7 @@ export const GET: APIRoute = async () => {
 
     const data: BriefingData = {
       generatedAt:     new Date().toISOString(),
-      meteoHorsEurope: meteoLines,
+      meteoHorsEurope,
       tropicale,
       volcanique,
       tailwindWatch,

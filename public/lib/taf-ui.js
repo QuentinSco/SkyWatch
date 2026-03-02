@@ -347,9 +347,14 @@
     return best;
   }
 
+  // Ne construit le snippet vent que si le groupe TAF contient explicitement un token vent.
+  // Cela évite d'afficher un vent hérité injecté par l'API NOAA dans les groupes
+  // PROB/TEMPO qui n'ont pas de vent dans le raw TAF.
   function buildFcstSnippet(fcst) {
     const parts = [];
-    if (fcst.wdir != null && fcst.wspd != null) {
+    const raw = fcst.rawFcst ?? fcst.fcstStr ?? '';
+    const hasExplicitWind = /\b\d{3}\d{2}(G\d{2})?KT\b/.test(raw);
+    if (hasExplicitWind && fcst.wdir != null && fcst.wspd != null) {
       const dir = String(fcst.wdir).padStart(3, '0');
       const spd = String(fcst.wspd).padStart(2, '0');
       const gst = fcst.wgst ? `G${String(fcst.wgst).padStart(2, '0')}` : '';

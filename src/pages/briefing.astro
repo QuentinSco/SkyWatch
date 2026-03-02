@@ -234,30 +234,32 @@ import '../styles/global.css';
       const d = window._briefingData;
       const lines = [];
 
-      // Météo hors Europe
-      lines.push('Météo hors Europe :');
+      // ── Météo hors Europe ────────────────────────────────────────────
+      lines.push('**Météo hors Europe :**');
       if (!d.meteoHorsEurope.length) {
         lines.push('-NIL');
       } else {
         d.meteoHorsEurope.forEach((line, i) => {
           const capaEl = document.querySelector(`[data-field="capa"][data-idx="${i}"]`);
           const degEl  = document.querySelector(`[data-field="deg"][data-idx="${i}"]`);
-          const capa   = capaEl?.value ? `Capa attente ~${capaEl.value}min` : 'Capa attente ???';
-          const deg    = degEl?.value  ? `Dégagement ${degEl.value.toUpperCase()}` : 'Dégagement ???';
-          lines.push(`-${line.phenomenon} ${line.iata} ${line.flight} (ETA ${line.etaZ} - Fenêtre ${line.fenetreZ} - ${capa} - ${deg})`);
+          // On ne construit que les parties renseignées
+          const infos = [`ETA ${line.etaZ}`, `Fenêtre ${line.fenetreZ}`];
+          if (capaEl?.value?.trim()) infos.push(`Capa attente ~${capaEl.value.trim()}min`);
+          if (degEl?.value?.trim())  infos.push(`Dégagement ${degEl.value.trim().toUpperCase()}`);
+          lines.push(`-${line.phenomenon} ${line.iata} ${line.flight} (${infos.join(' - ')})`);
         });
       }
 
-      // Perturbation tropicale
-      lines.push('Perturbation tropicale :');
+      // ── Perturbation tropicale ─────────────────────────────────────────
+      lines.push('**Perturbation tropicale :**');
       if (!d.tropicale.length) {
         lines.push('-NIL');
       } else {
         d.tropicale.forEach(tc => lines.push(`-${tc.name} — ${tc.basin} — ${tc.category} — ${tc.windKt}kt`));
       }
 
-      // Activité volcanique
-      lines.push('Activité volcanique :');
+      // ── Activité volcanique ────────────────────────────────────────────
+      lines.push('**Activité volcanique :**');
       if (!d.volcanique.length) {
         lines.push('-NIL');
       } else {
@@ -267,8 +269,8 @@ import '../styles/global.css';
         });
       }
 
-      // Vent arrière
-      lines.push('Vent arrière :');
+      // ── Vent arrière ────────────────────────────────────────────────────
+      lines.push('**Vent arrière :**');
       const twAlerts = (d.tailwindWatch || []).filter(tw => tw.alert || tw.forecastAlerts.length);
       if (!twAlerts.length) {
         lines.push('-NIL');
@@ -284,18 +286,18 @@ import '../styles/global.css';
         });
       }
 
-      // Carburant
-      lines.push('Carburant :');
+      // ── Carburant ───────────────────────────────────────────────────────
+      lines.push('**Carburant :**');
       const carb = document.getElementById('field-carburant')?.value?.trim();
-      lines.push(carb ? `-${carb}` : '-???');
+      lines.push(carb ? `-${carb}` : '-NIL');
 
-      // Géopolitique
-      lines.push('Géopolitique :');
+      // ── Géopolitique ──────────────────────────────────────────────────
+      lines.push('**Géopolitique :**');
       const geo = document.getElementById('field-geopolitique')?.value?.trim();
-      lines.push(geo ? `-${geo}` : '-???');
+      lines.push(geo ? `-${geo}` : '-NIL');
 
-      // Effectif DSP
-      lines.push('Effectif DSP :');
+      // ── Effectif DSP ───────────────────────────────────────────────────
+      lines.push('**Effectif DSP :**');
       const dsp = document.getElementById('field-dsp')?.value?.trim();
       lines.push(`-${dsp || 'OK'}`);
 
@@ -341,15 +343,12 @@ import '../styles/global.css';
           setTimeout(() => { toast.classList.remove('opacity-100'); toast.classList.add('opacity-0'); }, 2500);
         }
       } catch (_) {
-        // Fallback : sélection manuelle
         prompt('Copier ce texte :', text);
       }
     });
 
     // ── Init ──────────────────────────────────────────────────────────────────
     load();
-
-    // Auto-refresh toutes les 10 min
     setInterval(() => load(), 10 * 60 * 1000);
 
   })();

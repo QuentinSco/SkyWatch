@@ -82,8 +82,6 @@ import '../styles/global.css';
       >${value}</textarea></div>`;
     }
 
-    // Helper UTC avec jour : "DD/HHMMz" (minutes omises si 00)
-    // Ex : Feb 2 00:00z → "02/00z" | Feb 2 09:30z → "02/0930z"
     const utcDZ = ms => {
       const d = new Date(typeof ms === 'number' && ms < 1e12 ? ms * 1000 : ms);
       const dd = String(d.getUTCDate()).padStart(2, '0');
@@ -98,7 +96,6 @@ import '../styles/global.css';
       if (!form) return;
       let html = '';
 
-      // Météo hors Europe
       html += sectionHeader('🌩', 'Météo hors Europe', { cls: 'bg-green-100 text-green-700', label: '✓ Auto · 6h' });
       if (!data.meteoHorsEurope.length) { html += nilLine(); }
       else data.meteoHorsEurope.forEach((line, i) => {
@@ -130,7 +127,6 @@ import '../styles/global.css';
         </div>`;
       });
 
-      // Perturbation tropicale
       html += sectionHeader('🌀', 'Perturbation tropicale', { cls: 'bg-green-100 text-green-700', label: '✓ Auto' });
       if (!data.tropicale.length) { html += nilLine(); }
       else data.tropicale.forEach(tc => {
@@ -141,7 +137,6 @@ import '../styles/global.css';
         </div>`;
       });
 
-      // Volcanique
       html += sectionHeader('🌋', 'Activité volcanique', { cls: 'bg-green-100 text-green-700', label: '✓ Auto · VAAC' });
       if (!data.volcanique.length) { html += nilLine(); }
       else data.volcanique.forEach(v => {
@@ -152,7 +147,7 @@ import '../styles/global.css';
         </div>`;
       });
 
-      // Vent arrière — TAF uniquement (pas de METAR / actuel)
+      // Vent arrière — chips amber + format wspd/wgst explicite
       html += sectionHeader('💨', 'Vent arrière (charge offerte)', { cls: 'bg-green-100 text-green-700', label: '✓ TAF · 6h' });
       if (!data.tailwindWatch.length) { html += nilLine(); }
       else data.tailwindWatch.forEach(tw => {
@@ -167,9 +162,10 @@ import '../styles/global.css';
         }
         const runway = tw.forecastAlerts[0].runway;
         const chips  = tw.forecastAlerts.map(fa => {
-          const gust = fa.hasGust ? ' <span class="opacity-60 text-[9px]">rafale</span>' : '';
-          return `<span class="inline-flex items-center gap-0.5 px-2 py-0.5 rounded bg-yellow-50 border border-yellow-200 text-yellow-700 text-xs font-mono">
-            ${fa.tailwindKt}kt${gust}&nbsp;<span class="font-normal text-yellow-600">${utcDZ(fa.periodStart)}→${utcDZ(fa.periodEnd)}</span>
+          // Format explicite : 17G27kt au lieu de "26kt rafale"
+          const windLabel = fa.hasGust ? `${fa.wspdBase}G${fa.wgst}kt` : `${fa.tailwindKt}kt`;
+          return `<span class="inline-flex items-center gap-0.5 px-2 py-0.5 rounded bg-amber-100 border border-amber-300 text-amber-800 text-xs font-mono font-semibold">
+            ${windLabel}&nbsp;<span class="font-normal text-amber-700">${utcDZ(fa.periodStart)}→${utcDZ(fa.periodEnd)}</span>
           </span>`;
         }).join(' ');
         html += `<div class="px-6 py-3 border-b border-gray-50 last:border-b-0">
@@ -182,7 +178,6 @@ import '../styles/global.css';
         </div>`;
       });
 
-      // Sections manuelles
       html += sectionHeader('⛽', 'Carburant', { cls: 'bg-orange-100 text-orange-700', label: '✏️ Manuel' });
       html += manualTextarea('field-carburant', 'Ex : Afrique + BZV + HAV', data.carburant);
       html += sectionHeader('🌐', 'Géopolitique', { cls: 'bg-orange-100 text-orange-700', label: '✏️ Manuel' });
@@ -197,7 +192,7 @@ import '../styles/global.css';
       form.innerHTML = html;
     }
 
-    // ── Génération du contenu à copier (dual-format) ───────────────────────────
+    // ── Génération du contenu à copier ─────────────────────────────────────
     function buildCopyContent() {
       if (!window._briefingData) return { plain: '', html: '' };
       const d = window._briefingData;
@@ -212,7 +207,6 @@ import '../styles/global.css';
         htmlLines.push('');
       }
 
-      // Météo hors Europe
       const meteoItems = !d.meteoHorsEurope.length ? ['-NIL'] :
         d.meteoHorsEurope.map((line, i) => {
           const capaEl = document.querySelector(`[data-field="capa"][data-idx="${i}"]`);
@@ -232,12 +226,14 @@ import '../styles/global.css';
         !d.volcanique.length ? ['-NIL'] :
         d.volcanique.map(v => `-${v.volcanoName}${v.flLevel ? ' ' + v.flLevel : ''} (VAAC ${v.vaac})`));
 
-      // Vent arrière — TAF uniquement, format : -IATA RWY XX — TAF : Xkt (DD/HHz→DD/HHz)
+      // Vent arrière — texte copié : wspd/wgst si rafale, sinon tailwindKt seul
       const twWithTAF = (d.tailwindWatch || []).filter(tw => tw.forecastAlerts.length > 0);
       const twItems   = !twWithTAF.length ? ['-NIL'] : twWithTAF.map(tw => {
         const runway = tw.forecastAlerts[0].runway;
-        const fcsts  = tw.forecastAlerts
-          .map(fa => `${fa.tailwindKt}kt (${utcDZ(fa.periodStart)}→${utcDZ(fa.periodEnd)})`);
+        const fcsts  = tw.forecastAlerts.map(fa => {
+          const windStr = fa.hasGust ? `${fa.wspdBase}G${fa.wgst}kt` : `${fa.tailwindKt}kt`;
+          return `${windStr} (${utcDZ(fa.periodStart)}→${utcDZ(fa.periodEnd)})`;
+        });
         return `-${tw.iata} ${runway} — TAF : ${fcsts.join(', ')}`;
       });
       section('Vent arrière :', twItems);
@@ -255,7 +251,6 @@ import '../styles/global.css';
       };
     }
 
-    // ── Fetch + render ─────────────────────────────────────────────────────
     async function load(force = false) {
       const age = document.getElementById('briefing-age');
       if (age) age.textContent = 'Actualisation…';

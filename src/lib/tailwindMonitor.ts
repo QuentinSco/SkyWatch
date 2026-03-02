@@ -6,7 +6,7 @@ export interface RunwayWindComponents {
   runway:      string;
   heading:     number;
   headwindKt:  number;
-  tailwindKt:  number;   // arrondi à l'entier supérieur (Math.ceil)
+  tailwindKt:  number;
   crosswindKt: number;
 }
 
@@ -29,7 +29,9 @@ export interface TailwindStatus {
     periodEnd:    number;
     windDir:      number;
     windSpdKt:    number;  // vitesse effective utilisée (max(vent, rafale))
-    hasGust:      boolean; // vrai si la valeur effective vient d'une rafale TAF
+    wspdBase:     number;  // vent moyen brut (avant calcul max)
+    wgst:         number;  // rafale brute (avant calcul max)
+    hasGust:      boolean;
     tailwindKt:   number;
     runway:       string;
   }[];
@@ -86,15 +88,12 @@ function parseMetarWind(raw: string) {
   };
 }
 
-// Extrait la rafale depuis le groupe vent d'une ligne TAF brute
-// Ex : "09017G27KT" → 27  |  "09017KT" → 0
 function parseTafGust(raw: string | undefined): number {
   if (!raw) return 0;
   const m = raw.match(/\d{3}(\d{2,3})G(\d{2,3})KT/i);
   return m ? parseInt(m[2], 10) : 0;
 }
 
-// Clef KV versioinnée — changer le suffixe invalide immédiatement l'ancien cache
 const KV_KEY = 'tailwind_v2';
 const KV_TTL = 15 * 60;
 
@@ -134,7 +133,6 @@ export async function fetchTailwindStatus(): Promise<TailwindStatus[]> {
   const limit = now + 6 * 60 * 60 * 1000;
 
   const statuses: TailwindStatus[] = TAILWIND_AIRPORTS.map(ap => {
-    // ── METAR (utilisé uniquement pour l'alerte tableau de bord, pas pour le briefing) ──
     const raw      = metarByIcao[ap.icao];
     const rawStr   = raw?.rawOb ?? raw?.rawMETAR ?? '';
     const parsed   = parseMetarWind(rawStr);
@@ -149,18 +147,13 @@ export async function fetchTailwindStatus(): Promise<TailwindStatus[]> {
     const worst        = worstCaseRunway(parsed.windDir, parsed.windSpdKt, ap.runways);
     const tailwindAlert = worst !== null && worst.tailwindKt >= ap.thresholdKt;
 
-    // ── TAF — prévisions 6h
-    // Priorité pour les rafales :
-    //   1. f.wgst   (champ JSON décodé par AviationWeather)
-    //   2. parseTafGust(f.fcstText / f.windGroup / f.raw) — fallback sur texte brut
     const fcsts: any[] = tafByIcao[ap.icao]?.fcsts ?? [];
     const forecastAlerts = fcsts
       .filter(f => f.timeFrom * 1000 < limit && f.timeTo * 1000 > now)
       .flatMap(f => {
         const wdir = f.wdir === 'VRB' || f.wdir == null ? null : Number(f.wdir);
-        const wspd = Number(f.wspd  ?? 0);
+        const wspd = Number(f.wspd ?? 0);
 
-        // wgst : champ JSON décodé — si absent ou 0, on essaie le texte brut de la période
         const wgstJson = Number(f.wgst ?? 0);
         const wgstRaw  = wgstJson > 0 ? wgstJson
           : parseTafGust(f.fcstText ?? f.windGroup ?? f.windSpd ?? f.rawText ?? '');
@@ -174,6 +167,8 @@ export async function fetchTailwindStatus(): Promise<TailwindStatus[]> {
           periodEnd:    f.timeTo   as number,
           windDir:      wdir!,
           windSpdKt:    effectiveSpd,
+          wspdBase:     wspd,
+          wgst,
           hasGust:      wgst > wspd,
           tailwindKt:   w.tailwindKt,
           runway:       w.runway,

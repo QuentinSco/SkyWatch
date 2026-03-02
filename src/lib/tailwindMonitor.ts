@@ -86,7 +86,16 @@ function parseMetarWind(raw: string) {
   };
 }
 
-const KV_KEY = 'tailwind_status_cache';
+// Extrait la rafale depuis le groupe vent d'une ligne TAF brute
+// Ex : "09017G27KT" → 27  |  "09017KT" → 0
+function parseTafGust(raw: string | undefined): number {
+  if (!raw) return 0;
+  const m = raw.match(/\d{3}(\d{2,3})G(\d{2,3})KT/i);
+  return m ? parseInt(m[2], 10) : 0;
+}
+
+// Clef KV versioinnée — changer le suffixe invalide immédiatement l'ancien cache
+const KV_KEY = 'tailwind_v2';
 const KV_TTL = 15 * 60;
 
 export async function fetchTailwindStatus(): Promise<TailwindStatus[]> {
@@ -140,15 +149,24 @@ export async function fetchTailwindStatus(): Promise<TailwindStatus[]> {
     const worst        = worstCaseRunway(parsed.windDir, parsed.windSpdKt, ap.runways);
     const tailwindAlert = worst !== null && worst.tailwindKt >= ap.thresholdKt;
 
-    // ── TAF — prévisions 6h : utilise Math.max(vent, rafale) pour être conservateur ──
+    // ── TAF — prévisions 6h
+    // Priorité pour les rafales :
+    //   1. f.wgst   (champ JSON décodé par AviationWeather)
+    //   2. parseTafGust(f.fcstText / f.windGroup / f.raw) — fallback sur texte brut
     const fcsts: any[] = tafByIcao[ap.icao]?.fcsts ?? [];
     const forecastAlerts = fcsts
       .filter(f => f.timeFrom * 1000 < limit && f.timeTo * 1000 > now)
       .flatMap(f => {
-        const wdir         = f.wdir === 'VRB' || f.wdir == null ? null : Number(f.wdir);
-        const wspd         = f.wspd  != null ? Number(f.wspd)  : 0;
-        const wgst         = f.wgst  != null ? Number(f.wgst)  : 0;  // rafales TAF
-        const effectiveSpd = Math.max(wspd, wgst);                    // cas défavorable
+        const wdir = f.wdir === 'VRB' || f.wdir == null ? null : Number(f.wdir);
+        const wspd = Number(f.wspd  ?? 0);
+
+        // wgst : champ JSON décodé — si absent ou 0, on essaie le texte brut de la période
+        const wgstJson = Number(f.wgst ?? 0);
+        const wgstRaw  = wgstJson > 0 ? wgstJson
+          : parseTafGust(f.fcstText ?? f.windGroup ?? f.windSpd ?? f.rawText ?? '');
+        const wgst = Math.max(wgstJson, wgstRaw);
+
+        const effectiveSpd = Math.max(wspd, wgst);
         const w            = worstCaseRunway(wdir, effectiveSpd, ap.runways);
         if (!w || w.tailwindKt < ap.thresholdKt) return [];
         return [{
@@ -172,7 +190,7 @@ export async function fetchTailwindStatus(): Promise<TailwindStatus[]> {
   if (redis) {
     try {
       await redis.set(KV_KEY, statuses, { ex: KV_TTL });
-      console.log('[Tailwind] Cache KV MISS → stocké');
+      console.log('[Tailwind] Cache KV MISS → stocké sous', KV_KEY);
     } catch (e) { console.warn('[Tailwind] KV write:', e); }
   }
 

@@ -77,14 +77,19 @@ import '../styles/global.css';
     function nilLine() { return `<div class="px-6 py-3 text-sm text-gray-400 italic">- NIL</div>`; }
     function manualTextarea(id, placeholder, value = '') {
       return `<div class="px-6 py-3"><textarea id="${id}" rows="2" placeholder="${placeholder}"
-        class="w-full text-sm border border-orange-200 rounded-lg px-3 py-2 bg-orange-50 placeholder-orange-300 focus:outline-none focus:ring-2 focus:ring-orange-300 resize-none font-mono"
+        class="w-full text-sm border border-orange-200 rounded-lg px-3 py-2 bg-orange-50 placeholder-orange-300
+               focus:outline-none focus:ring-2 focus:ring-orange-300 resize-none font-mono"
       >${value}</textarea></div>`;
     }
 
-    // Helper UTC
-    const utcZ = ms => {
+    // Helper UTC avec jour : "DD/HHMMz" (minutes omises si 00)
+    // Ex : Feb 2 00:00z → "02/00z" | Feb 2 09:30z → "02/0930z"
+    const utcDZ = ms => {
       const d = new Date(typeof ms === 'number' && ms < 1e12 ? ms * 1000 : ms);
-      return String(d.getUTCHours()).padStart(2,'0') + String(d.getUTCMinutes()).padStart(2,'0') + 'z';
+      const dd = String(d.getUTCDate()).padStart(2, '0');
+      const hh = String(d.getUTCHours()).padStart(2, '0');
+      const mm = d.getUTCMinutes();
+      return mm ? `${dd}/${hh}${String(mm).padStart(2,'0')}z` : `${dd}/${hh}z`;
     };
 
     // ── Rendu UI ────────────────────────────────────────────────────────────
@@ -111,11 +116,13 @@ import '../styles/global.css';
               <div class="mt-2 flex flex-wrap items-center gap-3">
                 <label class="flex items-center gap-1.5 text-xs text-gray-500">Capa attente
                   <input type="number" min="0" placeholder="min" data-field="capa" data-idx="${i}"
-                    class="w-16 border border-orange-200 rounded-md px-2 py-0.5 bg-orange-50 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-orange-300 text-center" />
+                    class="w-16 border border-orange-200 rounded-md px-2 py-0.5 bg-orange-50 text-xs font-mono
+                           focus:outline-none focus:ring-1 focus:ring-orange-300 text-center" />
                 </label>
                 <label class="flex items-center gap-1.5 text-xs text-gray-500">Dégagement
                   <input type="text" placeholder="ICAO / IATA" data-field="deg" data-idx="${i}"
-                    class="w-24 border border-orange-200 rounded-md px-2 py-0.5 bg-orange-50 text-xs font-mono uppercase focus:outline-none focus:ring-1 focus:ring-orange-300" />
+                    class="w-24 border border-orange-200 rounded-md px-2 py-0.5 bg-orange-50 text-xs font-mono
+                           uppercase focus:outline-none focus:ring-1 focus:ring-orange-300" />
                 </label>
               </div>
             </div>
@@ -145,14 +152,12 @@ import '../styles/global.css';
         </div>`;
       });
 
-      // Vent arrière — refonte de la mise en forme UI
-      html += sectionHeader('💨', 'Vent arrière (charge offerte)', { cls: 'bg-green-100 text-green-700', label: '✓ Auto · METAR+TAF' });
+      // Vent arrière — TAF uniquement (pas de METAR / actuel)
+      html += sectionHeader('💨', 'Vent arrière (charge offerte)', { cls: 'bg-green-100 text-green-700', label: '✓ TAF · 6h' });
       if (!data.tailwindWatch.length) { html += nilLine(); }
       else data.tailwindWatch.forEach(tw => {
-        const hasAlert    = tw.alert && tw.currentTW !== null;
-        const hasForecasts = tw.forecastAlerts.length > 0;
-
-        if (!hasAlert && !hasForecasts) {
+        const hasTAF = tw.forecastAlerts.length > 0;
+        if (!hasTAF) {
           html += `<div class="px-6 py-3 text-sm border-b border-gray-50 last:border-b-0 flex items-center gap-3">
             <span class="font-bold text-gray-800 w-10">${tw.iata}</span>
             <span class="text-gray-300 text-xs">|</span>
@@ -160,33 +165,19 @@ import '../styles/global.css';
           </div>`;
           return;
         }
-
-        // Piste dominante (actuel prioritaire, sinon premier TAF)
-        const runway = tw.runway ?? tw.forecastAlerts[0]?.runway ?? '';
-
-        let actuelHtml = '';
-        if (hasAlert) {
-          actuelHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-xs font-bold">
-            ⚠️ ${tw.currentTW}kt actuel
+        const runway = tw.forecastAlerts[0].runway;
+        const chips  = tw.forecastAlerts.map(fa => {
+          const gust = fa.hasGust ? ' <span class="opacity-60 text-[9px]">rafale</span>' : '';
+          return `<span class="inline-flex items-center gap-0.5 px-2 py-0.5 rounded bg-yellow-50 border border-yellow-200 text-yellow-700 text-xs font-mono">
+            ${fa.tailwindKt}kt${gust}&nbsp;<span class="font-normal text-yellow-600">${utcDZ(fa.periodStart)}→${utcDZ(fa.periodEnd)}</span>
           </span>`;
-        }
-
-        let tafHtml = '';
-        if (hasForecasts) {
-          const tafItems = tw.forecastAlerts.map(fa =>
-            `<span class="inline-flex items-center px-2 py-0.5 rounded bg-yellow-50 border border-yellow-200 text-yellow-700 text-xs font-mono">
-              ${fa.tailwindKt}kt&nbsp;<span class="font-normal text-yellow-600">${utcZ(fa.periodStart)}→${utcZ(fa.periodEnd)}</span>
-            </span>`
-          ).join(' ');
-          tafHtml = `<span class="text-xs text-gray-400 mr-1">TAF :</span>${tafItems}`;
-        }
-
+        }).join(' ');
         html += `<div class="px-6 py-3 border-b border-gray-50 last:border-b-0">
           <div class="flex flex-wrap items-center gap-2">
             <span class="font-bold text-gray-900 text-sm w-10">${tw.iata}</span>
             <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-mono">${runway}</span>
-            ${actuelHtml}
-            ${tafHtml}
+            <span class="text-xs text-gray-400">TAF :</span>
+            ${chips}
           </div>
         </div>`;
       });
@@ -199,13 +190,14 @@ import '../styles/global.css';
       html += sectionHeader('👥', 'Effectif DSP', { cls: 'bg-orange-100 text-orange-700', label: '✏️ Manuel' });
       html += `<div class="px-6 py-3">
         <input id="field-dsp" type="text" value="${data.effectifDsp || 'OK'}"
-          class="w-40 border border-orange-200 rounded-lg px-3 py-1.5 bg-orange-50 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-300" />
+          class="w-40 border border-orange-200 rounded-lg px-3 py-1.5 bg-orange-50 text-sm font-mono
+                 focus:outline-none focus:ring-2 focus:ring-orange-300" />
       </div>`;
 
       form.innerHTML = html;
     }
 
-    // ── Génération du contenu à copier (dual-format HTML + plain) ────────────
+    // ── Génération du contenu à copier (dual-format) ───────────────────────────
     function buildCopyContent() {
       if (!window._briefingData) return { plain: '', html: '' };
       const d = window._briefingData;
@@ -232,37 +224,24 @@ import '../styles/global.css';
         });
       section('Météo hors Europe :', meteoItems);
 
-      // Perturbation tropicale
-      const tropiItems = !d.tropicale.length ? ['-NIL'] :
-        d.tropicale.map(tc => `-${tc.name} — ${tc.basin} — ${tc.category} — ${tc.windKt}kt`);
-      section('Perturbation tropicale :', tropiItems);
+      section('Perturbation tropicale :',
+        !d.tropicale.length ? ['-NIL'] :
+        d.tropicale.map(tc => `-${tc.name} — ${tc.basin} — ${tc.category} — ${tc.windKt}kt`));
 
-      // Volcanique
-      const volcaItems = !d.volcanique.length ? ['-NIL'] :
-        d.volcanique.map(v => `-${v.volcanoName}${v.flLevel ? ' ' + v.flLevel : ''} (VAAC ${v.vaac})`);
-      section('Activité volcanique :', volcaItems);
+      section('Activité volcanique :',
+        !d.volcanique.length ? ['-NIL'] :
+        d.volcanique.map(v => `-${v.volcanoName}${v.flLevel ? ' ' + v.flLevel : ''} (VAAC ${v.vaac})`));
 
-      // Vent arrière — format restructuré :
-      // -IATA RWY XX — actuel Xkt — TAF : Xkt (HHMMz→HHMMz), Xkt (HHMMz→HHMMz)
-      const twAlerts = (d.tailwindWatch || []).filter(tw => tw.alert || tw.forecastAlerts.length);
-      const twItems  = !twAlerts.length ? ['-NIL'] : twAlerts.map(tw => {
-        const runway = tw.runway ?? tw.forecastAlerts[0]?.runway ?? '';
-        const parts  = [];
-
-        if (tw.alert && tw.currentTW !== null) {
-          parts.push(`actuel ${tw.currentTW}kt`);
-        }
-        if (tw.forecastAlerts.length) {
-          const fcsts = tw.forecastAlerts
-            .map(fa => `${fa.tailwindKt}kt (${utcZ(fa.periodStart)}→${utcZ(fa.periodEnd)})`);
-          parts.push(`TAF : ${fcsts.join(', ')}`);
-        }
-
-        return `-${tw.iata} ${runway} — ${parts.join(' — ')}`;
+      // Vent arrière — TAF uniquement, format : -IATA RWY XX — TAF : Xkt (DD/HHz→DD/HHz)
+      const twWithTAF = (d.tailwindWatch || []).filter(tw => tw.forecastAlerts.length > 0);
+      const twItems   = !twWithTAF.length ? ['-NIL'] : twWithTAF.map(tw => {
+        const runway = tw.forecastAlerts[0].runway;
+        const fcsts  = tw.forecastAlerts
+          .map(fa => `${fa.tailwindKt}kt (${utcDZ(fa.periodStart)}→${utcDZ(fa.periodEnd)})`);
+        return `-${tw.iata} ${runway} — TAF : ${fcsts.join(', ')}`;
       });
       section('Vent arrière :', twItems);
 
-      // Sections manuelles
       const carb = document.getElementById('field-carburant')?.value?.trim();
       section('Carburant :', [carb ? `-${carb}` : '-NIL']);
       const geo = document.getElementById('field-geopolitique')?.value?.trim();
@@ -297,7 +276,6 @@ import '../styles/global.css';
       }
     }
 
-    // ── Boutons ─────────────────────────────────────────────────────────
     document.getElementById('btn-refresh')?.addEventListener('click', () => load(true));
     document.getElementById('btn-copy')?.addEventListener('click', async () => {
       const { plain, html } = buildCopyContent();

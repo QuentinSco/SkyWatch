@@ -5,9 +5,9 @@ import { redis } from './redis';
 export interface RunwayWindComponents {
   runway:      string;
   heading:     number;
-  headwindKt:  number;   // + = vent face (1 décimale)
-  tailwindKt:  number;   // + = vent arrière — arrondi à l'entier supérieur
-  crosswindKt: number;   // 1 décimale
+  headwindKt:  number;
+  tailwindKt:  number;   // arrondi à l'entier supérieur (Math.ceil)
+  crosswindKt: number;
 }
 
 export interface TailwindStatus {
@@ -25,12 +25,13 @@ export interface TailwindStatus {
   tailwindAlert:  boolean;
   thresholdKt:    number;
   forecastAlerts: {
-    periodStart: number;
-    periodEnd:   number;
-    windDir:     number;
-    windSpdKt:   number;
-    tailwindKt:  number;
-    runway:      string;
+    periodStart:  number;
+    periodEnd:    number;
+    windDir:      number;
+    windSpdKt:    number;  // vitesse effective utilisée (max(vent, rafale))
+    hasGust:      boolean; // vrai si la valeur effective vient d'une rafale TAF
+    tailwindKt:   number;
+    runway:       string;
   }[];
 }
 
@@ -54,23 +55,19 @@ const TAILWIND_AIRPORTS = [
 ] as const;
 
 function computeRunwayWind(
-  windDir: number,
-  windSpd: number,
-  rwy: { heading: number; name: string },
+  windDir: number, windSpd: number, rwy: { heading: number; name: string },
 ): RunwayWindComponents {
   const angle       = ((windDir - rwy.heading) + 360) % 360;
   const rad         = angle * Math.PI / 180;
   const headwindRaw = windSpd * Math.cos(rad);
   const headwindKt  = Math.round(headwindRaw * 10) / 10;
-  // Arrondi à l'entier supérieur pour être conservateur (sécurité)
   const tailwindKt  = Math.ceil(-headwindRaw);
   const crosswindKt = Math.round(Math.abs(windSpd * Math.sin(rad)) * 10) / 10;
   return { runway: rwy.name, heading: rwy.heading, headwindKt, tailwindKt, crosswindKt };
 }
 
 function worstCaseRunway(
-  windDir: number | null,
-  windSpd: number,
+  windDir: number | null, windSpd: number,
   runways: readonly { heading: number; name: string }[],
 ): RunwayWindComponents | null {
   if (windDir === null || windSpd === 0) return null;
@@ -128,6 +125,7 @@ export async function fetchTailwindStatus(): Promise<TailwindStatus[]> {
   const limit = now + 6 * 60 * 60 * 1000;
 
   const statuses: TailwindStatus[] = TAILWIND_AIRPORTS.map(ap => {
+    // ── METAR (utilisé uniquement pour l'alerte tableau de bord, pas pour le briefing) ──
     const raw      = metarByIcao[ap.icao];
     const rawStr   = raw?.rawOb ?? raw?.rawMETAR ?? '';
     const parsed   = parseMetarWind(rawStr);
@@ -142,21 +140,25 @@ export async function fetchTailwindStatus(): Promise<TailwindStatus[]> {
     const worst        = worstCaseRunway(parsed.windDir, parsed.windSpdKt, ap.runways);
     const tailwindAlert = worst !== null && worst.tailwindKt >= ap.thresholdKt;
 
+    // ── TAF — prévisions 6h : utilise Math.max(vent, rafale) pour être conservateur ──
     const fcsts: any[] = tafByIcao[ap.icao]?.fcsts ?? [];
     const forecastAlerts = fcsts
       .filter(f => f.timeFrom * 1000 < limit && f.timeTo * 1000 > now)
       .flatMap(f => {
-        const wdir = f.wdir === 'VRB' || f.wdir == null ? null : Number(f.wdir);
-        const wspd = f.wspd != null ? Number(f.wspd) : 0;
-        const w    = worstCaseRunway(wdir, wspd, ap.runways);
+        const wdir         = f.wdir === 'VRB' || f.wdir == null ? null : Number(f.wdir);
+        const wspd         = f.wspd  != null ? Number(f.wspd)  : 0;
+        const wgst         = f.wgst  != null ? Number(f.wgst)  : 0;  // rafales TAF
+        const effectiveSpd = Math.max(wspd, wgst);                    // cas défavorable
+        const w            = worstCaseRunway(wdir, effectiveSpd, ap.runways);
         if (!w || w.tailwindKt < ap.thresholdKt) return [];
         return [{
-          periodStart: f.timeFrom as number,
-          periodEnd:   f.timeTo   as number,
-          windDir:     wdir!,
-          windSpdKt:   wspd,
-          tailwindKt:  w.tailwindKt,
-          runway:      w.runway,
+          periodStart:  f.timeFrom as number,
+          periodEnd:    f.timeTo   as number,
+          windDir:      wdir!,
+          windSpdKt:    effectiveSpd,
+          hasGust:      wgst > wspd,
+          tailwindKt:   w.tailwindKt,
+          runway:       w.runway,
         }];
       });
 

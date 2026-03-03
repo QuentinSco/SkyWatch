@@ -1,6 +1,8 @@
 const SEVERITY_COLOR = { red: '#ef4444', orange: '#f97316', yellow: '#eab308' };
 const SEVERITY_RADIUS = { red: 14, orange: 10, yellow: 8 };
 const PHENOMENON_EMOJI = {
+  // LaunchLib
+  'Tir spatial':           '🚀',
   // GDACS
   'Cyclone tropical':      '🌀',
   'Tremblement de terre':  '🌏',

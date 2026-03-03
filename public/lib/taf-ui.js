@@ -375,15 +375,17 @@
   }
 
   function renderTafTimeline(baseTaf) {
-    const fcsts     = baseTaf.fcsts   || [];
-    const threats   = baseTaf.threats || [];
-    const nowSec    = Math.floor(Date.now() / 1000);
-    const windowSec = 24 * 3600;
+    const fcsts   = baseTaf.fcsts   || [];
+    const threats = baseTaf.threats || [];
+    const nowSec  = Math.floor(Date.now() / 1000);
 
-    const tStart = nowSec;
-    const tEnd   = fcsts.length > 0
-      ? Math.min(tStart + windowSec, Math.max(...fcsts.map(f => f.timeTo ?? f.timeFrom)))
-      : tStart + windowSec;
+    // Frise couvre toute la durée du TAF (du premier timeFrom au dernier timeTo)
+    const tStart = fcsts.length > 0
+      ? Math.min(...fcsts.map(f => f.timeFrom ?? nowSec))
+      : nowSec;
+    const tEnd = fcsts.length > 0
+      ? Math.max(...fcsts.map(f => f.timeTo ?? f.timeFrom ?? nowSec))
+      : nowSec + 24 * 3600;
 
     if (fcsts.length === 0 || tEnd <= tStart) {
       return `<div class="text-xs text-gray-400 italic">TAF non disponible</div>`;
@@ -508,9 +510,11 @@
       </div>`
     ).join('');
 
+    // Marqueur NOW positionné dynamiquement dans la frise
+    const nowPct  = Math.max(0, Math.min(100, ((nowSec - tStart) / totalSec) * 100));
     const nowHtml = `
       <div class="absolute top-0 h-full border-l-2 border-blue-500 pointer-events-none z-10"
-           style="left:0%">
+           style="left:${nowPct.toFixed(2)}%">
         <span class="absolute -top-5 text-[10px] text-blue-600 font-semibold -translate-x-1/2">NOW</span>
       </div>`;
 
@@ -607,7 +611,7 @@
         <div class="flex items-center justify-between mb-3 flex-wrap gap-4">
           <div>
             <h2 class="text-xl font-bold text-gray-900">🏠 État base CDG / ORY</h2>
-            <p class="text-gray-500 text-sm mt-0.5">TAF actifs sur notre base — frise 24h. Hors croisement vols LC.</p>
+            <p class="text-gray-500 text-sm mt-0.5">TAF actifs sur notre base — frise complète. Hors croisement vols LC.</p>
           </div>
           <div class="flex gap-2 text-xs">
             ${redCount    ? `<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full font-semibold">🔴 ${redCount} menace${redCount > 1 ? 's' : ''}</span>` : ''}

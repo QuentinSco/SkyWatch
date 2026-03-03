@@ -90,7 +90,7 @@ import '../styles/global.css';
       return mm ? `${dd}/${hh}${String(mm).padStart(2,'0')}z` : `${dd}/${hh}z`;
     };
 
-    // ── Rendu UI ────────────────────────────────────────────────────────────
+    // ── Rendu UI ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     function renderBriefing(data) {
       const form = document.getElementById('briefing-form');
       if (!form) return;
@@ -147,6 +147,23 @@ import '../styles/global.css';
         </div>`;
       });
 
+      html += sectionHeader('🚀', 'Tirs de fusée', { cls: 'bg-green-100 text-green-700', label: '✓ Auto · 6h' });
+      if (!data.tirsFusee.length) { html += nilLine(); }
+      else data.tirsFusee.forEach(launch => {
+        const apBadges = launch.airports.map(a =>
+          `<span class="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0.5 rounded font-mono">${a}</span>`
+        ).join(' ');
+        html += `<div class="px-6 py-3 text-sm text-gray-800 border-b border-gray-50 last:border-b-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="font-bold text-gray-900">${launch.provider}</span>
+            <span class="text-gray-500">— ${launch.rocket}</span>
+            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-mono">${launch.timeZ}</span>
+          </div>
+          <div class="mt-1 text-xs text-gray-500">${launch.site}</div>
+          <div class="mt-1.5 flex flex-wrap gap-1">${apBadges}</div>
+        </div>`;
+      });
+
       // Vent arrière — chips amber + format wspd/wgst explicite
       html += sectionHeader('💨', 'Vent arrière (charge offerte)', { cls: 'bg-green-100 text-green-700', label: '✓ TAF · 6h' });
       if (!data.tailwindWatch.length) { html += nilLine(); }
@@ -192,7 +209,7 @@ import '../styles/global.css';
       form.innerHTML = html;
     }
 
-    // ── Génération du contenu à copier ─────────────────────────────────────
+    // ── Génération du contenu à copier ─────────────────────────────────────────────────────────────────────────────────────────
     function buildCopyContent() {
       if (!window._briefingData) return { plain: '', html: '' };
       const d = window._briefingData;
@@ -225,6 +242,10 @@ import '../styles/global.css';
       section('Activité volcanique :',
         !d.volcanique.length ? ['-NIL'] :
         d.volcanique.map(v => `-${v.volcanoName}${v.flLevel ? ' ' + v.flLevel : ''} (VAAC ${v.vaac})`));
+
+      section('Tirs de fusée :',
+        !d.tirsFusee.length ? ['-NIL'] :
+        d.tirsFusee.map(l => `-${l.provider} — ${l.rocket} | ${l.site} | ${l.timeZ} (${l.airports.join(', ')})`));
 
       // Vent arrière — texte copié : wspd/wgst si rafale, sinon tailwindKt seul
       const twWithTAF = (d.tailwindWatch || []).filter(tw => tw.forecastAlerts.length > 0);

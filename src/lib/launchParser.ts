@@ -82,6 +82,18 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
 
       console.log(`  ↳ ALERTE ${severity.toUpperCase()} — aéroports impactés : ${airports.join(', ')}`);
 
+      // Construction des liens sources
+      const sourceLinks: { label: string; url: string }[] = [
+        {
+          label: 'API LaunchLibrary',
+          url: launch.url ?? 'https://thespacedevs.com'
+        },
+        {
+          label: 'Space Launch Schedule',
+          url: 'https://www.spacelaunchschedule.com'
+        }
+      ];
+
       alerts.push({
         id:          `LAUNCH-${launch.id}`,
         source:      'LaunchLib',
@@ -94,10 +106,11 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
         lat, lon,
         validFrom:   new Date(windowStart).toISOString(),
         validTo:     new Date(windowEnd).toISOString(),
-        headline:    `🚀 ${provider} — ${rocket} | ${siteName} | T-${Math.round(hoursUntil)}h (${statusName})`,
+        headline:    `${provider} — ${rocket} | ${siteName} | Tir prévu`,
         description: `Mission : ${missionName}. Vérifier NOTAMs aéroports impactés : ${airports.join(', ')}.`,
         link:        launch.url ?? 'https://thespacedevs.com',
-      });
+        sourceLinks,
+      } as Alert & { sourceLinks: { label: string; url: string }[] });
     }
 
     console.log(`[LaunchLib] ${alerts.length} lancement(s) impactant(s) dans les 72h`);

@@ -11,14 +11,17 @@ const SEVERITY_BY_HOURS: { maxH: number; severity: 'red' | 'orange' | 'yellow' }
 
 const LAUNCH_IMPACT_RADIUS_KM = 500;
 
+// Statuts LL2 à exclure : lancements déjà terminés ou échoués
+const EXCLUDE_STATUS_IDS = new Set([4, 7]); // 4=Failed, 7=Partial Failure
+
 export async function fetchRocketLaunches(): Promise<Alert[]> {
   const alerts: Alert[] = [];
   try {
     const url = new URL('https://ll.thespacedevs.com/2.2.0/launch/upcoming/');
     url.searchParams.set('limit', '50');
     url.searchParams.set('ordering', 'window_start');
-    // Passer chaque statut séparément — une valeur CSV serait encodée en %2C → HTTP 400
-    ['1', '2', '3'].forEach(s => url.searchParams.append('status', s));
+    // Pas de filtre status : /upcoming/ garantit déjà des lancements futurs,
+    // et les statuts 1/2/3 s'avèrent trop restrictifs (0 résultats en pratique).
 
     console.log('[LaunchLib] Requête:', url.toString());
 
@@ -36,14 +39,21 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
     console.log(`[LaunchLib] ${json.count ?? '?'} lancements dispo, ${json.results?.length ?? 0} reçus`);
 
     for (const launch of (json.results ?? [])) {
+      const statusId = launch.status?.id;
+
       const windowStart = new Date(launch.window_start ?? launch.net).getTime();
       const windowEnd   = new Date(launch.window_end   ?? launch.net).getTime();
       const hoursUntil  = (windowStart - now) / 3_600_000;
 
       console.log(
-        `[LaunchLib] ${launch.name} | status=${launch.status?.id}(${launch.status?.abbrev ?? launch.status?.name})` +
+        `[LaunchLib] ${launch.name} | status=${statusId}(${launch.status?.abbrev ?? launch.status?.name})` +
         ` | T-${Math.round(hoursUntil)}h | pad=(${launch.pad?.latitude},${launch.pad?.longitude})`
       );
+
+      if (EXCLUDE_STATUS_IDS.has(statusId)) {
+        console.log(`  ↳ IGNORE (statut échec/partiel : ${statusId})`);
+        continue;
+      }
 
       if (hoursUntil < 0 || hoursUntil > LAUNCH_WINDOW_HOURS) {
         console.log(`  ↳ IGNORE (hors fenêtre 0-72h : T-${Math.round(hoursUntil)}h)`);
@@ -63,7 +73,7 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
         continue;
       }
 
-      const severity = SEVERITY_BY_HOURS.find(s => hoursUntil <= s.maxH)?.severity ?? 'yellow';
+      const severity    = SEVERITY_BY_HOURS.find(s => hoursUntil <= s.maxH)?.severity ?? 'yellow';
       const provider    = launch.launch_service_provider?.abbrev ?? launch.launch_service_provider?.name ?? '?';
       const rocket      = launch.rocket?.configuration?.name ?? 'Lanceur inconnu';
       const siteName    = launch.pad?.name ?? launch.pad?.location?.name ?? 'Site inconnu';

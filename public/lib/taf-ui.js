@@ -90,6 +90,14 @@
       .replace(/\s+(FM\d{6}|BECMG\b|(?<!PROB(?:30|40) )TEMPO\b|PROB(30|40)(?!\s+TEMPO)\b|RMK\b)/g, '\n$1');
   }
 
+  function formatDate(iso) {
+    if (!iso) return '';
+    return new Date(iso).toLocaleString('fr-FR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      timeZone: 'UTC',
+    });
+  }
+
   function lastUpdateBar() {
     return `
       <div class="text-xs text-gray-400 mt-2 flex items-center gap-2">
@@ -251,6 +259,7 @@
 
     const rowId = 'vol-row-' + (_rowIdx++);
 
+    // Afficher toutes les autres menaces du TAF (sauf la menace principale affichée)
     const otherThreats = taf.threats.filter(t =>
       !(t.type === threat.type &&
         t.periodStart === threat.periodStart &&
@@ -621,21 +630,21 @@
 
   // ── Fonction de dédoublonnage des vols ──────────────────────────────────────────────────────────────────────────
   function deduplicateFlights(hits) {
-    const uniqueHits = [];
-    const seen = new Set();
+    const flightMap = {};
     
     for (const hit of hits) {
-      // Créer une clé unique basée sur le numéro de vol, l'ICAO de destination, 
-      // et la fenêtre temporelle de la menace
-      const key = `${hit.flight.flightNumber}-${hit.taf.icao}-${hit.threat.periodStart}-${hit.threat.periodEnd}-${hit.threat.type}`;
+      const etaIso = hit.flight.estimatedTouchDownTime || hit.flight.scheduledArrival;
+      const dateKey = formatDate(etaIso); // Date au format jj/mm/aaaa
+      const key = `${hit.flight.flightNumber}-${dateKey}`;
       
-      if (!seen.has(key)) {
-        seen.add(key);
-        uniqueHits.push(hit);
+      // Si le vol n'existe pas encore ou si la nouvelle menace est plus sévère
+      if (!flightMap[key] || 
+          SEVERITY_ORDER[hit.threat.severity] < SEVERITY_ORDER[flightMap[key].threat.severity]) {
+        flightMap[key] = hit;
       }
     }
     
-    return uniqueHits;
+    return Object.values(flightMap);
   }
 
   // ── Vols AF : chargement section ──────────────────────────────────────────────────────────────────────────────────────
@@ -663,7 +672,7 @@
 
       const { hits, baseHits, baseTafs } = await res.json();
 
-      // ✅ Dédoublonner les vols avant affichage
+      // ✅ Dédoublonner les vols par date + numéro de vol, en gardant la menace la plus sévère
       const uniqueHits = deduplicateFlights(hits);
 
       const red    = uniqueHits.filter(h => h.threat.severity === 'red').length;

@@ -12,7 +12,8 @@
     "@astrojs/node": "^9.5.4",
     "@astrojs/vercel": "^9.0.4",
     "@upstash/redis": "^1.36.2",
-    "astro": "^5.1.7"
+    "astro": "^5.1.7",
+    "notams": "^2.0.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.0"

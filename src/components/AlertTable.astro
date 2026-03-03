@@ -64,20 +64,65 @@ function getVolcanoName(alert: WeatherAlert): string | null {
   if (!h) return null;
 
   // "Avis cendres volcaniques : NOM ..."
-  const m1 = h.match(/Avis cendres volcaniques\s*:\s*([\w][\w .,'\u00C0-\u017E-]{0,60}?)\s*(?:—|\s*FL|\s*\()/);
+  const m1 = h.match(/Avis cendres volcaniques\\s*:\\s*([\\w][\\w .,'\\u00C0-\\u017E-]{0,60}?)\\s*(?:—|\\s*FL|\\s*\\()/);
   if (m1) {
     const v = m1[1].trim();
     if (v && v !== 'Inconnu' && v !== 'Volcan inconnu') return v;
   }
 
   // "Cendres volcaniques — NOM ..."
-  const m2 = h.match(/Cendres volcaniques\s*[—\-–]\s*([\w][\w .,'\u00C0-\u017E-]{0,60}?)\s*(?:FL|\(VAAC|—|$)/);
+  const m2 = h.match(/Cendres volcaniques\\s*[—\\-–]\\s*([\\w][\\w .,'\\u00C0-\\u017E-]{0,60}?)\\s*(?:FL|\\(VAAC|—|$)/);
   if (m2) {
     const v = m2[1].trim();
     if (v && v !== 'Inconnu' && v !== 'Volcan' && v !== 'Volcan inconnu') return v;
   }
 
   return null;
+}
+
+/**
+ * Extraction du nom de mission pour les tirs spatiaux
+ */
+function getLaunchMissionName(headline: string): string | null {
+  // Format attendu : "SpaceX — Falcon 9 | Space Launch Complex 40 | Tir..."
+  const match = headline.match(/^([^\u2014|]+)/);
+  if (match) {
+    return match[1].trim();
+  }
+  return null;
+}
+
+/**
+ * Calcul du temps restant avant un tir spatial
+ */
+function getLaunchCountdown(validFrom: string | undefined): string {
+  if (!validFrom) return '—';
+  const now = Date.now();
+  const launch = new Date(validFrom).getTime();
+  const msLeft = launch - now;
+  
+  if (msLeft < 0) {
+    const msPast = Math.abs(msLeft);
+    const h = Math.floor(msPast / 3600000);
+    const m = Math.floor((msPast % 3600000) / 60000);
+    return h > 0 ? `T+${h}h${m}m` : `T+${m}m`;
+  }
+  
+  const h = Math.floor(msLeft / 3600000);
+  const m = Math.floor((msLeft % 3600000) / 60000);
+  return h > 0 ? `T-${h}h${m}m` : `T-${m}m`;
+}
+
+/**
+ * Génère le résumé optimisé selon le type d'alerte
+ */
+function getSummary(alert: WeatherAlert): string {
+  if (alert.phenomenon === 'Tir spatial') {
+    const mission = getLaunchMissionName(alert.headline);
+    const countdown = getLaunchCountdown(alert.validFrom);
+    return mission ? `${mission} | ${countdown}` : alert.headline.slice(0, 90);
+  }
+  return alert.headline.slice(0, 90) + (alert.headline.length > 90 ? '…' : '');
 }
 
 const borderColor = filtered.some(a => a.severity === 'red')
@@ -114,8 +159,12 @@ const borderColor = filtered.some(a => a.severity === 'red')
         <tbody>
           {filtered.map((alert, i) => {
             const volcanoName = getVolcanoName(alert);
+            const alertId = `alert-${region}-${i}`;
             return (
-            <tr class={`border-b border-gray-100 hover:bg-blue-50 transition ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
+            <tr 
+              class={`border-b border-gray-100 hover:bg-blue-50 transition cursor-pointer ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+              onclick={`document.getElementById('modal-${alertId}').classList.remove('hidden')`}
+            >
 
               <td class="py-2 px-4">
                 <AlertBadge severity={alert.severity} />
@@ -176,6 +225,7 @@ const borderColor = filtered.some(a => a.severity === 'red')
                               target="_blank"
                               rel="noopener noreferrer"
                               class="text-xs bg-blue-50 text-blue-700 rounded px-1.5 py-0.5 border border-blue-200 hover:bg-blue-100 transition whitespace-nowrap"
+                              onclick={(e: Event) => e.stopPropagation()}
                             >
                               {l.label} ↗
                             </a>
@@ -192,8 +242,8 @@ const borderColor = filtered.some(a => a.severity === 'red')
                 })()}
               </td>
 
-              <td class="py-2 px-4 text-gray-500 text-xs max-w-xs truncate" title={alert.headline}>
-                {alert.headline.slice(0, 90)}{alert.headline.length > 90 ? '…' : ''}
+              <td class="py-2 px-4 text-gray-500 text-xs max-w-xs truncate">
+                {getSummary(alert)}
               </td>
 
             </tr>
@@ -204,3 +254,105 @@ const borderColor = filtered.some(a => a.severity === 'red')
     </div>
   )}
 </section>
+
+<!-- Modales de détails -->
+{filtered.map((alert, i) => {
+  const alertId = `alert-${region}-${i}`;
+  const volcanoName = getVolcanoName(alert);
+  return (
+    <div 
+      id={`modal-${alertId}`} 
+      class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+      onclick={`if (event.target === this) this.classList.add('hidden')`}
+    >
+      <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div class="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <AlertBadge severity={alert.severity} />
+            <h3 class="text-lg font-semibold text-gray-800">{alert.phenomenon}</h3>
+          </div>
+          <button 
+            onclick={`document.getElementById('modal-${alertId}').classList.add('hidden')`}
+            class="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+          >
+            ×
+          </button>
+        </div>
+        
+        <div class="px-6 py-4 space-y-4">
+          {volcanoName && (
+            <div class="bg-orange-50 border border-orange-200 rounded-lg p-3">
+              <div class="text-sm font-semibold text-orange-800 flex items-center gap-2">
+                🌋 Volcan : {volcanoName}
+              </div>
+            </div>
+          )}
+          
+          <div>
+            <h4 class="text-sm font-semibold text-gray-700 mb-1">Description complète</h4>
+            <p class="text-sm text-gray-600 leading-relaxed">{alert.headline}</p>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <h4 class="text-xs font-semibold text-gray-500 uppercase mb-1">Pays / Zone</h4>
+              <p class="text-sm text-gray-700">{alert.country}</p>
+            </div>
+            
+            <div>
+              <h4 class="text-xs font-semibold text-gray-500 uppercase mb-1">Source</h4>
+              <p class="text-sm text-gray-700">{alert.source}</p>
+            </div>
+            
+            <div>
+              <h4 class="text-xs font-semibold text-gray-500 uppercase mb-1">Début</h4>
+              <p class="text-sm text-gray-700">{formatShortDate(alert.validFrom)}</p>
+            </div>
+            
+            <div>
+              <h4 class="text-xs font-semibold text-gray-500 uppercase mb-1">Fin</h4>
+              <p class="text-sm text-gray-700">{formatShortDate(alert.validTo)}</p>
+            </div>
+          </div>
+          
+          {alert.airports.length > 0 && (
+            <div>
+              <h4 class="text-sm font-semibold text-gray-700 mb-2">Aéroports AF concernés</h4>
+              <div class="flex flex-wrap gap-2">
+                {alert.airports.map(a => (
+                  <span class="bg-blue-100 text-blue-700 text-sm px-2 py-1 rounded font-mono">
+                    {a}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {(() => {
+            const links = (alert as any).sourceLinks as Array<{ label: string; url: string }> | undefined;
+            if (links && links.length > 0) {
+              return (
+                <div>
+                  <h4 class="text-sm font-semibold text-gray-700 mb-2">Liens officiels</h4>
+                  <div class="flex flex-col gap-2">
+                    {links.map((l: { label: string; url: string }) => (
+                      <a
+                        href={l.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="text-sm bg-blue-50 text-blue-700 rounded px-3 py-2 border border-blue-200 hover:bg-blue-100 transition flex items-center justify-between"
+                      >
+                        <span>{l.label}</span>
+                        <span>↗</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+          })()}
+        </div>
+      </div>
+    </div>
+  );
+})}

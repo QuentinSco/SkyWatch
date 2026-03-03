@@ -87,7 +87,7 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
         source:      'LaunchLib',
         region:      regionFromCoords(lat, lon),
         severity,
-        phenomenon:  'Tir spatial / TFR',
+        phenomenon:  'Tir spatial',
         eventType:   'LAUNCH',
         country:     launch.pad?.location?.country_code ?? '',
         airports,
@@ -95,7 +95,7 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
         validFrom:   new Date(windowStart).toISOString(),
         validTo:     new Date(windowEnd).toISOString(),
         headline:    `🚀 ${provider} — ${rocket} | ${siteName} | T-${Math.round(hoursUntil)}h (${statusName})`,
-        description: `Mission : ${missionName}. Zone TFR active autour de ${siteName}. Vérifier NOTAMs aéroports impactés : ${airports.join(', ')}.`,
+        description: `Mission : ${missionName}. Vérifier NOTAMs aéroports impactés : ${airports.join(', ')}.`,
         link:        launch.url ?? 'https://thespacedevs.com',
       });
     }

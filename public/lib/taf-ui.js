@@ -619,6 +619,25 @@
       </section>`;
   }
 
+  // ── Fonction de dédoublonnage des vols ──────────────────────────────────────────────────────────────────────────
+  function deduplicateFlights(hits) {
+    const uniqueHits = [];
+    const seen = new Set();
+    
+    for (const hit of hits) {
+      // Créer une clé unique basée sur le numéro de vol, l'ICAO de destination, 
+      // et la fenêtre temporelle de la menace
+      const key = `${hit.flight.flightNumber}-${hit.taf.icao}-${hit.threat.periodStart}-${hit.threat.periodEnd}-${hit.threat.type}`;
+      
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueHits.push(hit);
+      }
+    }
+    
+    return uniqueHits;
+  }
+
   // ── Vols AF : chargement section ──────────────────────────────────────────────────────────────────────────────────────
   async function loadTafVolRisks() {
     _rowIdx = 0;
@@ -644,18 +663,21 @@
 
       const { hits, baseHits, baseTafs } = await res.json();
 
-      const red    = hits.filter(h => h.threat.severity === 'red').length;
-      const orange = hits.filter(h => h.threat.severity === 'orange').length;
+      // ✅ Dédoublonner les vols avant affichage
+      const uniqueHits = deduplicateFlights(hits);
+
+      const red    = uniqueHits.filter(h => h.threat.severity === 'red').length;
+      const orange = uniqueHits.filter(h => h.threat.severity === 'orange').length;
       if (countersEl) {
         countersEl.innerHTML = [
           red    ? `<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-semibold">🔴 ${red}</span>` : '',
           orange ? `<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-semibold">🟠 ${orange}</span>` : '',
-          hits.length ? `<span class="text-gray-400 text-xs">Total ${hits.length} vol${hits.length > 1 ? 's' : ''}</span>` : '',
+          uniqueHits.length ? `<span class="text-gray-400 text-xs">Total ${uniqueHits.length} vol${uniqueHits.length > 1 ? 's' : ''}</span>` : '',
         ].join('');
       }
 
       let mainHtml;
-      if (hits.length === 0) {
+      if (uniqueHits.length === 0) {
         mainHtml = `
           <div class="text-gray-400 text-sm py-4">
             Aucun vol AF LC actuellement dans une fenêtre de menace TAF détectée.
@@ -675,7 +697,7 @@
                   <th class="py-2 px-3">ETA</th>
                 </tr>
               </thead>
-              <tbody>${hits.map(renderTafVolRow).join('')}</tbody>
+              <tbody>${uniqueHits.map(renderTafVolRow).join('')}</tbody>
             </table>
           </div>`;
       }

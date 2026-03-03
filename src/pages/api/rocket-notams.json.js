@@ -1,204 +1,228 @@
 /**
- * API endpoint: /api/rocket-notams.json
- * Fetches AHA/DRA rocket NOTAMs using Aviation Weather Center API
- * 
- * Strategy:
- *   1. Query aviationweather.gov NOTAM data service (free, public)
- *   2. Filter for space operations keywords
- *   3. Parse with our rocket NOTAM parser
- *   Returns GeoJSON FeatureCollection
+ * /api/rocket-notams.json
+ *
+ * Source : Launch Library 2 (The Space Devs)
+ *   https://ll.thespacedevs.com/2.2.0/
+ *   Free, no API key, 15 req/h unauthenticated (on met en cache 5 min)
+ *
+ * Retourne un GeoJSON des lancements :
+ *   - fenêtre J-1 / J+1 (actifs ou imminents)
+ *   - lancés avec succès il y a moins de 6h (zone verte auto)
+ *
+ * Zones approximatives : cercles basés sur les coordonnées du pad
+ * (les NOTAMs exacts restent la référence officielle, mais ça suffit
+ * pour l'affichage opérationnel à l'échelle de la carte monde).
  */
 
-import { parseRocketNotam } from '../../../JS/notamRocket.js';
+const LL2_BASE  = 'https://ll.thespacedevs.com/2.2.0';
+const CLEARED_H = 6; // heures d'affichage après succès
 
-// Aviation Weather Center NOTAM endpoint (public, no auth required)
-const AWC_NOTAM_URL = 'https://aviationweather.gov/cgi-bin/data/notam.php';
+// Rayon approximatif de la zone de restriction autour du pad (km)
+// AHA réelle = définie dans le NOTAM, on prend 80 km comme proxy conservative
+const DEFAULT_RADIUS_KM = 80;
 
-// Major airports near US rocket launch sites
-const ROCKET_AIRPORTS = [
-  'KXMR',  // Cape Canaveral Space Force Station
-  'KCOF',  // Patrick SFB (near Cape Canaveral)
-  'KMCO',  // Orlando (ZMA FIR - covers Cape area)
-  'KVBG',  // Vandenberg Space Force Base
-  'KBRO',  // Brownsville (near SpaceX Starbase)
-  'KWRI',  // Wallops Flight Facility
-];
+/** Codes statut LL2 pertinents */
+const STATUS = {
+  GO:         'Go',
+  IN_FLIGHT:  'In Flight',
+  SUCCESS:    'Success',
+  FAILURE:    'Failure',
+  TBD:        'TBD',
+  TBC:        'TBC',
+  ON_HOLD:    'Hold',
+};
 
-const SPACE_KEYWORDS = [
-  'SPACE', 'LAUNCH', 'AHA', 'DRA', 'ANOMALY HAZARD',
-  'DEBRIS RESPONSE', 'ROCKET', 'STARLINK', 'STLNK',
-  'SPACEX', 'BLUE ORIGIN', 'ULA', 'ORBITAL',
-];
-
-async function fetchNotamsFromAWC() {
-  const allNotams = [];
-
-  for (const icao of ROCKET_AIRPORTS) {
-    try {
-      const url = `${AWC_NOTAM_URL}?ids=${icao}`;
-      console.log(`[rocket-notams] Fetching ${icao}...`);
-      
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': 'SkyWatch/1.0 (Aviation Weather Aggregator)',
-          'Accept': 'text/plain, text/html',
-        },
-      });
-
-      if (!res.ok) {
-        console.warn(`[rocket-notams] AWC returned HTTP ${res.status} for ${icao}`);
-        continue;
-      }
-
-      const text = await res.text();
-      
-      // AWC returns plain text NOTAMs, one per line or block
-      // Split by common NOTAM delimiters
-      const notams = text
-        .split(/\n(?=[A-Z!])/)
-        .filter(line => line.trim().length > 50); // Filter out short lines
-
-      console.log(`[rocket-notams] ${icao}: ${notams.length} NOTAMs`);
-
-      // Filter for space-related NOTAMs
-      const spaceNotams = notams.filter(notam => {
-        const upper = notam.toUpperCase();
-        return SPACE_KEYWORDS.some(kw => upper.includes(kw));
-      });
-
-      console.log(`[rocket-notams] ${icao}: ${spaceNotams.length} space NOTAMs`);
-      allNotams.push(...spaceNotams);
-
-    } catch (error) {
-      console.error(`[rocket-notams] Error fetching ${icao}:`, error.message);
-    }
+/** Convertit un cercle (lat, lng, km) en polygone GeoJSON (n points) */
+function circleToPolygon(lat, lng, radiusKm, nPoints = 32) {
+  const R  = 6371; // rayon Terre km
+  const d  = radiusKm / R;
+  const coords = [];
+  for (let i = 0; i <= nPoints; i++) {
+    const angle = (2 * Math.PI * i) / nPoints;
+    const latR  = (lat * Math.PI) / 180;
+    const pLat  = Math.asin(
+      Math.sin(latR) * Math.cos(d) +
+      Math.cos(latR) * Math.sin(d) * Math.cos(angle)
+    );
+    const pLng  =
+      (lng * Math.PI) / 180 +
+      Math.atan2(
+        Math.sin(angle) * Math.sin(d) * Math.cos(latR),
+        Math.cos(d) - Math.sin(latR) * Math.sin(pLat)
+      );
+    coords.push([
+      parseFloat(((pLng * 180) / Math.PI).toFixed(5)),
+      parseFloat(((pLat * 180) / Math.PI).toFixed(5)),
+    ]);
   }
-
-  return allNotams;
+  return coords;
 }
 
-// Fallback: Manual TFR check via FAA TFR list (if AWC fails)
-async function fetchTFRList() {
-  try {
-    // FAA publishes active TFRs as a text list
-    const res = await fetch('https://tfr.faa.gov/tfr2/list.html', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0',
-      },
-    });
+/** Calcule le statut opérationnel d'une zone à partir des données LL2 */
+function zoneStatus(launch) {
+  const abbrev = launch.status?.abbrev || '';
+  const net    = new Date(launch.net).getTime();
+  const now    = Date.now();
 
-    if (!res.ok) return [];
-
-    const html = await res.text();
-    
-    // Extract TFR numbers that might be space-related
-    // Format: "3/1234 EFFECTIVE 03/03/2026..."
-    const tfrPattern = /(\d+\/\d+).*?(SPACE|LAUNCH|ROCKET)/gi;
-    const matches = [...html.matchAll(tfrPattern)];
-    
-    console.log(`[rocket-notams] Found ${matches.length} potential space TFRs`);
-    
-    // For each TFR number, we'd need to fetch full details
-    // This is a placeholder - full implementation would query each TFR
-    return [];
-    
-  } catch (error) {
-    console.error('[rocket-notams] TFR list fetch failed:', error.message);
-    return [];
-  }
-}
-
-function buildGeoJSON(rawNotams, source) {
-  const now = new Date();
-
-  // Deduplicate
-  const unique = [...new Set(rawNotams)];
-
-  const features = unique
-    .map(raw => {
-      try {
-        return parseRocketNotam(raw);
-      } catch (err) {
-        console.warn('[rocket-notams] Parse error:', err.message);
-        return null;
-      }
-    })
-    .filter(n =>
-      n &&
-      n.polygon?.length >= 3 &&
-      (!n.validity?.end || new Date(n.validity.end) > now)
-    )
-    .map(n => {
-      const coords = [
-        ...n.polygon.map(p => [p.lng, p.lat]),
-        [n.polygon[0].lng, n.polygon[0].lat],
-      ];
+  if (abbrev === STATUS.SUCCESS) {
+    const elapsedMs = now - net;
+    if (elapsedMs < CLEARED_H * 3600000) {
       return {
-        type: 'Feature',
-        properties: {
-          notamType:      n.notamType,
-          notamNumber:    n.notamNumber,
-          classification: n.classification,
-          status:         n.status,
-          confidence:     n.confidence,
-          missionId:      n.missionId,
-          validFrom:      n.validity?.start?.toISOString() ?? null,
-          validTo:        n.validity?.end?.toISOString()   ?? null,
-          altitudeLower:  n.altitude.lower,
-          altitudeUpper:  n.altitude.upper,
-          raw:            n.raw.substring(0, 500),
-        },
-        geometry: {
-          type:        'Polygon',
-          coordinates: [coords],
-        },
+        type:        'CLEARED',
+        color:       { fill: '#16a34a', stroke: '#15803d', opacity: 0.35 },
+        label:       'COULOIR LIBÉRÉ',
+        dashArray:   '',
+        clearedSince: launch.net,
+        remainingMs:  CLEARED_H * 3600000 - elapsedMs,
       };
-    });
+    }
+    return null; // plus de 6h — ne plus afficher
+  }
+
+  if (abbrev === STATUS.FAILURE) return null; // échec, pas besoin d'afficher
+
+  if (abbrev === STATUS.IN_FLIGHT) {
+    return {
+      type:      'IN_FLIGHT',
+      color:     { fill: '#dc2626', stroke: '#991b1b', opacity: 0.55 },
+      label:     'LANCEMENT EN COURS',
+      dashArray: '',
+    };
+  }
+
+  if (abbrev === STATUS.GO) {
+    return {
+      type:      'GO',
+      color:     { fill: '#f59e0b', stroke: '#d97706', opacity: 0.40 },
+      label:     'GO FOR LAUNCH',
+      dashArray: '6,4',
+    };
+  }
+
+  // TBD / TBC / autres — fenêtre < 48h
+  const diffH = (net - now) / 3600000;
+  if (diffH >= 0 && diffH <= 48) {
+    return {
+      type:      'UPCOMING',
+      color:     { fill: '#64748b', stroke: '#475569', opacity: 0.25 },
+      label:     'LANCEMENT PLANIFIÉ',
+      dashArray: '4,6',
+    };
+  }
+
+  return null;
+}
+
+/** Construit une Feature GeoJSON à partir d'un lancement LL2 */
+function launchToFeature(launch, status) {
+  const lat = parseFloat(launch.pad?.latitude);
+  const lng = parseFloat(launch.pad?.longitude);
+  if (isNaN(lat) || isNaN(lng)) return null;
+
+  const polygon = circleToPolygon(lat, lng, DEFAULT_RADIUS_KM);
 
   return {
-    type: 'FeatureCollection',
-    features,
-    metadata: {
-      generated: now.toISOString(),
-      count:     features.length,
-      source,
-      note: features.length === 0 
-        ? 'No active rocket launch NOTAMs found. This is normal if no launches are scheduled.'
-        : undefined,
+    type: 'Feature',
+    properties: {
+      launchId:     launch.id,
+      name:         launch.name,
+      status:       status.type,
+      statusLabel:  status.label,
+      abbrev:       launch.status?.abbrev,
+      net:          launch.net,
+      windowEnd:    launch.window_end,
+      pad:          launch.pad?.name,
+      padLocation:  launch.pad?.location?.name,
+      provider:     launch.launch_service_provider?.name,
+      missionName:  launch.mission?.name || null,
+      missionType:  launch.mission?.type || null,
+      infoUrl:      launch.url,
+      // Champs CLEARED
+      clearedSince: status.clearedSince || null,
+      remainingMs:  status.remainingMs  || null,
+      // Style
+      fill:         status.color.fill,
+      stroke:       status.color.stroke,
+      opacity:      status.color.opacity,
+      dashArray:    status.dashArray,
+      // Centre du pad pour le tooltip
+      centerLat: lat,
+      centerLng: lng,
+    },
+    geometry: {
+      type:        'Polygon',
+      coordinates: [polygon],
     },
   };
 }
 
 export async function GET() {
   try {
-    console.log('[rocket-notams] Starting fetch from Aviation Weather Center...');
-    
-    let rawNotams = await fetchNotamsFromAWC();
-    let source = 'Aviation Weather Center (aviationweather.gov)';
+    const now = new Date();
 
-    // If AWC returns nothing, try TFR list as fallback
-    if (rawNotams.length === 0) {
-      console.log('[rocket-notams] No NOTAMs from AWC, trying TFR list...');
-      rawNotams = await fetchTFRList();
-      source = 'FAA TFR List (tfr.faa.gov)';
+    // Fenêtre : J-1 (pour les succès récents) jusqu'à J+2 (lancements à venir)
+    const from = new Date(now.getTime() - CLEARED_H * 3600000 - 3600000); // 7h avant
+    const to   = new Date(now.getTime() + 48 * 3600000);                  // 48h après
+
+    const params = new URLSearchParams({
+      window_start__gte: from.toISOString(),
+      window_start__lte: to.toISOString(),
+      limit:  '25',
+      ordering: 'net',
+    });
+
+    console.log(`[rocket-notams] Calling Launch Library 2...`);
+
+    const res = await fetch(`${LL2_BASE}/launch/?${params}`, {
+      headers: {
+        'Accept':     'application/json',
+        'User-Agent': 'SkyWatch-Dispatch/1.0 (skywatch-aviation)',
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error(`LL2 HTTP ${res.status}: ${res.statusText}`);
     }
 
-    console.log(`[rocket-notams] Total raw NOTAMs: ${rawNotams.length}`);
+    const data    = await res.json();
+    const launches = data.results || [];
 
-    const geojson = buildGeoJSON(rawNotams, source);
+    console.log(`[rocket-notams] LL2 returned ${launches.length} launch(es)`);
 
-    console.log(`[rocket-notams] Rocket zones after parsing: ${geojson.features.length}`);
+    const features = launches
+      .map(launch => {
+        const status = zoneStatus(launch);
+        if (!status) return null; // ignorer (expiré, échec, trop loin)
+        return launchToFeature(launch, status);
+      })
+      .filter(Boolean);
+
+    console.log(`[rocket-notams] Zones à afficher : ${features.length}`);
+
+    const geojson = {
+      type:     'FeatureCollection',
+      features,
+      metadata: {
+        generated:  now.toISOString(),
+        count:      features.length,
+        source:     'Launch Library 2 (thespacedevs.com)',
+        window:     { from: from.toISOString(), to: to.toISOString() },
+        note:       features.length === 0
+          ? 'Aucun lancement dans la fenêtre J-7h / J+48h.'
+          : undefined,
+      },
+    };
 
     return new Response(JSON.stringify(geojson, null, 2), {
       status: 200,
       headers: {
         'Content-Type':  'application/json',
-        'Cache-Control': 'public, max-age=300',
+        'Cache-Control': 'public, max-age=300', // cache 5 min
       },
     });
 
   } catch (error) {
-    console.error('[rocket-notams] Fatal error:', error);
+    console.error('[rocket-notams] Error:', error);
 
     return new Response(
       JSON.stringify({
@@ -207,10 +231,10 @@ export async function GET() {
         metadata: {
           error:     error.message,
           generated: new Date().toISOString(),
-          hint: 'Aviation Weather Center API failed. This service is free but may have rate limits. For production use, consider registering for api.faa.gov credentials.',
+          hint: 'Launch Library 2 est limité à 15 req/h sans clé. En cas de 429, attendre 4 min.',
         },
       }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
   }
 }

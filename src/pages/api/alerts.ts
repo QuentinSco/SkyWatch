@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { fetchGDACS, fetchNOAA, fetchMeteoAlarm, fetchVAAC, fetchSWPC } from '../../lib/alertsServer';
+import { fetchRocketLaunches } from '../../lib/launchParser';
 
 export const prerender = false;
 
@@ -16,21 +17,19 @@ export const GET: APIRoute = async () => {
     });
   }
 
-  const [gdacs, noaa, meteoalarm, vaac, swpc] = await Promise.all([
+  const [gdacs, noaa, meteoalarm, vaac, swpc, launches] = await Promise.all([
     fetchGDACS(),
     fetchNOAA(),
     fetchMeteoAlarm(),
     fetchVAAC(),
     fetchSWPC(),
+    fetchRocketLaunches(),
   ]);
 
   const SEVERITY_ORDER: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
-  const all = [...gdacs, ...noaa, ...meteoalarm, ...vaac, ...swpc]
+  const all = [...gdacs, ...noaa, ...meteoalarm, ...vaac, ...swpc, ...launches]
     .sort((a: any, b: any) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])
     .filter((a: any) => {
-      // Alertes SWPC sans validTo (ex : SUMMARY de flare X-ray) :
-      // elles n'ont ni "Valid To" ni "Now Valid Until", on les garde
-      // au maximum 6h après leur validFrom pour éviter les fantômes.
       if (a.source === 'SWPC' && !a.validTo) {
         if (!a.validFrom) return false;
         return Date.now() - new Date(a.validFrom).getTime() < SIX_HOURS;

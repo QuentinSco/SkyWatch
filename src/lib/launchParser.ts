@@ -1,5 +1,5 @@
-import type { Alert } from './alertsServer';
-import { getAirportsNearCoords, regionFromCoords } from './alertsServer';
+import type { Alert } from './geoUtils';
+import { getAirportsNearCoords, regionFromCoords } from './geoUtils';
 
 const LAUNCH_WINDOW_HOURS = 72;
 

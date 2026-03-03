@@ -16,7 +16,8 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
   try {
     const url = new URL('https://ll.thespacedevs.com/2.2.0/launch/upcoming/');
     url.searchParams.set('limit', '20');
-    url.searchParams.set('status', '1,2,3');
+    // Passer chaque statut séparément — une valeur CSV serait encodée en %2C → HTTP 400
+    ['1', '2', '3'].forEach(s => url.searchParams.append('status', s));
 
     const res = await fetch(url.toString(), {
       headers: { 'User-Agent': 'SkyWatch/0.1', 'Accept': 'application/json' },

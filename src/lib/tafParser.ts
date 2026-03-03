@@ -357,12 +357,6 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
   }
 
   // ── Plafond bas BKN/OVC (hors CB/TCU)
-  //   BKN/OVC = couverture ≥5/8 = plafond officiel.
-  //   On ne remonte que le layer le plus bas (≤ 1000ft) pour éviter le bruit.
-  //   Seuils LVP CDG/ORY : BKN/OVC ≤ 200ft = conditions LVP.
-  //     base < 100ft  : RED
-  //     base < 500ft  : ORANGE  (couvre le seuil LVP 200ft)
-  //     base < 1000ft : YELLOW
   if (Array.isArray(clouds)) {
     const ceilingLayers = clouds
       .filter((c: any) =>
@@ -370,7 +364,7 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
         c.type !== 'CB' && c.type !== 'TCU' &&
         c.base != null && c.base <= 1000
       )
-      .sort((a: any, b: any) => a.base - b.base); // plus bas en premier
+      .sort((a: any, b: any) => a.base - b.base);
 
     if (ceilingLayers.length > 0) {
       const lowest = ceilingLayers[0];
@@ -473,9 +467,20 @@ export async function fetchTafRisks(): Promise<TafRisk[]> {
     }
   }
 
-  console.log(`[TAF] ${allTafs.length} TAFs récupérés sur ${AF_AIRPORT_ICAOS.length} demandés`);
+  // Dédupliquer par icaoId : garder uniquement le TAF le plus récent (issueTime max)
+  const latestByIcao = new Map<string, any>();
+  for (const taf of allTafs) {
+    const icao = taf.icaoId ?? taf.stationId;
+    if (!icao) continue;
+    const existing = latestByIcao.get(icao);
+    if (!existing || (taf.issueTime ?? 0) > (existing.issueTime ?? 0)) {
+      latestByIcao.set(icao, taf);
+    }
+  }
+  const deduped = [...latestByIcao.values()];
+  console.log(`[TAF] ${allTafs.length} TAFs bruts → ${deduped.length} après déduplication issueTime`);
 
-  const risks = parseTafToRisks(allTafs);
+  const risks = parseTafToRisks(deduped);
 
   if (redis && risks.length > 0) {
     try {

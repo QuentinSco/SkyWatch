@@ -96,36 +96,67 @@ import '../styles/global.css';
       if (!form) return;
       let html = '';
 
+      // ── Météo hors Europe (intègre TAF menaces + Vent arrière) ────────────────────────────────────────────────────────
       html += sectionHeader('🌩', 'Météo hors Europe', { cls: 'bg-green-100 text-green-700', label: '✓ Auto · 6h' });
-      if (!data.meteoHorsEurope.length) { html += nilLine(); }
-      else data.meteoHorsEurope.forEach((line, i) => {
-        const c = SEV_COLORS[line.severity] || SEV_COLORS.yellow;
-        html += `<div class="px-6 py-3 border-b border-gray-50 last:border-b-0">
-          <div class="flex items-start gap-3">
-            <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${c.dot}"></span>
-            <div class="flex-1 min-w-0">
-              <div class="flex flex-wrap items-center gap-2 text-sm font-medium text-gray-800">
-                <span>${line.phenomenon}</span>
-                <span class="font-bold">${line.iata}</span>
-                <span class="text-blue-700 font-bold">${line.flight}</span>
-                <span class="text-gray-500 text-xs">(ETA <span class="font-mono font-semibold text-gray-700">${line.etaZ}</span> · Fenêtre <span class="font-mono text-gray-700">${line.fenetreZ}</span>)</span>
-              </div>
-              <div class="mt-2 flex flex-wrap items-center gap-3">
-                <label class="flex items-center gap-1.5 text-xs text-gray-500">Capa attente
-                  <input type="number" min="0" placeholder="min" data-field="capa" data-idx="${i}"
-                    class="w-16 border border-orange-200 rounded-md px-2 py-0.5 bg-orange-50 text-xs font-mono
-                           focus:outline-none focus:ring-1 focus:ring-orange-300 text-center" />
-                </label>
-                <label class="flex items-center gap-1.5 text-xs text-gray-500">Dégagement
-                  <input type="text" placeholder="ICAO / IATA" data-field="deg" data-idx="${i}"
-                    class="w-24 border border-orange-200 rounded-md px-2 py-0.5 bg-orange-50 text-xs font-mono
-                           uppercase focus:outline-none focus:ring-1 focus:ring-orange-300" />
-                </label>
+
+      // TAF menaces (orages, CB, visibilité, etc.)
+      if (data.meteoHorsEurope.length > 0) {
+        data.meteoHorsEurope.forEach((line, i) => {
+          const c = SEV_COLORS[line.severity] || SEV_COLORS.yellow;
+          html += `<div class="px-6 py-3 border-b border-gray-50">
+            <div class="flex items-start gap-3">
+              <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${c.dot}"></span>
+              <div class="flex-1 min-w-0">
+                <div class="flex flex-wrap items-center gap-2 text-sm font-medium text-gray-800">
+                  <span>${line.phenomenon}</span>
+                  <span class="font-bold">${line.iata}</span>
+                  <span class="text-blue-700 font-bold">${line.flight}</span>
+                  <span class="text-gray-500 text-xs">(ETA <span class="font-mono font-semibold text-gray-700">${line.etaZ}</span> · Fenêtre <span class="font-mono text-gray-700">${line.fenetreZ}</span>)</span>
+                </div>
+                <div class="mt-2 flex flex-wrap items-center gap-3">
+                  <label class="flex items-center gap-1.5 text-xs text-gray-500">Capa attente
+                    <input type="number" min="0" placeholder="min" data-field="capa" data-idx="${i}"
+                      class="w-16 border border-orange-200 rounded-md px-2 py-0.5 bg-orange-50 text-xs font-mono
+                             focus:outline-none focus:ring-1 focus:ring-orange-300 text-center" />
+                  </label>
+                  <label class="flex items-center gap-1.5 text-xs text-gray-500">Dégagement
+                    <input type="text" placeholder="ICAO / IATA" data-field="deg" data-idx="${i}"
+                      class="w-24 border border-orange-200 rounded-md px-2 py-0.5 bg-orange-50 text-xs font-mono
+                             uppercase focus:outline-none focus:ring-1 focus:ring-orange-300" />
+                  </label>
+                </div>
               </div>
             </div>
-          </div>
-        </div>`;
-      });
+          </div>`;
+        });
+      }
+
+      // Vent arrière (charge offerte) intégré dans Météo hors Europe
+      const twWithTAF = (data.tailwindWatch || []).filter(tw => tw.forecastAlerts.length > 0);
+      if (twWithTAF.length > 0) {
+        twWithTAF.forEach(tw => {
+          const runway = tw.forecastAlerts[0].runway;
+          const chips  = tw.forecastAlerts.map(fa => {
+            const windLabel = fa.hasGust ? `${fa.wspdBase}G${fa.wgst}kt` : `${fa.tailwindKt}kt`;
+            return `<span class="inline-flex items-center gap-0.5 px-2 py-0.5 rounded bg-amber-100 border border-amber-300 text-amber-800 text-xs font-mono font-semibold">
+              ${windLabel}&nbsp;<span class="font-normal text-amber-700">${utcDZ(fa.periodStart)}→${utcDZ(fa.periodEnd)}</span>
+            </span>`;
+          }).join(' ');
+          html += `<div class="px-6 py-3 border-b border-gray-50">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="font-bold text-gray-900 text-sm w-10">${tw.iata}</span>
+              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-mono">${runway}</span>
+              <span class="text-xs text-gray-500">💨 Vent arrière —</span>
+              ${chips}
+            </div>
+          </div>`;
+        });
+      }
+
+      // Si aucune menace TAF ni vent arrière
+      if (data.meteoHorsEurope.length === 0 && twWithTAF.length === 0) {
+        html += nilLine();
+      }
 
       html += sectionHeader('🌀', 'Perturbation tropicale', { cls: 'bg-green-100 text-green-700', label: '✓ Auto' });
       if (!data.tropicale.length) { html += nilLine(); }
@@ -164,37 +195,6 @@ import '../styles/global.css';
         </div>`;
       });
 
-      // Vent arrière — chips amber + format wspd/wgst explicite
-      html += sectionHeader('💨', 'Vent arrière (charge offerte)', { cls: 'bg-green-100 text-green-700', label: '✓ TAF · 6h' });
-      if (!data.tailwindWatch.length) { html += nilLine(); }
-      else data.tailwindWatch.forEach(tw => {
-        const hasTAF = tw.forecastAlerts.length > 0;
-        if (!hasTAF) {
-          html += `<div class="px-6 py-3 text-sm border-b border-gray-50 last:border-b-0 flex items-center gap-3">
-            <span class="font-bold text-gray-800 w-10">${tw.iata}</span>
-            <span class="text-gray-300 text-xs">|</span>
-            <span class="text-gray-400 text-xs italic">NIL</span>
-          </div>`;
-          return;
-        }
-        const runway = tw.forecastAlerts[0].runway;
-        const chips  = tw.forecastAlerts.map(fa => {
-          // Format explicite : 17G27kt au lieu de "26kt rafale"
-          const windLabel = fa.hasGust ? `${fa.wspdBase}G${fa.wgst}kt` : `${fa.tailwindKt}kt`;
-          return `<span class="inline-flex items-center gap-0.5 px-2 py-0.5 rounded bg-amber-100 border border-amber-300 text-amber-800 text-xs font-mono font-semibold">
-            ${windLabel}&nbsp;<span class="font-normal text-amber-700">${utcDZ(fa.periodStart)}→${utcDZ(fa.periodEnd)}</span>
-          </span>`;
-        }).join(' ');
-        html += `<div class="px-6 py-3 border-b border-gray-50 last:border-b-0">
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="font-bold text-gray-900 text-sm w-10">${tw.iata}</span>
-            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-mono">${runway}</span>
-            <span class="text-xs text-gray-400">TAF :</span>
-            ${chips}
-          </div>
-        </div>`;
-      });
-
       html += sectionHeader('⛽', 'Carburant', { cls: 'bg-orange-100 text-orange-700', label: '✏️ Manuel' });
       html += manualTextarea('field-carburant', 'Ex : Afrique + BZV + HAV', data.carburant);
       html += sectionHeader('🌐', 'Géopolitique', { cls: 'bg-orange-100 text-orange-700', label: '✏️ Manuel' });
@@ -224,16 +224,26 @@ import '../styles/global.css';
         htmlLines.push('');
       }
 
-      const meteoItems = !d.meteoHorsEurope.length ? ['-NIL'] :
-        d.meteoHorsEurope.map((line, i) => {
-          const capaEl = document.querySelector(`[data-field="capa"][data-idx="${i}"]`);
-          const degEl  = document.querySelector(`[data-field="deg"][data-idx="${i}"]`);
-          const infos  = [`ETA ${line.etaZ}`, `Fenêtre ${line.fenetreZ}`];
-          if (capaEl?.value?.trim()) infos.push(`Capa attente ~${capaEl.value.trim()}min`);
-          if (degEl?.value?.trim())  infos.push(`Dégagement ${degEl.value.trim().toUpperCase()}`);
-          return `-${line.phenomenon} ${line.iata} ${line.flight} (${infos.join(' - ')})`;
+      // Météo hors Europe : TAF menaces + Vent arrière
+      const meteoItems = [];
+      d.meteoHorsEurope.forEach((line, i) => {
+        const capaEl = document.querySelector(`[data-field="capa"][data-idx="${i}"]`);
+        const degEl  = document.querySelector(`[data-field="deg"][data-idx="${i}"]`);
+        const infos  = [`ETA ${line.etaZ}`, `Fenêtre ${line.fenetreZ}`];
+        if (capaEl?.value?.trim()) infos.push(`Capa attente ~${capaEl.value.trim()}min`);
+        if (degEl?.value?.trim())  infos.push(`Dégagement ${degEl.value.trim().toUpperCase()}`);
+        meteoItems.push(`-${line.phenomenon} ${line.iata} ${line.flight} (${infos.join(' - ')})`);
+      });
+      const twWithTAF = (d.tailwindWatch || []).filter(tw => tw.forecastAlerts.length > 0);
+      twWithTAF.forEach(tw => {
+        const runway = tw.forecastAlerts[0].runway;
+        const fcsts  = tw.forecastAlerts.map(fa => {
+          const windStr = fa.hasGust ? `${fa.wspdBase}G${fa.wgst}kt` : `${fa.tailwindKt}kt`;
+          return `${windStr} (${utcDZ(fa.periodStart)}→${utcDZ(fa.periodEnd)})`;
         });
-      section('Météo hors Europe :', meteoItems);
+        meteoItems.push(`-Vent arrière ${tw.iata} ${runway} — TAF : ${fcsts.join(', ')}`);
+      });
+      section('Météo hors Europe :', meteoItems.length ? meteoItems : ['-NIL']);
 
       section('Perturbation tropicale :',
         !d.tropicale.length ? ['-NIL'] :
@@ -246,18 +256,6 @@ import '../styles/global.css';
       section('Tirs de fusée :',
         !d.tirsFusee.length ? ['-NIL'] :
         d.tirsFusee.map(l => `-${l.provider} — ${l.rocket} | ${l.site} | ${l.timeZ} (${l.airports.join(', ')})`));
-
-      // Vent arrière — texte copié : wspd/wgst si rafale, sinon tailwindKt seul
-      const twWithTAF = (d.tailwindWatch || []).filter(tw => tw.forecastAlerts.length > 0);
-      const twItems   = !twWithTAF.length ? ['-NIL'] : twWithTAF.map(tw => {
-        const runway = tw.forecastAlerts[0].runway;
-        const fcsts  = tw.forecastAlerts.map(fa => {
-          const windStr = fa.hasGust ? `${fa.wspdBase}G${fa.wgst}kt` : `${fa.tailwindKt}kt`;
-          return `${windStr} (${utcDZ(fa.periodStart)}→${utcDZ(fa.periodEnd)})`;
-        });
-        return `-${tw.iata} ${runway} — TAF : ${fcsts.join(', ')}`;
-      });
-      section('Vent arrière :', twItems);
 
       const carb = document.getElementById('field-carburant')?.value?.trim();
       section('Carburant :', [carb ? `-${carb}` : '-NIL']);

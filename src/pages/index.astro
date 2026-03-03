@@ -38,7 +38,7 @@ import '../styles/global.css';
         grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
         grid-template-rows: auto;
         align-items: start;
-        gap: 1.5rem;
+        gap: 1rem; /* Réduit de 1.5rem à 1rem */
       }
 
       /* ✅ Colonne gauche : sticky + hauteur bornée.
@@ -50,14 +50,14 @@ import '../styles/global.css';
         top: 1.5rem;
         display: flex;
         flex-direction: column;
-        gap: 1.5rem;
-        height: calc(100vh - 3rem);
+        gap: 1rem; /* Réduit de 1.5rem à 1rem */
+        height: calc(100vh - 2rem); /* Ajusté pour compenser les gaps réduits */
       }
 
-      /* Carte : hauteur fixe, ne se compresse pas */
+      /* Carte : hauteur fixe optimisée, ne se compresse pas */
       #alert-map {
-        height: clamp(420px, 55vh, 620px) !important;
-        min-height: 420px;
+        height: clamp(350px, 45vh, 520px) !important; /* Réduit de 420px min à 350px min */
+        min-height: 350px; /* Réduit de 420px à 350px */
         flex-shrink: 0;
       }
 
@@ -81,7 +81,7 @@ import '../styles/global.css';
       /* Colonne droite : scroll indépendant */
       .col-alerts {
         overflow-y: auto;
-        height: calc(100vh - 3rem);
+        height: calc(100vh - 2rem); /* Ajusté pour compenser les gaps réduits */
         padding-right: 0.25rem;
       }
     }
@@ -257,9 +257,18 @@ import '../styles/global.css';
       function tryMove() {
         const block = findBaseSection();
         if (!block) return false;
+        
+        // Clone le contenu SANS l'entête h2/h3 pour éviter la duplication
+        const content = block.cloneNode(true);
+        const heading = content.querySelector('h2, h3');
+        if (heading) heading.remove();
+        
         slot.innerHTML = '';
         slot.classList.remove('text-gray-400', 'italic');
-        slot.appendChild(block);
+        slot.appendChild(content);
+        
+        // Masque la section originale sur grand écran
+        block.style.display = 'none';
         return true;
       }
       if (tryMove()) return;

@@ -65,7 +65,6 @@ import '../styles/global.css';
     const SEV_COLORS = {
       red:    { dot: 'bg-red-500',    badge: 'bg-red-100 text-red-700' },
       orange: { dot: 'bg-orange-400', badge: 'bg-orange-100 text-orange-700' },
-      yellow: { dot: 'bg-yellow-400', badge: 'bg-yellow-100 text-yellow-700' },
     };
 
     function sectionHeader(icon, title, badge) {
@@ -102,7 +101,7 @@ import '../styles/global.css';
       // TAF menaces (orages, CB, visibilité, etc.)
       if (data.meteoHorsEurope.length > 0) {
         data.meteoHorsEurope.forEach((line, i) => {
-          const c = SEV_COLORS[line.severity] || SEV_COLORS.yellow;
+          const c = SEV_COLORS[line.severity] || SEV_COLORS.orange;
           html += `<div class="px-6 py-3 border-b border-gray-50">
             <div class="flex items-start gap-3">
               <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${c.dot}"></span>

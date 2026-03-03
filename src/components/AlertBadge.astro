@@ -1,8 +1,14 @@
----
 export interface Props {
   severity: 'red' | 'orange' | 'yellow';
+  isSpatial?: boolean;
 }
-const { severity } = Astro.props;
+const { severity, isSpatial = false } = Astro.props;
+
+if (isSpatial) {
+  const spatialStyle = 'bg-violet-600 text-white';
+  const spatialLabel = '🚀 SPATIAL';
+}
+
 const styles = {
   red:    'bg-red-600 text-white',
   orange: 'bg-orange-500 text-white',
@@ -10,6 +16,8 @@ const styles = {
 };
 const labels = { red: '🔴 ROUGE', orange: '🟠 ORANGE', yellow: '🟡 JAUNE' };
 ---
-<span class={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase ${styles[severity]}`}>
-  {labels[severity]}
+<span class={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase ${
+  isSpatial ? 'bg-violet-600 text-white' : styles[severity]
+}`}>
+  {isSpatial ? '🚀 SPATIAL' : labels[severity]}
 </span>

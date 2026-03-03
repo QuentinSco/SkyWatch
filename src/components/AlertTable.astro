@@ -46,32 +46,39 @@ function timeWindowStatus(validTo: string | undefined): { label: string; cls: st
 }
 
 /**
+ * Statut contextuel pour les tirs spatiaux
+ */
+function getLaunchStatus(validFrom: string | undefined, validTo: string | undefined): { label: string; cls: string } | null {
+  if (!validFrom) return null;
+  const now = Date.now();
+  const from = new Date(validFrom).getTime();
+  const to = validTo ? new Date(validTo).getTime() : null;
+  if (now < from) return { label: '⏳ À venir', cls: 'text-blue-500 font-semibold' };
+  if (to && now >= from && now <= to) return { label: '🟢 Tir en cours', cls: 'text-green-600 font-bold' };
+  return { label: '✅ Fenêtre fermée', cls: 'text-gray-400 italic' };
+}
+
+/**
  * Résolution du nom du volcan.
- * Priorité : champ volcanoName exposé par le serveur (source de vérité)
- * Fallback  : parsing du headline comme filet de sécurité
  */
 function getVolcanoName(alert: WeatherAlert): string | null {
   if (alert.source !== 'VAAC' && (alert as any).eventType !== 'VAAC') return null;
 
-  // 1. Champ dédié injecté côté serveur — fiable à 100%
   const direct = (alert as any).volcanoName as string | undefined;
   if (direct && direct.trim() && direct.trim() !== 'Inconnu' && direct.trim() !== 'Volcan inconnu') {
     return direct.trim();
   }
 
-  // 2. Fallback : parse headline
   const h = alert.headline;
   if (!h) return null;
 
-  // "Avis cendres volcaniques : NOM ..."
-  const m1 = h.match(/Avis cendres volcaniques\\s*:\\s*([\\w][\\w .,'\\u00C0-\\u017E-]{0,60}?)\\s*(?:—|\\s*FL|\\s*\\()/);
+  const m1 = h.match(/Avis cendres volcaniques\s*:\s*([\w][\w .,'\u00C0-\u017E-]{0,60}?)\s*(?:—|\s*FL|\s*\()/);
   if (m1) {
     const v = m1[1].trim();
     if (v && v !== 'Inconnu' && v !== 'Volcan inconnu') return v;
   }
 
-  // "Cendres volcaniques — NOM ..."
-  const m2 = h.match(/Cendres volcaniques\\s*[—\\-–]\\s*([\\w][\\w .,'\\u00C0-\\u017E-]{0,60}?)\\s*(?:FL|\\(VAAC|—|$)/);
+  const m2 = h.match(/Cendres volcaniques\s*[—\-–]\s*([\w][\w .,'\u00C0-\u017E-]{0,60}?)\s*(?:FL|\(VAAC|—|$)/);
   if (m2) {
     const v = m2[1].trim();
     if (v && v !== 'Inconnu' && v !== 'Volcan' && v !== 'Volcan inconnu') return v;
@@ -84,7 +91,6 @@ function getVolcanoName(alert: WeatherAlert): string | null {
  * Extraction du nom de mission pour les tirs spatiaux
  */
 function getLaunchMissionName(headline: string): string | null {
-  // Format attendu : "SpaceX — Falcon 9 | Space Launch Complex 40 | Tir..."
   const match = headline.match(/^([^\u2014|]+)/);
   if (match) {
     return match[1].trim();
@@ -95,34 +101,26 @@ function getLaunchMissionName(headline: string): string | null {
 /**
  * Calcul du temps restant avant un tir spatial
  */
-function getLaunchCountdown(validFrom: string | undefined): string {
-  if (!validFrom) return '—';
+function getLaunchCountdown(validFrom: string | undefined): { text: string; urgent: boolean; past: boolean } {
+  if (!validFrom) return { text: '—', urgent: false, past: false };
   const now = Date.now();
   const launch = new Date(validFrom).getTime();
   const msLeft = launch - now;
-  
+
   if (msLeft < 0) {
     const msPast = Math.abs(msLeft);
     const h = Math.floor(msPast / 3600000);
     const m = Math.floor((msPast % 3600000) / 60000);
-    return h > 0 ? `T+${h}h${m}m` : `T+${m}m`;
+    return { text: h > 0 ? `T+${h}h${m}m` : `T+${m}m`, urgent: false, past: true };
   }
-  
+
   const h = Math.floor(msLeft / 3600000);
   const m = Math.floor((msLeft % 3600000) / 60000);
-  return h > 0 ? `T-${h}h${m}m` : `T-${m}m`;
-}
-
-/**
- * Génère le résumé optimisé selon le type d'alerte
- */
-function getSummary(alert: WeatherAlert): string {
-  if (alert.phenomenon === 'Tir spatial') {
-    const mission = getLaunchMissionName(alert.headline);
-    const countdown = getLaunchCountdown(alert.validFrom);
-    return mission ? `${mission} | ${countdown}` : alert.headline.slice(0, 90);
-  }
-  return alert.headline.slice(0, 90) + (alert.headline.length > 90 ? '…' : '');
+  return {
+    text: h > 0 ? `T-${h}h${m}m` : `T-${m}m`,
+    urgent: msLeft < 7200000, // < 2h
+    past: false,
+  };
 }
 
 const borderColor = filtered.some(a => a.severity === 'red')
@@ -159,6 +157,7 @@ const borderColor = filtered.some(a => a.severity === 'red')
         <tbody>
           {filtered.map((alert, i) => {
             const volcanoName = getVolcanoName(alert);
+            const isSpatial = alert.phenomenon === 'Tir spatial';
             const alertId = `alert-${region}-${i}`;
             return (
             <tr 
@@ -167,11 +166,16 @@ const borderColor = filtered.some(a => a.severity === 'red')
             >
 
               <td class="py-2 px-4">
-                <AlertBadge severity={alert.severity} />
+                <AlertBadge severity={alert.severity} isSpatial={isSpatial} />
               </td>
 
               <td class="py-2 px-4 font-medium text-gray-800">
                 {alert.phenomenon}
+                {isSpatial && (
+                  <div class="text-xs text-violet-700 font-semibold mt-0.5 flex items-center gap-1">
+                    🚀 {getLaunchMissionName(alert.headline)}
+                  </div>
+                )}
                 {volcanoName && (
                   <div class="text-xs text-orange-700 font-semibold mt-0.5 flex items-center gap-1">
                     🌋 {volcanoName}
@@ -200,6 +204,16 @@ const borderColor = filtered.some(a => a.severity === 'red')
 
               <td class="py-2 px-4">
                 {(() => {
+                  if (isSpatial) {
+                    const status = getLaunchStatus(alert.validFrom, alert.validTo);
+                    return (
+                      <div class="text-xs leading-tight whitespace-nowrap">
+                        <div class="text-gray-500">{formatShortDate(alert.validFrom)}</div>
+                        <div class="text-gray-400 text-[10px]">→ {formatShortDate(alert.validTo)}</div>
+                        {status && <div class={`mt-0.5 text-[10px] ${status.cls}`}>{status.label}</div>}
+                      </div>
+                    );
+                  }
                   const status = timeWindowStatus(alert.validTo);
                   return (
                     <div class="text-xs leading-tight whitespace-nowrap">
@@ -242,8 +256,23 @@ const borderColor = filtered.some(a => a.severity === 'red')
                 })()}
               </td>
 
-              <td class="py-2 px-4 text-gray-500 text-xs max-w-xs truncate">
-                {getSummary(alert)}
+              <td class="py-2 px-4 max-w-xs">
+                {(() => {
+                  if (isSpatial) {
+                    const mission = getLaunchMissionName(alert.headline);
+                    const countdown = getLaunchCountdown(alert.validFrom);
+                    return (
+                      <div class="text-xs leading-tight">
+                        <div class="font-medium text-gray-700 truncate">{mission ?? alert.headline.slice(0, 60)}</div>
+                        <div class={`font-bold mt-0.5 ${
+                          countdown.past ? 'text-gray-400' : countdown.urgent ? 'text-red-500' : 'text-blue-600'
+                        }`}>{countdown.text}</div>
+                      </div>
+                    );
+                  }
+                  const text = alert.headline.slice(0, 90) + (alert.headline.length > 90 ? '…' : '');
+                  return <span class="text-gray-500 text-xs truncate block">{text}</span>;
+                })()}
               </td>
 
             </tr>
@@ -259,6 +288,7 @@ const borderColor = filtered.some(a => a.severity === 'red')
 {filtered.map((alert, i) => {
   const alertId = `alert-${region}-${i}`;
   const volcanoName = getVolcanoName(alert);
+  const isSpatial = alert.phenomenon === 'Tir spatial';
   return (
     <div 
       id={`modal-${alertId}`} 
@@ -268,7 +298,7 @@ const borderColor = filtered.some(a => a.severity === 'red')
       <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div class="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
           <div class="flex items-center gap-3">
-            <AlertBadge severity={alert.severity} />
+            <AlertBadge severity={alert.severity} isSpatial={isSpatial} />
             <h3 class="text-lg font-semibold text-gray-800">{alert.phenomenon}</h3>
           </div>
           <button 
@@ -280,6 +310,23 @@ const borderColor = filtered.some(a => a.severity === 'red')
         </div>
         
         <div class="px-6 py-4 space-y-4">
+          {isSpatial && (() => {
+            const mission = getLaunchMissionName(alert.headline);
+            const countdown = getLaunchCountdown(alert.validFrom);
+            const status = getLaunchStatus(alert.validFrom, alert.validTo);
+            return (
+              <div class="bg-violet-50 border border-violet-200 rounded-lg p-3">
+                <div class="text-sm font-semibold text-violet-800 flex items-center gap-2">
+                  🚀 Mission : {mission ?? '—'}
+                </div>
+                <div class={`text-sm font-bold mt-1 ${
+                  countdown.past ? 'text-gray-400' : countdown.urgent ? 'text-red-500' : 'text-blue-600'
+                }`}>{countdown.text}</div>
+                {status && <div class={`text-xs mt-1 ${status.cls}`}>{status.label}</div>}
+              </div>
+            );
+          })()}
+
           {volcanoName && (
             <div class="bg-orange-50 border border-orange-200 rounded-lg p-3">
               <div class="text-sm font-semibold text-orange-800 flex items-center gap-2">

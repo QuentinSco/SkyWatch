@@ -177,6 +177,14 @@
       attribution: '© OpenStreetMap contributors',
     }).addTo(leafletMap);
     markersLayer = L.layerGroup().addTo(leafletMap);
+    
+    // 🚀 Load rocket NOTAM layer if available
+    if (window.loadRocketNotams) {
+      console.log('[main.js] Loading rocket NOTAM layer...');
+      window.loadRocketNotams(leafletMap).catch(err => {
+        console.warn('[main.js] Could not load rocket NOTAMs:', err);
+      });
+    }
   }
 
   function updateMapMarkers(alerts) {

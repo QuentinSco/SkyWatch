@@ -1,177 +1,247 @@
 /**
  * API endpoint: /api/rocket-notams.json
- * Fetches and parses rocket launch NOTAMs (AHA/DRA zones) from FAA NOTAM Search
- * Returns GeoJSON FeatureCollection for Leaflet integration
- * 
- * Note: This is a mock endpoint for demonstration. In production, you would:
- * 1. Use FAA NOTAM Search API (https://notams.aim.faa.gov/notamSearch)
- * 2. Use Notamify API (https://notamify.com) with proper authentication
- * 3. Set up a backend scraper with proper rate limiting
+ * Fetches AHA/DRA rocket NOTAMs from FAA.
+ *
+ * Strategy:
+ *   1. FAA Official API (api.faa.gov) — if FAA_CLIENT_ID + FAA_CLIENT_SECRET are set in env
+ *   2. Direct query to notams.aim.faa.gov — public, no key, same source as old `notams` npm package
+ *   Returns GeoJSON FeatureCollection. No mock data.
  */
 
 import { parseRocketNotam } from '../../../JS/notamRocket.js';
 
-// Mock data - Example rocket NOTAMs for demonstration
-const MOCK_NOTAMS = [
-  // Real KZMA NOTAM provided by user
-  `!CARF 03/029 ZMA AIRSPACE DCC EROP X3730 F9 STLNK 10-40 AREA A STNR
-ALT RESERVATION WI AN AREA DEFINED AS 283900N0804100W TO
-284100N0803500W TO 292800N0795700W TO 291400N0793800W TO
-285000N0794500W TO 282600N0803000W TO POINT OF ORIGIN SFC-UNL.
-CAUTION SPACE LAUNCH / HAZARDOUS OPS AND POSSIBILITY OF FALLING
-SPACE DEBRIS. 2603040658-2603041140`,
-  
-  // Additional example: SpaceX Starbase TFR (Boca Chica)
-  `!FDC 3/045 ZHU AIRSPACE SPACE OPERATIONS
-PURSUANT TO 14 CFR SECTION 91.143, SPACE FLIGHT OPERATIONS AREA
-ALT RESERVATION WI AN AREA DEFINED AS 260000N0972000W TO
-260500N0971500W TO 265000N0970000W TO 264500N0970500W TO
-POINT OF ORIGIN SFC-UNL.
-NO FLY ZONE - AHA (ANOMALY HAZARD AREA)
-SPACEX STARSHIP TEST FLIGHT
-2603101400-2603101800`,
-  
-  // Example: Vandenberg SFB launch
-  `!FDC 3/088 ZLA AIRSPACE SPACE OPERATIONS
-ALT RESERVATION WI AN AREA DEFINED AS 343000N1204500W TO
-343500N1204000W TO 350000N1195000W TO 345500N1195500W TO
-POINT OF ORIGIN SFC-FL600.
-AHA - ANOMALY HAZARD AREA / NO FLY ZONE
-VANDENBERG SFB SPACE LAUNCH
-2603151200-2603151600`
-];
+const FAA_CLIENT_ID     = import.meta.env.FAA_CLIENT_ID;
+const FAA_CLIENT_SECRET = import.meta.env.FAA_CLIENT_SECRET;
 
-export async function GET({ request }) {
-  try {
-    console.log('[rocket-notams] Processing mock NOTAMs for demonstration...');
-    
-    // Parse mock NOTAMs using our parser
-    const parsedNotams = MOCK_NOTAMS.map(text => {
+// FIRs / ARTCCs covering US rocket launch sites
+// ZMA = Miami (Cape Canaveral), ZHU = Houston (Starbase), ZLA = LA (Vandenberg), ZJX = Jacksonville
+const ROCKET_FIRS = ['ZMA', 'ZHU', 'ZLA', 'ZJX'];
+
+const NOTAM_SEARCH_URL = 'https://notams.aim.faa.gov/notamSearch/search';
+const FAA_TOKEN_URL    = 'https://api.faa.gov/oauth/token';
+const FAA_NOTAM_URL    = 'https://api.faa.gov/notams/v1/notams';
+
+// ─── Approach A : FAA Official API (requires env credentials) ─────────────────
+async function fetchViaOfficialAPI() {
+  // Step 1: get OAuth2 bearer token
+  const tokenRes = await fetch(FAA_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type:    'client_credentials',
+      client_id:     FAA_CLIENT_ID,
+      client_secret: FAA_CLIENT_SECRET,
+    }),
+  });
+
+  if (!tokenRes.ok) {
+    throw new Error(`FAA token request failed: HTTP ${tokenRes.status}`);
+  }
+
+  const { access_token } = await tokenRes.json();
+
+  // Step 2: query NOTAMs filtered by space keywords
+  // Paginate through all results (FAA API returns max 100 per page)
+  let allItems = [];
+  let pageNum  = 1;
+  let hasMore  = true;
+
+  while (hasMore) {
+    const url = new URL(FAA_NOTAM_URL);
+    url.searchParams.set('keywords',  'SPACE LAUNCH');
+    url.searchParams.set('pageSize',  '100');
+    url.searchParams.set('pageNum',   String(pageNum));
+
+    const res = await fetch(url.toString(), {
+      headers: {
+        'Authorization': `Bearer ${access_token}`,
+        'Accept':        'application/json',
+      },
+    });
+
+    if (!res.ok) break;
+
+    const data = await res.json();
+    const items = data?.items || data?.notamList || [];
+    allItems = allItems.concat(items);
+
+    hasMore = items.length === 100;
+    pageNum++;
+  }
+
+  // The official API wraps the raw NOTAM in a text field — extract it
+  return allItems.map(item => {
+    const raw = item?.notam?.text ||
+                item?.icaoMessage ||
+                item?.traditionalMessage ||
+                item?.coreNOTAMData?.notam?.text ||
+                JSON.stringify(item); // last resort
+    return raw;
+  }).filter(Boolean);
+}
+
+// ─── Approach B : Direct notams.aim.faa.gov query (no credentials needed) ────
+// Replicates exactly what the deprecated `notams` npm package did:
+// POST form-encoded to the NOTAM search endpoint with ARTCC designators.
+async function fetchViaAimFAA() {
+  const allRaw = [];
+
+  await Promise.all(ROCKET_FIRS.map(async (fir) => {
+    try {
+      const res = await fetch(NOTAM_SEARCH_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          // Mimic a browser request — the FAA search endpoint can block bots
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept':     'application/json, text/plain, */*',
+          'Origin':     'https://notams.aim.faa.gov',
+          'Referer':    'https://notams.aim.faa.gov/notamSearch/',
+        },
+        body: new URLSearchParams({
+          // Replicate the form submission used by PilotWeb / aim.faa.gov
+          designatorsForTFR:      fir,
+          retrieveArtcc:          'false',
+          sortColumns:            'CLMN_LSID+ASC+',
+          formatType:             'DOMESTIC',
+          retrievalType:          'ALL',
+          pageSize:               '150',
+          pageNum:                '1',
+          action:                 'notamRetrievalByICAOs',
+          openItems:              'false',
+        }),
+      });
+
+      if (!res.ok) {
+        console.warn(`[rocket-notams] aim.faa.gov returned HTTP ${res.status} for ${fir}`);
+        return;
+      }
+
+      const json = await res.json();
+
+      // Response shape: { notamList: [ { icaoMessage, traditionalMessage, ... }, ... ] }
+      const list = json?.notamList || json?.items || [];
+      list.forEach(item => {
+        const raw = item?.icaoMessage ||
+                    item?.traditionalMessage ||
+                    item?.notam?.text ||
+                    item?.coreNOTAMData?.notam?.text;
+        if (raw) allRaw.push(raw.trim());
+      });
+
+    } catch (err) {
+      console.warn(`[rocket-notams] fetchViaAimFAA error for ${fir}:`, err.message);
+    }
+  }));
+
+  return allRaw;
+}
+
+// ─── GeoJSON builder ─────────────────────────────────────────────────────────
+function buildGeoJSON(rawNotams, source) {
+  const now = new Date();
+
+  // Deduplicate by raw text
+  const unique = [...new Set(rawNotams)];
+
+  const features = unique
+    .map(raw => {
       try {
-        return parseRocketNotam(text);
-      } catch (error) {
-        console.error('[rocket-notams] Failed to parse NOTAM:', error);
+        return parseRocketNotam(raw);
+      } catch {
         return null;
       }
-    }).filter(n => n !== null);
-    
-    console.log(`[rocket-notams] Parsed ${parsedNotams.length} NOTAMs`);
-    
-    // Filter only active or future NOTAMs
-    const now = new Date();
-    const activeNotams = parsedNotams.filter(n => {
-      if (!n.validity?.end) return true;
-      return new Date(n.validity.end) > now;
+    })
+    .filter(n =>
+      n &&
+      n.polygon?.length >= 3 && // valid polygon needs at least 3 points
+      (!n.validity?.end || new Date(n.validity.end) > now) // filter expired
+    )
+    .map(n => {
+      const coords = [
+        ...n.polygon.map(p => [p.lng, p.lat]),
+        [n.polygon[0].lng, n.polygon[0].lat], // close ring
+      ];
+      return {
+        type: 'Feature',
+        properties: {
+          notamType:      n.notamType,
+          notamNumber:    n.notamNumber,
+          classification: n.classification,
+          status:         n.status,
+          confidence:     n.confidence,
+          missionId:      n.missionId,
+          validFrom:      n.validity?.start?.toISOString() ?? null,
+          validTo:        n.validity?.end?.toISOString()   ?? null,
+          altitudeLower:  n.altitude.lower,
+          altitudeUpper:  n.altitude.upper,
+          raw:            n.raw.substring(0, 500),
+        },
+        geometry: {
+          type:        'Polygon',
+          coordinates: [coords],
+        },
+      };
     });
-    
-    console.log(`[rocket-notams] Active NOTAMs: ${activeNotams.length}`);
-    
-    // Convert to GeoJSON FeatureCollection
-    const features = activeNotams
-      .filter(n => n.polygon && n.polygon.length > 0)
-      .map(n => {
-        // Close the polygon by adding first point at the end
-        const coordinates = [
-          ...n.polygon.map(p => [p.lng, p.lat]),
-          [n.polygon[0]?.lng, n.polygon[0]?.lat]
-        ].filter(coord => coord[0] != null && coord[1] != null);
-        
-        return {
-          type: 'Feature',
-          properties: {
-            notamType: n.notamType,
-            notamNumber: n.notamNumber,
-            classification: n.classification,
-            status: n.status,
-            confidence: n.confidence,
-            missionId: n.missionId,
-            validFrom: n.validity?.start?.toISOString(),
-            validTo: n.validity?.end?.toISOString(),
-            altitudeLower: n.altitude.lower,
-            altitudeUpper: n.altitude.upper,
-            raw: n.raw.substring(0, 500)
-          },
-          geometry: {
-            type: 'Polygon',
-            coordinates: [coordinates]
-          }
-        };
-      });
-    
-    const geojson = {
-      type: 'FeatureCollection',
-      features,
-      metadata: {
-        generated: new Date().toISOString(),
-        count: features.length,
-        mode: 'DEMO',
-        sources: ['Mock Data - Demo Mode'],
-        note: 'This is demonstration data. In production, integrate with FAA NOTAM Search API or Notamify API.'
-      }
-    };
-    
+
+  return {
+    type: 'FeatureCollection',
+    features,
+    metadata: {
+      generated: now.toISOString(),
+      count:     features.length,
+      source,
+      firs:      ROCKET_FIRS,
+    },
+  };
+}
+
+// ─── Main handler ─────────────────────────────────────────────────────────────
+export async function GET() {
+  let rawNotams = [];
+  let source    = 'unknown';
+
+  try {
+    if (FAA_CLIENT_ID && FAA_CLIENT_SECRET) {
+      console.log('[rocket-notams] Using FAA Official API (api.faa.gov)');
+      rawNotams = await fetchViaOfficialAPI();
+      source    = 'FAA Official API (api.faa.gov)';
+    } else {
+      console.log('[rocket-notams] No credentials — falling back to notams.aim.faa.gov');
+      rawNotams = await fetchViaAimFAA();
+      source    = 'notams.aim.faa.gov (direct)';
+    }
+
+    console.log(`[rocket-notams] Raw NOTAMs fetched: ${rawNotams.length}`);
+
+    const geojson = buildGeoJSON(rawNotams, source);
+
+    console.log(`[rocket-notams] Rocket zones returned: ${geojson.features.length}`);
+
     return new Response(JSON.stringify(geojson, null, 2), {
       status: 200,
       headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'public, max-age=300'
-      }
+        'Content-Type':  'application/json',
+        'Cache-Control': 'public, max-age=300', // 5-min cache
+      },
     });
-    
+
   } catch (error) {
-    console.error('[rocket-notams] Error:', error);
-    
+    console.error('[rocket-notams] Fatal error:', error);
+
     return new Response(
       JSON.stringify({
-        type: 'FeatureCollection',
+        type:     'FeatureCollection',
         features: [],
         metadata: {
-          error: error.message,
-          generated: new Date().toISOString()
-        }
+          error:     error.message,
+          generated: new Date().toISOString(),
+          hint: FAA_CLIENT_ID
+            ? 'FAA Official API failed — check FAA_CLIENT_ID / FAA_CLIENT_SECRET'
+            : 'Set FAA_CLIENT_ID + FAA_CLIENT_SECRET in env for the official API, or the notams.aim.faa.gov fallback may be rate-limited.',
+        },
       }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      }
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
 }
-
-/**
- * PRODUCTION IMPLEMENTATION NOTES:
- * 
- * Option 1: FAA NOTAM Search API (Official, Free)
- * - Endpoint: https://notams.aim.faa.gov/notamSearch/search
- * - Requires web form submission / screen scraping
- * - Rate limits apply
- * 
- * Option 2: Notamify API (Commercial, Structured)
- * - Endpoint: https://api.notamify.com/v2/notams
- * - Provides parsed data with categories
- * - Pricing: 1 credit per page
- * - Example query: GET /v2/notams?icao=KZMA&category=ROCKET_LAUNCH
- * 
- * Option 3: NASA NOTAMs API (Public, Structured)
- * - Endpoint: https://dip.amesaero.nasa.gov (requires registration)
- * - Value-added processing of FAA SWIM feed
- * - Free for research/educational use
- * 
- * Example integration with Notamify:
- * 
- * const response = await fetch('https://api.notamify.com/v2/notams', {
- *   headers: {
- *     'Authorization': `Bearer ${process.env.NOTAMIFY_API_KEY}`,
- *     'Content-Type': 'application/json'
- *   },
- *   params: {
- *     category: 'SPACE_OPERATIONS',
- *     active: true,
- *     page: 1,
- *     per_page: 50
- *   }
- * });
- * 
- * const data = await response.json();
- * // Process data.notams with built-in interpretation
- */

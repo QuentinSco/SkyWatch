@@ -1,276 +1,265 @@
 /**
  * rocket-notam-layer.js
  * Leaflet layer manager for AHA/DRA rocket launch zones
- * Integrates with SkyWatch map display
+ *
+ * Feature: after a dispatcher clicks "Tir réussi ✅",
+ * the zone turns green and stays visible 6h (CLEARED status).
+ * Stored in localStorage so persiste entre les rechargements.
  */
 
-// Color coding by classification and status
 const NOTAM_COLORS = {
-  // AHA = strict NO FLY ZONE
-  'AHA': {
-    NO_FLY: { fill: '#dc2626', stroke: '#991b1b', opacity: 0.5 }
-  },
-  // DRA = CAUTION zone (may be closed by separate NOTAM)
-  'DRA': {
-    CAUTION: { fill: '#f97316', stroke: '#c2410c', opacity: 0.35 }
-  },
-  // LAUNCH_HAZARD = hybrid (CARF with hazardous ops)
-  'LAUNCH_HAZARD': {
-    CAUTION_HIGH: { fill: '#f59e0b', stroke: '#d97706', opacity: 0.4 },
-    AVOID: { fill: '#fbbf24', stroke: '#f59e0b', opacity: 0.3 }
-  },
-  // Generic fallback
-  'LAUNCH': {
-    INFO: { fill: '#64748b', stroke: '#475569', opacity: 0.25 }
-  }
+  AHA:           { NO_FLY:      { fill: '#dc2626', stroke: '#991b1b', opacity: 0.50 } },
+  DRA:           { CAUTION:     { fill: '#f97316', stroke: '#c2410c', opacity: 0.35 } },
+  LAUNCH_HAZARD: { CAUTION_HIGH:{ fill: '#f59e0b', stroke: '#d97706', opacity: 0.40 },
+                   AVOID:       { fill: '#fbbf24', stroke: '#f59e0b', opacity: 0.30 } },
+  LAUNCH:        { INFO:        { fill: '#64748b', stroke: '#475569', opacity: 0.25 } },
+  // Zone verte après tir réussi
+  CLEARED:       { OK:          { fill: '#16a34a', stroke: '#15803d', opacity: 0.35 } },
 };
 
-let rocketLayerGroup = null;
-let fetchInterval = null;
+// Durée d'affichage de la zone verte après confirmation (ms)
+const CLEARED_DURATION_MS = 6 * 60 * 60 * 1000; // 6 heures
 
-/**
- * Get color configuration for a NOTAM based on classification and status
- */
-function getNotamColor(classification, status) {
-  const classConfig = NOTAM_COLORS[classification];
-  if (!classConfig) return NOTAM_COLORS.LAUNCH.INFO;
-  
-  return classConfig[status] || Object.values(classConfig)[0];
+const LS_KEY = 'skywatch_launches_ok'; // localStorage
+
+let rocketLayerGroup = null;
+let fetchInterval    = null;
+let _leafletMap      = null; // référence globale pour les callbacks popup
+
+// ─── Helpers localStorage ─────────────────────────────────────────────────
+function getLaunchesOk() {
+  try {
+    return JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveLaunchOk(notamKey) {
+  const all = getLaunchesOk();
+  all[notamKey] = new Date().toISOString();
+  localStorage.setItem(LS_KEY, JSON.stringify(all));
 }
 
 /**
- * Format popup content for a rocket NOTAM
+ * Retourne l'état CLEARED d'un NOTAM :
+ * - null   = pas encore marqué comme réussi
+ * - { ts, remainingMs } = réussi, encore dans la fenêtre 6h
+ * - 'expired' = fenêtre 6h écoulée
  */
-function makePopupContent(properties) {
-  const { classification, status, notamNumber, missionId, validFrom, validTo, altitudeLower, altitudeUpper, confidence } = properties;
-  
-  const colorConfig = getNotamColor(classification, status);
-  
-  // Status badge
+function getClearedStatus(notamKey) {
+  const all  = getLaunchesOk();
+  const tsStr = all[notamKey];
+  if (!tsStr) return null;
+
+  const ts        = new Date(tsStr).getTime();
+  const elapsed   = Date.now() - ts;
+  if (elapsed > CLEARED_DURATION_MS) return 'expired';
+
+  return {
+    ts: new Date(tsStr),
+    remainingMs: CLEARED_DURATION_MS - elapsed,
+  };
+}
+
+// Clé unique pour un NOTAM (numéro ou mission ID + from)
+function notamKey(props) {
+  return props.notamNumber || `${props.missionId}_${props.validFrom}`;
+}
+
+// ─── Couleur ───────────────────────────────────────────────────────────────
+function getColor(classification, status, cleared) {
+  if (cleared && cleared !== 'expired') return NOTAM_COLORS.CLEARED.OK;
+  const cls = NOTAM_COLORS[classification];
+  if (!cls) return NOTAM_COLORS.LAUNCH.INFO;
+  return cls[status] || Object.values(cls)[0];
+}
+
+// ─── Popup ─────────────────────────────────────────────────────────────────
+function formatDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('fr-FR', {
+    day: '2-digit', month: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    timeZone: 'UTC', timeZoneName: 'short',
+  });
+}
+
+function formatDuration(ms) {
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return h > 0 ? `${h}h${m.toString().padStart(2,'0')}` : `${m}min`;
+}
+
+function makePopupContent(props, cleared) {
+  const color = getColor(props.classification, props.status, cleared);
+  const key   = notamKey(props);
+
   const statusLabels = {
-    NO_FLY: 'NO FLY ZONE',
-    CAUTION_HIGH: 'CAUTION - HIGH RISK',
-    CAUTION: 'CAUTION',
-    AVOID: 'AVOID',
-    INFO: 'INFORMATIONAL'
+    NO_FLY: 'NO FLY ZONE', CAUTION_HIGH: 'CAUTION — HIGH RISK',
+    CAUTION: 'CAUTION', AVOID: 'AVOID', INFO: 'INFO',
   };
-  
-  const statusLabel = statusLabels[status] || status;
-  
-  // Classification emoji
-  const classEmoji = {
-    AHA: '🚫',
-    DRA: '⚠️',
-    LAUNCH_HAZARD: '🚀',
-    LAUNCH: 'ℹ️'
-  };
-  
-  const emoji = classEmoji[classification] || '🚀';
-  
-  // Format dates
-  const formatDate = (isoString) => {
-    if (!isoString) return '—';
-    return new Date(isoString).toLocaleString('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'UTC',
-      timeZoneName: 'short'
+  const classEmoji = { AHA: '🚫', DRA: '⚠️', LAUNCH_HAZARD: '🚀', LAUNCH: 'ℹ️' };
+
+  const altDisplay = props.altitudeUpper === null
+    ? `${props.altitudeLower}ft → UNLIMITED`
+    : `${props.altitudeLower}ft → ${props.altitudeUpper}ft`;
+
+  const confidencePercent = Math.round((props.confidence || 0) * 100);
+  const confidenceColor   = props.confidence >= 0.9 ? '#16a34a'
+                          : props.confidence >= 0.7 ? '#f59e0b' : '#6b7280';
+
+  // ─── Zone CLEARED ───
+  if (cleared && cleared !== 'expired') {
+    const remaining = formatDuration(cleared.remainingMs);
+    const confirmedAt = cleared.ts.toLocaleString('fr-FR', {
+      hour: '2-digit', minute: '2-digit',
+      timeZone: 'UTC', timeZoneName: 'short',
     });
-  };
-  
-  // Altitude display
-  const altDisplay = altitudeUpper === null 
-    ? `${altitudeLower}ft → UNLIMITED`
-    : `${altitudeLower}ft → ${altitudeUpper}ft`;
-  
-  // Confidence indicator
-  const confidencePercent = Math.round(confidence * 100);
-  const confidenceColor = confidence >= 0.9 ? '#16a34a' : (confidence >= 0.7 ? '#f59e0b' : '#6b7280');
-  
+    return `
+      <div style="min-width:280px;font-family:system-ui,sans-serif;font-size:13px;line-height:1.5">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-size:28px">✅</span>
+          <div>
+            <div style="background:#15803d;color:white;font-weight:700;font-size:10px;padding:3px 8px;border-radius:4px;text-transform:uppercase;display:inline-block;margin-bottom:3px">COULOIR LIBÉRÉ</div>
+            <div style="font-size:11px;color:#6b7280;font-family:monospace">${props.notamNumber || 'N/A'}</div>
+          </div>
+        </div>
+        <div style="background:#f0fdf4;border-left:3px solid #16a34a;padding:8px;border-radius:4px;margin-bottom:8px">
+          ${props.missionId ? `<div style="font-weight:600;margin-bottom:2px">🚀 ${props.missionId}</div>` : ''}
+          <div style="color:#374151">✅ Tir réussi confirmé à ${confirmedAt}</div>
+          <div style="color:#16a34a;font-weight:600;margin-top:4px">Zone effacée dans ${remaining}</div>
+        </div>
+        <div style="font-size:11px;color:#6b7280">✈️ Le couloir est considéré libéré jusqu'à la fin de la fenêtre de 6h.</div>
+      </div>`;
+  }
+
+  // ─── Zone active ───
   return `
     <div style="min-width:280px;max-width:320px;font-family:system-ui,sans-serif;font-size:13px;line-height:1.5">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <span style="font-size:24px">${emoji}</span>
+        <span style="font-size:24px">${classEmoji[props.classification] || '🚀'}</span>
         <div style="flex:1">
-          <div style="background:${colorConfig.stroke};color:white;font-weight:700;font-size:10px;padding:3px 8px;border-radius:4px;text-transform:uppercase;display:inline-block;margin-bottom:3px">
-            ${statusLabel}
+          <div style="background:${color.stroke};color:white;font-weight:700;font-size:10px;padding:3px 8px;border-radius:4px;text-transform:uppercase;display:inline-block;margin-bottom:3px">
+            ${statusLabels[props.status] || props.status}
           </div>
-          <div style="font-size:11px;color:#6b7280;font-family:monospace">${notamNumber || 'N/A'}</div>
+          <div style="font-size:11px;color:#6b7280;font-family:monospace">${props.notamNumber || 'N/A'}</div>
         </div>
       </div>
-      
-      <div style="background:#f8fafc;border-left:3px solid ${colorConfig.stroke};padding:8px;margin-bottom:8px;border-radius:4px">
-        <div style="font-weight:600;color:#111;margin-bottom:4px">${classification}</div>
-        ${missionId ? `<div style="color:#374151;font-family:monospace;font-size:12px;margin-bottom:2px">🛰️ ${missionId}</div>` : ''}
+
+      <div style="background:#f8fafc;border-left:3px solid ${color.stroke};padding:8px;margin-bottom:8px;border-radius:4px">
+        <div style="font-weight:600;color:#111;margin-bottom:4px">${props.classification}</div>
+        ${props.missionId ? `<div style="color:#374151;font-family:monospace;font-size:12px;margin-bottom:2px">🛰️ ${props.missionId}</div>` : ''}
         <div style="color:#6b7280;font-size:11px;margin-top:4px">
-          Confidence: <span style="color:${confidenceColor};font-weight:600">${confidencePercent}%</span>
+          Confiance : <span style="color:${confidenceColor};font-weight:600">${confidencePercent}%</span>
         </div>
       </div>
-      
-      <div style="font-size:11px;color:#374151;margin-bottom:6px">
-        <div style="margin-bottom:3px">
-          <span style="font-weight:600">Valid from:</span><br/>
-          ${formatDate(validFrom)}
-        </div>
-        <div>
-          <span style="font-weight:600">Valid to:</span><br/>
-          ${formatDate(validTo)}
-        </div>
+
+      <div style="font-size:11px;color:#374151;margin-bottom:8px">
+        <div style="margin-bottom:3px"><span style="font-weight:600">Début :</span> ${formatDate(props.validFrom)}</div>
+        <div><span style="font-weight:600">Fin :</span> ${formatDate(props.validTo)}</div>
+        <div style="margin-top:4px">✈️ Altitude&nbsp;: <span style="font-family:monospace">${altDisplay}</span></div>
       </div>
-      
-      <div style="font-size:11px;color:#6b7280;padding-top:6px;border-top:1px solid #e5e7eb">
-        <div>✈️ Altitude: <span style="font-family:monospace">${altDisplay}</span></div>
-      </div>
-    </div>
-  `;
+
+      <!-- Bouton confirmation tir réussi -->
+      <button
+        onclick="window.__rocketConfirmOk('${key}')"
+        style="
+          width:100%;padding:8px;margin-top:4px;
+          background:#16a34a;color:white;
+          border:none;border-radius:6px;
+          font-size:13px;font-weight:600;cursor:pointer;
+        "
+      >
+        ✅ Tir réussi — Libérer le couloir (6h)
+      </button>
+    </div>`;
 }
 
-/**
- * Add rocket NOTAM layer to map
- * @param {L.Map} map - Leaflet map instance
- * @param {Object} geojson - GeoJSON FeatureCollection from API
- */
-export function addRocketNotamLayer(map, geojson) {
-  if (!map || !geojson || !geojson.features) {
-    console.warn('[rocket-notam-layer] Invalid map or GeoJSON data');
-    return;
-  }
-  
-  // Remove existing layer if present
-  if (rocketLayerGroup) {
-    map.removeLayer(rocketLayerGroup);
-  }
-  
+// ─── Callback global appelé depuis le HTML du popup ────────────────────────
+window.__rocketConfirmOk = function (key) {
+  if (!confirm(`Confirmer le tir réussi pour ce NOTAM ?\nLa zone sera affichée comme libérée pendant 6h.`)) return;
+  saveLaunchOk(key);
+  // Rafraîchit la couche pour appliquer la couleur verte immédiatement
+  if (_leafletMap) loadRocketNotams(_leafletMap);
+};
+
+// ─── Construction de la couche Leaflet ───────────────────────────────────────
+function addRocketNotamLayer(map, geojson) {
+  if (!map || !geojson?.features) return;
+
+  if (rocketLayerGroup) map.removeLayer(rocketLayerGroup);
   rocketLayerGroup = L.layerGroup();
-  
+
+  // Nettoyage des entrées localStorage expirées
+  const all = getLaunchesOk();
+  let changed = false;
+  for (const k in all) {
+    if (getClearedStatus(k) === 'expired') { delete all[k]; changed = true; }
+  }
+  if (changed) localStorage.setItem(LS_KEY, JSON.stringify(all));
+
   geojson.features.forEach(feature => {
-    const { classification, status } = feature.properties;
-    const colorConfig = getNotamColor(classification, status);
-    
-    // Create polygon
-    const polygon = L.polygon(
-      feature.geometry.coordinates[0].map(coord => [coord[1], coord[0]]), // GeoJSON is [lng, lat], Leaflet needs [lat, lng]
-      {
-        color: colorConfig.stroke,
-        fillColor: colorConfig.fill,
-        fillOpacity: colorConfig.opacity,
-        weight: 2.5,
-        dashArray: status === 'NO_FLY' ? '' : '5, 5' // Solid for NO_FLY, dashed for others
-      }
-    );
-    
-    // Add popup
-    polygon.bindPopup(makePopupContent(feature.properties), {
-      maxWidth: 340,
-      className: 'rocket-notam-popup'
+    const props   = feature.properties;
+    const key     = notamKey(props);
+    const cleared = getClearedStatus(key);
+
+    // Zone expirée ET déjà confirmée depuis > 6h → on n'affiche pas
+    if (cleared === 'expired') return;
+
+    const color = getColor(props.classification, props.status, cleared);
+
+    const latlngs = feature.geometry.coordinates[0].map(c => [c[1], c[0]]);
+
+    const poly = L.polygon(latlngs, {
+      color:       color.stroke,
+      fillColor:   color.fill,
+      fillOpacity: color.opacity,
+      weight:      2.5,
+      // Plein si CLEARED ou NO_FLY, pointillé sinon
+      dashArray: (cleared || props.status === 'NO_FLY') ? '' : '6, 5',
     });
-    
-    // Add tooltip on hover (shows NOTAM number)
-    polygon.bindTooltip(
-      `${feature.properties.classification}: ${feature.properties.notamNumber || 'N/A'}`,
-      { sticky: true, direction: 'top' }
-    );
-    
-    polygon.addTo(rocketLayerGroup);
+
+    poly.bindPopup(makePopupContent(props, cleared), {
+      maxWidth: 340,
+      className: 'rocket-notam-popup',
+    });
+
+    const tooltipLabel = cleared
+      ? `✅ CLEARED — ${props.missionId || props.notamNumber || 'NOTAM'}`
+      : `🚀 ${props.classification} — ${props.notamNumber || props.missionId || 'N/A'}`;
+
+    poly.bindTooltip(tooltipLabel, { sticky: true, direction: 'top' });
+
+    // Auto-expire : programme la suppression quand la fenêtre de 6h s'écoule
+    if (cleared && cleared !== 'expired') {
+      setTimeout(() => {
+        if (_leafletMap) loadRocketNotams(_leafletMap);
+      }, cleared.remainingMs + 1000);
+    }
+
+    poly.addTo(rocketLayerGroup);
   });
-  
+
   rocketLayerGroup.addTo(map);
-  
-  console.log(`[rocket-notam-layer] Added ${geojson.features.length} rocket NOTAM zones to map`);
-  
-  return rocketLayerGroup;
+  console.log(`[rocket-notam-layer] ${geojson.features.length} zone(s) affichée(s)`);
 }
 
-/**
- * Fetch and display rocket NOTAMs on map
- * @param {L.Map} map - Leaflet map instance
- */
-export async function loadRocketNotams(map) {
+// ─── Fetch + affichage ────────────────────────────────────────────────────────────
+async function loadRocketNotams(map) {
+  _leafletMap = map;
   try {
-    const response = await fetch('/api/rocket-notams.json');
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    
-    const geojson = await response.json();
-    console.log(`[rocket-notam-layer] Loaded ${geojson.features?.length || 0} NOTAMs from API`);
-    
+    const res = await fetch('/api/rocket-notams.json');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const geojson = await res.json();
     addRocketNotamLayer(map, geojson);
-    
     return geojson;
-  } catch (error) {
-    console.error('[rocket-notam-layer] Failed to load rocket NOTAMs:', error);
+  } catch (err) {
+    console.error('[rocket-notam-layer] Fetch error:', err);
     return null;
   }
 }
 
-/**
- * Start auto-refresh of rocket NOTAMs
- * @param {L.Map} map - Leaflet map instance
- * @param {number} intervalMs - Refresh interval in milliseconds (default: 5 minutes)
- */
-export function startAutoRefresh(map, intervalMs = 5 * 60 * 1000) {
-  // Clear existing interval
-  if (fetchInterval) {
-    clearInterval(fetchInterval);
-  }
-  
-  // Load immediately
-  loadRocketNotams(map);
-  
-  // Set up periodic refresh
-  fetchInterval = setInterval(() => {
-    console.log('[rocket-notam-layer] Auto-refreshing rocket NOTAMs...');
-    loadRocketNotams(map);
-  }, intervalMs);
-  
-  console.log(`[rocket-notam-layer] Auto-refresh enabled (every ${intervalMs / 1000}s)`);
-}
-
-/**
- * Stop auto-refresh
- */
-export function stopAutoRefresh() {
-  if (fetchInterval) {
-    clearInterval(fetchInterval);
-    fetchInterval = null;
-    console.log('[rocket-notam-layer] Auto-refresh stopped');
-  }
-}
-
-/**
- * Remove rocket NOTAM layer from map
- * @param {L.Map} map - Leaflet map instance
- */
-export function removeRocketNotamLayer(map) {
-  if (rocketLayerGroup && map) {
-    map.removeLayer(rocketLayerGroup);
-    rocketLayerGroup = null;
-    console.log('[rocket-notam-layer] Layer removed');
-  }
-}
-
-/**
- * Toggle rocket NOTAM layer visibility
- * @param {L.Map} map - Leaflet map instance
- * @returns {boolean} New visibility state
- */
-export function toggleRocketNotamLayer(map) {
-  if (!map) return false;
-  
-  if (rocketLayerGroup && map.hasLayer(rocketLayerGroup)) {
-    map.removeLayer(rocketLayerGroup);
-    console.log('[rocket-notam-layer] Layer hidden');
-    return false;
-  } else {
-    if (rocketLayerGroup) {
-      rocketLayerGroup.addTo(map);
-    } else {
-      loadRocketNotams(map);
-    }
-    console.log('[rocket-notam-layer] Layer shown');
-    return true;
-  }
-}
+// ─── Exposition sur window (utilisé par main.js via is:inline) ────────────────
+// main.js fait : window.loadRocketNotams(map)
+window.loadRocketNotams = loadRocketNotams;

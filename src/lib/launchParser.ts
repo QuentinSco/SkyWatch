@@ -34,29 +34,24 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
     url.searchParams.set('limit', '50');
     url.searchParams.set('ordering', 'window_start');
 
-    console.log('[LaunchLib] Requête:', url.toString());
-
     const res = await fetch(url.toString(), {
       headers: { 'User-Agent': 'SkyWatch/0.1', 'Accept': 'application/json' },
       signal: AbortSignal.timeout(10000),
     });
     if (!res.ok) {
-      console.error('[LaunchLib] HTTP', res.status, await res.text().catch(() => ''));
+      console.error('[LaunchLib] HTTP', res.status);
       return alerts;
     }
 
     const json = await res.json();
     const now = Date.now();
-    console.log(`[LaunchLib] ${json.count ?? '?'} lancements dispo, ${json.results?.length ?? 0} reçus`);
 
     for (const launch of (json.results ?? [])) {
       const statusId = launch.status?.id;
-
       const windowStart = new Date(launch.window_start ?? launch.net).getTime();
       const windowEnd   = new Date(launch.window_end   ?? launch.net).getTime();
       const hoursUntil  = (windowStart - now) / 3_600_000;
-
-      const isBackup = BACKUP_STATUS_IDS.has(statusId);
+      const isBackup    = BACKUP_STATUS_IDS.has(statusId);
 
       if (EXCLUDE_STATUS_IDS.has(statusId)) continue;
       if (hoursUntil < 0 || hoursUntil > LAUNCH_WINDOW_HOURS) continue;
@@ -77,33 +72,27 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
       const siteName    = launch.pad?.name ?? launch.pad?.location?.name ?? 'Site inconnu';
       const missionName = launch.mission?.name ?? launch.name ?? 'Mission inconnue';
 
-      // Lien site officiel du provider (plus lisible que la fiche LL2)
+      // Liens utiles — on n'expose JAMAIS l'URL LL2 brute (illisible)
       const providerInfoUrl: string = launch.launch_service_provider?.info_url ?? '';
       const providerName: string    = launch.launch_service_provider?.name ?? provider;
-
-      // Dernière mise à jour LL2 : updates[0] (le plus récent)
-      const lastUpdate = Array.isArray(launch.updates) && launch.updates.length > 0
-        ? launch.updates[0]
-        : null;
-      const lastUpdateUrl: string     = lastUpdate?.info_url  ?? '';
-      const lastUpdateComment: string = lastUpdate?.comment   ?? '';
-
       const nrUrl = nextrocketUrl(launch);
+
+      // Dernière MàJ (updates trié du plus récent au plus ancien par LL2)
+      const lastUpdate = Array.isArray(launch.updates) && launch.updates.length > 0
+        ? launch.updates[0] : null;
+      const lastUpdateUrl: string     = lastUpdate?.info_url ?? '';
+      const lastUpdateComment: string = lastUpdate?.comment  ?? '';
 
       const sourceLinks: { label: string; url: string }[] = [];
       if (providerInfoUrl) sourceLinks.push({ label: providerName, url: providerInfoUrl });
       if (nrUrl)           sourceLinks.push({ label: 'NextRocket.space', url: nrUrl });
-      if (lastUpdateUrl)   sourceLinks.push({ label: lastUpdateComment ? `MàJ : ${lastUpdateComment.slice(0, 40)}` : 'Dernière MàJ', url: lastUpdateUrl });
-      // Fallback : si aucun lien utile, on garde la fiche LL2
-      if (sourceLinks.length === 0) {
-        const launchDetailUrl = launch.url ?? `https://ll.thespacedevs.com/2.2.0/launch/${launch.id}/`;
-        sourceLinks.push({ label: 'Fiche LL2', url: launchDetailUrl });
-      }
+      if (lastUpdateUrl)   sourceLinks.push({
+        label: lastUpdateComment ? `MàJ : ${lastUpdateComment.slice(0, 40)}` : 'Dernière MàJ',
+        url: lastUpdateUrl,
+      });
+      // Si vraiment aucun lien : on n'affiche rien (sourceLinks vide = label "LaunchLib" seulement)
 
       const launchDetailUrl = launch.url ?? `https://ll.thespacedevs.com/2.2.0/launch/${launch.id}/`;
-      const backupSuffix = isBackup ? ' | Tir de secours (TBD)' : ' | Tir prévu';
-
-      console.log(`  ↳ ALERTE ${severity.toUpperCase()}${isBackup ? ' [BACKUP]' : ''} — aéroports impactés : ${airports.join(', ')}`);
 
       alerts.push({
         id:          `LAUNCH-${launch.id}`,
@@ -117,7 +106,7 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
         lat, lon,
         validFrom:   new Date(windowStart).toISOString(),
         validTo:     new Date(windowEnd).toISOString(),
-        headline:    `${provider} — ${rocket} | ${siteName}${backupSuffix}`,
+        headline:    `${provider} — ${rocket} | ${siteName}`,
         description: `Mission : ${missionName}. Vérifier NOTAMs aéroports impactés : ${airports.join(', ')}.`,
         link:        launchDetailUrl,
         sourceLinks,

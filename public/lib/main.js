@@ -78,7 +78,6 @@
     return null;
   }
 
-  /** Countdown T- inline discret, même style que le texte résumé */
   function countdownLabel(validFrom) {
     if (!validFrom) return '';
     const diff = new Date(validFrom).getTime() - Date.now();
@@ -88,19 +87,14 @@
     const m = totalMin % 60;
     let label, cls;
     if (h < 1) {
-      label = `T-${m}min`;
-      cls   = 'text-red-600 font-semibold';
+      label = `T-${m}min`; cls = 'text-red-600 font-semibold';
     } else if (h < 6) {
-      label = `T-${h}h${m > 0 ? String(m).padStart(2,'0') : ''}`;
-      cls   = 'text-orange-500 font-semibold';
+      label = `T-${h}h${m > 0 ? String(m).padStart(2,'0') : ''}`; cls = 'text-orange-500 font-semibold';
     } else if (h < 24) {
-      label = `T-${h}h`;
-      cls   = 'text-yellow-600';
+      label = `T-${h}h`; cls = 'text-yellow-600';
     } else {
-      const d = Math.floor(h / 24);
-      const rh = h % 24;
-      label = rh > 0 ? `T-${d}j${rh}h` : `T-${d}j`;
-      cls   = 'text-gray-500';
+      const d = Math.floor(h / 24); const rh = h % 24;
+      label = rh > 0 ? `T-${d}j${rh}h` : `T-${d}j`; cls = 'text-gray-500';
     }
     return `<span class="${cls}">${label}</span>`;
   }
@@ -157,7 +151,6 @@
       sourceHtml = `<span class="text-xs font-semibold text-gray-400">${icon} ${alert.source}</span>`;
     }
 
-    // Résumé tir spatial : timer inline discret + provider · rocket / mission / site
     let resumeHtml;
     if (isSpatial) {
       const provider    = alert.provider    || '';
@@ -165,7 +158,6 @@
       const missionName = alert.missionName || '';
       const siteName    = alert.siteName    || '';
       const cdHtml      = countdownLabel(alert.validFrom);
-      // Ligne 1 : timer + provider · rocket  (même taille que le reste)
       const providerRocket = [provider, rocket].filter(Boolean).join(' · ');
       resumeHtml = `
         <div class="text-xs leading-snug">
@@ -256,29 +248,52 @@
     markersLayer.clearLayers();
     for (const alert of alerts) {
       if (alert.lat == null || alert.lon == null) continue;
-      if (alert.phenomenon === 'Tir spatial') continue;
-      const color = SEVERITY_DOT[alert.severity] ?? '#6b7280';
-      const emoji = phenomenonEmoji(alert.phenomenon);
+
+      const isSpatial = alert.phenomenon === 'Tir spatial';
+      const color     = isSpatial ? '#7c3aed' : (SEVERITY_DOT[alert.severity] ?? '#6b7280');
+      const strokeColor = isSpatial ? '#5b21b6' : color;
+
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = 36;
       const ctx = canvas.getContext('2d');
       ctx.beginPath();
       ctx.arc(18, 18, 16, 0, Math.PI * 2);
-      ctx.fillStyle = 'white'; ctx.fill();
-      ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.stroke();
+      ctx.fillStyle = isSpatial ? '#7c3aed' : 'white';
+      ctx.fill();
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 2.5; ctx.stroke();
       ctx.font = '18px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(emoji, 18, 19);
+      ctx.fillStyle = isSpatial ? 'white' : 'black';
+      ctx.fillText(isSpatial ? '🚀' : phenomenonEmoji(alert.phenomenon), 18, 19);
+
       const icon = L.icon({ iconUrl: canvas.toDataURL('image/png'), iconSize: [36,36], iconAnchor: [18,18], popupAnchor: [0,-20] });
       const marker = L.marker([alert.lat, alert.lon], { icon });
-      marker.bindPopup(`
-        <div class="text-xs font-sans">
-          <div class="font-bold text-sm mb-1">${emoji} ${alert.phenomenon}</div>
-          <div class="text-gray-600 mb-1">${alert.country}</div>
-          <div class="font-semibold" style="color:${color}">${SEVERITY_LABEL[alert.severity] ?? alert.severity}</div>
-          <div class="text-gray-500 mt-1">${alert.headline.slice(0,100)}${alert.headline.length>100?'…':''}</div>
-          <div class="text-gray-400 mt-1">Source : ${alert.source}</div>
-          ${alert.airports?.length ? `<div class="mt-1">✈️ ${alert.airports.join(' · ')}</div>` : ''}
-        </div>`);
+
+      let popupContent;
+      if (isSpatial) {
+        const cdHtml = countdownLabel(alert.validFrom);
+        const providerRocket = [alert.provider, alert.rocket].filter(Boolean).join(' · ');
+        popupContent = `
+          <div class="text-xs font-sans" style="min-width:180px">
+            <div class="font-bold text-sm mb-1">🚀 ${alert.phenomenon}</div>
+            <div class="font-semibold mb-1">${cdHtml ? cdHtml + ' — ' : ''}${providerRocket}</div>
+            ${alert.missionName ? `<div class="text-gray-600">${alert.missionName}</div>` : ''}
+            ${alert.siteName    ? `<div class="text-gray-400">${alert.siteName}</div>` : ''}
+            ${alert.airports?.length ? `<div class="mt-1">✈️ ${alert.airports.join(' · ')}</div>` : ''}
+          </div>`;
+      } else {
+        popupContent = `
+          <div class="text-xs font-sans">
+            <div class="font-bold text-sm mb-1">${phenomenonEmoji(alert.phenomenon)} ${alert.phenomenon}</div>
+            <div class="text-gray-600 mb-1">${alert.country}</div>
+            <div class="font-semibold" style="color:${color}">${SEVERITY_LABEL[alert.severity] ?? alert.severity}</div>
+            <div class="text-gray-500 mt-1">${alert.headline.slice(0,100)}${alert.headline.length>100?'…':''}</div>
+            <div class="text-gray-400 mt-1">Source : ${alert.source}</div>
+            ${alert.airports?.length ? `<div class="mt-1">✈️ ${alert.airports.join(' · ')}</div>` : ''}
+          </div>`;
+      }
+
+      marker.bindPopup(popupContent);
       markersLayer.addLayer(marker);
     }
   }

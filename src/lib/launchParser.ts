@@ -17,6 +17,26 @@ const EXCLUDE_STATUS_IDS = new Set([4, 7]); // 4=Failed, 7=Partial Failure
 // Statuts considérés comme "backup" (TBD/TBC)
 const BACKUP_STATUS_IDS = new Set([2, 8]); // 2=TBD, 8=TBC
 
+/** Extrait le slug depuis l'URL LL2, ex: https://ll.thespacedevs.com/2.2.0/launch/falcon-9-block-5-starlink-group-17-18/ → falcon-9-block-5-starlink-group-17-18 */
+function slugFromUrl(url: string | undefined): string {
+  if (!url) return '';
+  // L'URL LL2 se termine par /<slug>/ ou /<uuid>/
+  const m = url.replace(/\/$/, '').match(/\/([^\/]+)$/);
+  return m ? m[1] : '';
+}
+
+/** Construit le lien NextRocket.space — utilise le slug si c'est un slug lisible (pas un UUID) */
+function nextrocketUrl(launch: any): string {
+  const slug = slugFromUrl(launch.url);
+  // UUID = 8-4-4-4-12 hex
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
+  if (slug && !isUuid) {
+    return `https://nextrocket.space/launch/${slug}`;
+  }
+  // Fallback : page d'accueil NextRocket avec le nom en recherche
+  return 'https://nextrocket.space';
+}
+
 export async function fetchRocketLaunches(): Promise<Alert[]> {
   const alerts: Alert[] = [];
   try {
@@ -77,7 +97,6 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
         continue;
       }
 
-      // Les tirs backup sont toujours en yellow, jamais plus grave
       const severity = isBackup
         ? 'yellow'
         : (SEVERITY_BY_HOURS.find(s => hoursUntil <= s.maxH)?.severity ?? 'yellow');
@@ -91,23 +110,14 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
 
       console.log(`  ↳ ALERTE ${severity.toUpperCase()}${isBackup ? ' [BACKUP]' : ''} — aéroports impactés : ${airports.join(', ')}`);
 
-      // Lien direct vers la fiche du lancement (lisible)
       const launchDetailUrl = launch.url ?? `https://ll.thespacedevs.com/2.2.0/launch/${launch.id}/`;
-      // Lien vers nextrocket.space pour une page grand public lisible
-      const nextrocketSlug = (launch.slug ?? launch.id ?? '').toString();
-      const nextrocketUrl  = nextrocketSlug
-        ? `https://nextrocket.space/launch/${nextrocketSlug}`
-        : 'https://nextrocket.space';
+      const nrUrl = nextrocketUrl(launch);
 
       const sourceLinks: { label: string; url: string }[] = [
-        {
-          label: 'Fiche lancement',
-          url: launchDetailUrl,
-        },
-        {
-          label: 'NextRocket.space',
-          url: nextrocketUrl,
-        },
+        { label: 'Fiche LL2', url: launchDetailUrl },
+        ...(nrUrl !== 'https://nextrocket.space'
+          ? [{ label: 'NextRocket.space', url: nrUrl }]
+          : []),
       ];
 
       alerts.push({
@@ -127,7 +137,13 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
         link:        launchDetailUrl,
         sourceLinks,
         isBackup,
-      } as Alert & { sourceLinks: { label: string; url: string }[]; isBackup: boolean });
+        // Champs supplémentaires pour le rendu
+        provider,
+        rocket,
+        missionName,
+        siteName,
+        hoursUntil: Math.round(hoursUntil),
+      } as Alert & { sourceLinks: { label: string; url: string }[]; isBackup: boolean; provider: string; rocket: string; missionName: string; siteName: string; hoursUntil: number });
     }
 
     console.log(`[LaunchLib] ${alerts.length} lancement(s) impactant(s) dans les 72h`);

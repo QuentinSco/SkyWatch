@@ -54,10 +54,9 @@
     'Neige':                 '🌨',
     'Poussière / Sable':     '🏜',
     'Gel / Verglas':         '🧊',
-    'Tir spatial':           'ROCKET_SVG',
   };
 
-  // SVG rocket inline (Material Design style, monochrome)
+  // SVG rocket inline
   const ROCKET_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="display:inline;width:1em;height:1em;vertical-align:-0.15em" aria-hidden="true"><path d="M13.75 2c-1.79 0-3.5.7-4.77 1.95L4 8.93V11l2.5 2.5L9 11l1-1 4-4 3.1-.1c.8-.03 1.57.28 2.13.84l.03.03c.56.56.87 1.33.84 2.13L20 12l-4 4-1 1-2.5 2.5H15l4.98-4.98A6.74 6.74 0 0 0 22 10.25C22 5.7 18.3 2 13.75 2ZM9 15.5 4.5 20l-.01-.01A1.49 1.49 0 0 1 4 19H3a1 1 0 0 1-1-1v-1a1.49 1.49 0 0 1 .44-1.06L7 11.5 9 13.5l.5.5L9 15.5Zm5-6a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Z"/></svg>`;
 
   function formatShortDate(iso) {
@@ -80,6 +79,33 @@
     return null;
   }
 
+  /** Countdown T- vers validFrom : "T-4h30" ou "T-12j" */
+  function countdown(validFrom) {
+    if (!validFrom) return null;
+    const diff = new Date(validFrom).getTime() - Date.now();
+    if (diff <= 0) return { label: 'EN COURS', cls: 'text-red-600 font-bold animate-pulse' };
+    const totalMin = Math.floor(diff / 60000);
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    let label, cls;
+    if (h < 1) {
+      label = `T-${m}min`;
+      cls   = 'text-red-600 font-bold';
+    } else if (h < 6) {
+      label = `T-${h}h${m > 0 ? String(m).padStart(2,'0') : ''}`;
+      cls   = 'text-orange-500 font-semibold';
+    } else if (h < 24) {
+      label = `T-${h}h`;
+      cls   = 'text-yellow-600 font-medium';
+    } else {
+      const d = Math.floor(h / 24);
+      const rh = h % 24;
+      label = rh > 0 ? `T-${d}j${rh}h` : `T-${d}j`;
+      cls   = 'text-gray-500';
+    }
+    return { label, cls };
+  }
+
   function groupByRegion(alerts) {
     return alerts.reduce((acc, a) => {
       const r = a.region || 'AUTRE';
@@ -91,10 +117,9 @@
 
   function phenomenonEmoji(phenomenon) {
     if (!phenomenon) return '⚠️';
-    if (phenomenon === 'Tir spatial') return ROCKET_SVG;
-    if (PHENOMENON_EMOJI[phenomenon] && PHENOMENON_EMOJI[phenomenon] !== 'ROCKET_SVG') return PHENOMENON_EMOJI[phenomenon];
+    if (PHENOMENON_EMOJI[phenomenon]) return PHENOMENON_EMOJI[phenomenon];
     const match = Object.entries(PHENOMENON_EMOJI)
-      .find(([k, v]) => v !== 'ROCKET_SVG' && phenomenon.toLowerCase().includes(k.toLowerCase()));
+      .find(([k]) => phenomenon.toLowerCase().includes(k.toLowerCase()));
     return match ? match[1] : '⚠️';
   }
 
@@ -119,7 +144,7 @@
         ).join(' ')
       : '<span class="text-gray-400">—</span>';
 
-    // Source : lien(s) ou simple label
+    // Source : liens ou simple label
     let sourceHtml;
     if (alert.sourceLinks && alert.sourceLinks.length > 0) {
       sourceHtml = `<div class="flex flex-col gap-0.5">
@@ -134,14 +159,21 @@
       sourceHtml = `<span class="text-xs font-semibold text-gray-400">${icon} ${alert.source}</span>`;
     }
 
-    // Résumé : pour un tir spatial on affiche la mission + countdown, sinon texte libre sur 2 lignes max
+    // Résumé tir spatial : provider · rocket · mission + countdown
     let resumeHtml;
     if (isSpatial) {
-      const missionMatch = alert.headline.match(/^([^\u2014|]+)/);
-      const mission = missionMatch ? missionMatch[1].trim() : alert.headline.slice(0, 60);
-      resumeHtml = `<div class="text-xs leading-tight">
-        <div class="font-medium text-gray-700">${mission}</div>
-      </div>`;
+      const provider    = alert.provider    || '';
+      const rocket      = alert.rocket      || '';
+      const missionName = alert.missionName || alert.headline.split('|')[0].trim();
+      const siteName    = alert.siteName    || '';
+      const cd          = countdown(alert.validFrom);
+      resumeHtml = `
+        <div class="text-xs leading-snug">
+          ${cd ? `<div class="text-base font-bold mb-0.5 ${cd.cls}">${cd.label}</div>` : ''}
+          <div class="font-semibold text-gray-800">${provider}${rocket ? ' · ' + rocket : ''}</div>
+          ${missionName ? `<div class="text-gray-500">${missionName}</div>` : ''}
+          ${siteName    ? `<div class="text-gray-400 text-[11px]">${siteName}</div>` : ''}
+        </div>`;
     } else {
       const text = alert.headline.slice(0, 90) + (alert.headline.length > 90 ? '…' : '');
       resumeHtml = `<span class="text-gray-600 text-xs break-words">${text}</span>`;
@@ -218,13 +250,7 @@
       attribution: '© OpenStreetMap contributors',
     }).addTo(leafletMap);
     markersLayer = L.layerGroup().addTo(leafletMap);
-    
-    if (window.loadRocketNotams) {
-      console.log('[main.js] Loading rocket NOTAM layer...');
-      window.loadRocketNotams(leafletMap).catch(err => {
-        console.warn('[main.js] Could not load rocket NOTAMs:', err);
-      });
-    }
+    // Couche NOTAM fusée supprimée — pas d'API propre disponible
   }
 
   function updateMapMarkers(alerts) {
@@ -232,26 +258,24 @@
     markersLayer.clearLayers();
     for (const alert of alerts) {
       if (alert.lat == null || alert.lon == null) continue;
+      // Les tirs spatiaux n'ont pas de marqueur carte (couche NOTAM supprimée)
+      if (alert.phenomenon === 'Tir spatial') continue;
       const color = SEVERITY_DOT[alert.severity] ?? '#6b7280';
-      const isSpatialMarker = alert.phenomenon === 'Tir spatial';
+      const emoji = phenomenonEmoji(alert.phenomenon);
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = 36;
       const ctx = canvas.getContext('2d');
       ctx.beginPath();
       ctx.arc(18, 18, 16, 0, Math.PI * 2);
-      ctx.fillStyle = isSpatialMarker ? '#7c3aed' : 'white';
-      ctx.fill();
-      ctx.strokeStyle = isSpatialMarker ? '#5b21b6' : color;
-      ctx.lineWidth = 2.5; ctx.stroke();
-      // Pour les tirs spatiaux, dessiner une fusée en texte
+      ctx.fillStyle = 'white'; ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.stroke();
       ctx.font = '18px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillStyle = isSpatialMarker ? 'white' : 'black';
-      ctx.fillText(isSpatialMarker ? '🚀' : phenomenonEmoji(alert.phenomenon).replace(/<[^>]+>/g, ''), 18, 19);
+      ctx.fillText(emoji, 18, 19);
       const icon = L.icon({ iconUrl: canvas.toDataURL('image/png'), iconSize: [36,36], iconAnchor: [18,18], popupAnchor: [0,-20] });
       const marker = L.marker([alert.lat, alert.lon], { icon });
       marker.bindPopup(`
         <div class="text-xs font-sans">
-          <div class="font-bold text-sm mb-1">🚀 ${alert.phenomenon}</div>
+          <div class="font-bold text-sm mb-1">${emoji} ${alert.phenomenon}</div>
           <div class="text-gray-600 mb-1">${alert.country}</div>
           <div class="font-semibold" style="color:${color}">${SEVERITY_LABEL[alert.severity] ?? alert.severity}</div>
           <div class="text-gray-500 mt-1">${alert.headline.slice(0,100)}${alert.headline.length>100?'…':''}</div>

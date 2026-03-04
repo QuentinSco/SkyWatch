@@ -170,6 +170,19 @@
       resumeHtml = `<span class="text-gray-600 text-xs break-words">${text}</span>`;
     }
 
+    // Lien ligne dépliée :
+    // - tir spatial : sourceLinks[0] si dispo, sinon rien (jamais l'URL LL2 brute)
+    // - autre alerte : alert.link (source officielle météo/géophysique)
+    let detailLinkHtml = '';
+    if (isSpatial) {
+      const firstLink = alert.sourceLinks && alert.sourceLinks.length > 0 ? alert.sourceLinks[0] : null;
+      if (firstLink) {
+        detailLinkHtml = `<a href="${firstLink.url}" target="_blank" rel="noopener" class="text-blue-500 underline text-xs">→ ${firstLink.label}</a>`;
+      }
+    } else if (alert.link) {
+      detailLinkHtml = `<a href="${alert.link}" target="_blank" rel="noopener" class="text-blue-500 underline text-xs">→ Source officielle</a>`;
+    }
+
     return `
       <tr class="border-b border-gray-100 hover:bg-blue-50/60 transition cursor-pointer"
           onclick="this.nextElementSibling.classList.toggle('hidden')">
@@ -191,7 +204,7 @@
         <td colspan="7" class="px-6 py-3 text-xs text-gray-600">
           <div class="flex flex-col gap-1">
             ${alert.description ? `<p class="text-gray-700">${alert.description}</p>` : ''}
-            ${alert.link ? `<a href="${alert.link}" target="_blank" rel="noopener" class="text-blue-500 underline text-xs">→ Source officielle</a>` : ''}
+            ${detailLinkHtml}
           </div>
         </td>
       </tr>

@@ -45,9 +45,6 @@ function timeWindowStatus(validTo: string | undefined): { label: string; cls: st
   return { label: `expire dans ${d}j`, cls: 'text-gray-500' };
 }
 
-/**
- * Statut contextuel pour les tirs spatiaux
- */
 function getLaunchStatus(validFrom: string | undefined, validTo: string | undefined): { label: string; cls: string } | null {
   if (!validFrom) return null;
   const now = Date.now();
@@ -58,9 +55,6 @@ function getLaunchStatus(validFrom: string | undefined, validTo: string | undefi
   return { label: '✅ Fenêtre fermée', cls: 'text-gray-400 italic' };
 }
 
-/**
- * Résolution du nom du volcan.
- */
 function getVolcanoName(alert: WeatherAlert): string | null {
   if (alert.source !== 'VAAC' && (alert as any).eventType !== 'VAAC') return null;
 
@@ -87,9 +81,6 @@ function getVolcanoName(alert: WeatherAlert): string | null {
   return null;
 }
 
-/**
- * Extraction du nom de mission pour les tirs spatiaux
- */
 function getLaunchMissionName(headline: string): string | null {
   const match = headline.match(/^([^\u2014|]+)/);
   if (match) {
@@ -98,9 +89,6 @@ function getLaunchMissionName(headline: string): string | null {
   return null;
 }
 
-/**
- * Calcul du temps restant avant un tir spatial
- */
 function getLaunchCountdown(validFrom: string | undefined): { text: string; urgent: boolean; past: boolean } {
   if (!validFrom) return { text: '—', urgent: false, past: false };
   const now = Date.now();
@@ -118,7 +106,7 @@ function getLaunchCountdown(validFrom: string | undefined): { text: string; urge
   const m = Math.floor((msLeft % 3600000) / 60000);
   return {
     text: h > 0 ? `T-${h}h${m}m` : `T-${m}m`,
-    urgent: msLeft < 7200000, // < 2h
+    urgent: msLeft < 7200000,
     past: false,
   };
 }
@@ -141,7 +129,7 @@ const borderColor = filtered.some(a => a.severity === 'red')
   {filtered.length === 0 ? (
     <p class="text-gray-400 text-sm italic">Aucune alerte significative.</p>
   ) : (
-    <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+    <div class="rounded-xl border border-gray-200 shadow-sm">
       <table class="w-full text-sm text-left text-gray-700 bg-white">
         <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-200">
           <tr>
@@ -158,6 +146,7 @@ const borderColor = filtered.some(a => a.severity === 'red')
           {filtered.map((alert, i) => {
             const volcanoName = getVolcanoName(alert);
             const isSpatial = alert.phenomenon === 'Tir spatial';
+            const isBackup = (alert as any).isBackup === true || (alert as any).eventType === 'LAUNCH_BACKUP';
             const alertId = `alert-${region}-${i}`;
             return (
             <tr 
@@ -166,14 +155,14 @@ const borderColor = filtered.some(a => a.severity === 'red')
             >
 
               <td class="py-2 px-4">
-                <AlertBadge severity={alert.severity} isSpatial={isSpatial} />
+                <AlertBadge severity={alert.severity} isSpatial={isSpatial} isBackup={isBackup} />
               </td>
 
               <td class="py-2 px-4 font-medium text-gray-800">
                 {alert.phenomenon}
                 {isSpatial && (
                   <div class="text-xs text-violet-700 font-semibold mt-0.5 flex items-center gap-1">
-                    🚀 {getLaunchMissionName(alert.headline)}
+                    {isBackup ? '🛸 Backup :' : '🚀'} {getLaunchMissionName(alert.headline)}
                   </div>
                 )}
                 {volcanoName && (
@@ -192,7 +181,7 @@ const borderColor = filtered.some(a => a.severity === 'red')
                   ? (
                     <div class="flex flex-wrap gap-1">
                       {alert.airports.map(a => (
-                        <span class="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded font-mono whitespace-nowrap">
+                        <span class="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded font-mono">
                           {a}
                         </span>
                       ))}
@@ -207,7 +196,7 @@ const borderColor = filtered.some(a => a.severity === 'red')
                   if (isSpatial) {
                     const status = getLaunchStatus(alert.validFrom, alert.validTo);
                     return (
-                      <div class="text-xs leading-tight whitespace-nowrap">
+                      <div class="text-xs leading-tight">
                         <div class="text-gray-500">{formatShortDate(alert.validFrom)}</div>
                         <div class="text-gray-400 text-[10px]">→ {formatShortDate(alert.validTo)}</div>
                         {status && <div class={`mt-0.5 text-[10px] ${status.cls}`}>{status.label}</div>}
@@ -216,7 +205,7 @@ const borderColor = filtered.some(a => a.severity === 'red')
                   }
                   const status = timeWindowStatus(alert.validTo);
                   return (
-                    <div class="text-xs leading-tight whitespace-nowrap">
+                    <div class="text-xs leading-tight">
                       <div class="text-gray-500">{formatShortDate(alert.validFrom)}</div>
                       <div class="text-gray-400 text-[10px]">→ {formatShortDate(alert.validTo)}</div>
                       {status && <div class={`mt-0.5 text-[10px] ${status.cls}`}>{status.label}</div>}
@@ -238,7 +227,7 @@ const borderColor = filtered.some(a => a.severity === 'red')
                               href={l.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              class="text-xs bg-blue-50 text-blue-700 rounded px-1.5 py-0.5 border border-blue-200 hover:bg-blue-100 transition whitespace-nowrap"
+                              class="text-xs bg-blue-50 text-blue-700 rounded px-1.5 py-0.5 border border-blue-200 hover:bg-blue-100 transition"
                               onclick={(e: Event) => e.stopPropagation()}
                             >
                               {l.label} ↗
@@ -263,7 +252,7 @@ const borderColor = filtered.some(a => a.severity === 'red')
                     const countdown = getLaunchCountdown(alert.validFrom);
                     return (
                       <div class="text-xs leading-tight">
-                        <div class="font-medium text-gray-700 truncate">{mission ?? alert.headline.slice(0, 60)}</div>
+                        <div class="font-medium text-gray-700">{mission ?? alert.headline.slice(0, 80)}</div>
                         <div class={`font-bold mt-0.5 ${
                           countdown.past ? 'text-gray-400' : countdown.urgent ? 'text-red-500' : 'text-blue-600'
                         }`}>{countdown.text}</div>
@@ -271,7 +260,7 @@ const borderColor = filtered.some(a => a.severity === 'red')
                     );
                   }
                   const text = alert.headline.slice(0, 90) + (alert.headline.length > 90 ? '…' : '');
-                  return <span class="text-gray-500 text-xs truncate block">{text}</span>;
+                  return <span class="text-gray-500 text-xs break-words">{text}</span>;
                 })()}
               </td>
 
@@ -289,6 +278,7 @@ const borderColor = filtered.some(a => a.severity === 'red')
   const alertId = `alert-${region}-${i}`;
   const volcanoName = getVolcanoName(alert);
   const isSpatial = alert.phenomenon === 'Tir spatial';
+  const isBackup = (alert as any).isBackup === true || (alert as any).eventType === 'LAUNCH_BACKUP';
   return (
     <div 
       id={`modal-${alertId}`} 
@@ -298,7 +288,7 @@ const borderColor = filtered.some(a => a.severity === 'red')
       <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div class="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
           <div class="flex items-center gap-3">
-            <AlertBadge severity={alert.severity} isSpatial={isSpatial} />
+            <AlertBadge severity={alert.severity} isSpatial={isSpatial} isBackup={isBackup} />
             <h3 class="text-lg font-semibold text-gray-800">{alert.phenomenon}</h3>
           </div>
           <button 
@@ -315,9 +305,12 @@ const borderColor = filtered.some(a => a.severity === 'red')
             const countdown = getLaunchCountdown(alert.validFrom);
             const status = getLaunchStatus(alert.validFrom, alert.validTo);
             return (
-              <div class="bg-violet-50 border border-violet-200 rounded-lg p-3">
+              <div class={`border rounded-lg p-3 ${
+                isBackup ? 'bg-violet-50/50 border-violet-200' : 'bg-violet-50 border-violet-200'
+              }`}>
                 <div class="text-sm font-semibold text-violet-800 flex items-center gap-2">
                   🚀 Mission : {mission ?? '—'}
+                  {isBackup && <span class="text-xs font-normal text-violet-500 bg-violet-100 rounded px-1.5 py-0.5">Tir de secours</span>}
                 </div>
                 <div class={`text-sm font-bold mt-1 ${
                   countdown.past ? 'text-gray-400' : countdown.urgent ? 'text-red-500' : 'text-blue-600'

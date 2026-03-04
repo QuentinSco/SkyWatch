@@ -14,14 +14,15 @@ const LAUNCH_IMPACT_RADIUS_KM = 500;
 // Statuts LL2 à exclure : lancements déjà terminés ou échoués
 const EXCLUDE_STATUS_IDS = new Set([4, 7]); // 4=Failed, 7=Partial Failure
 
+// Statuts considérés comme "backup" (TBD/TBC)
+const BACKUP_STATUS_IDS = new Set([2, 8]); // 2=TBD, 8=TBC
+
 export async function fetchRocketLaunches(): Promise<Alert[]> {
   const alerts: Alert[] = [];
   try {
     const url = new URL('https://ll.thespacedevs.com/2.2.0/launch/upcoming/');
     url.searchParams.set('limit', '50');
     url.searchParams.set('ordering', 'window_start');
-    // Pas de filtre status : /upcoming/ garantit déjà des lancements futurs,
-    // et les statuts 1/2/3 s'avèrent trop restrictifs (0 résultats en pratique).
 
     console.log('[LaunchLib] Requête:', url.toString());
 
@@ -45,9 +46,12 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
       const windowEnd   = new Date(launch.window_end   ?? launch.net).getTime();
       const hoursUntil  = (windowStart - now) / 3_600_000;
 
+      const isBackup = BACKUP_STATUS_IDS.has(statusId);
+
       console.log(
         `[LaunchLib] ${launch.name} | status=${statusId}(${launch.status?.abbrev ?? launch.status?.name})` +
-        ` | T-${Math.round(hoursUntil)}h | pad=(${launch.pad?.latitude},${launch.pad?.longitude})`
+        ` | T-${Math.round(hoursUntil)}h | pad=(${launch.pad?.latitude},${launch.pad?.longitude})` +
+        (isBackup ? ' [BACKUP]' : '')
       );
 
       if (EXCLUDE_STATUS_IDS.has(statusId)) {
@@ -73,25 +77,37 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
         continue;
       }
 
-      const severity    = SEVERITY_BY_HOURS.find(s => hoursUntil <= s.maxH)?.severity ?? 'yellow';
+      // Les tirs backup sont toujours en yellow, jamais plus grave
+      const severity = isBackup
+        ? 'yellow'
+        : (SEVERITY_BY_HOURS.find(s => hoursUntil <= s.maxH)?.severity ?? 'yellow');
+
       const provider    = launch.launch_service_provider?.abbrev ?? launch.launch_service_provider?.name ?? '?';
       const rocket      = launch.rocket?.configuration?.name ?? 'Lanceur inconnu';
       const siteName    = launch.pad?.name ?? launch.pad?.location?.name ?? 'Site inconnu';
       const missionName = launch.mission?.name ?? launch.name ?? 'Mission inconnue';
-      const statusName  = launch.status?.name ?? '';
 
-      console.log(`  ↳ ALERTE ${severity.toUpperCase()} — aéroports impactés : ${airports.join(', ')}`);
+      const backupSuffix = isBackup ? ' | Tir de secours (TBD)' : ' | Tir prévu';
 
-      // Construction des liens sources
+      console.log(`  ↳ ALERTE ${severity.toUpperCase()}${isBackup ? ' [BACKUP]' : ''} — aéroports impactés : ${airports.join(', ')}`);
+
+      // Lien direct vers la fiche du lancement (lisible)
+      const launchDetailUrl = launch.url ?? `https://ll.thespacedevs.com/2.2.0/launch/${launch.id}/`;
+      // Lien vers nextrocket.space pour une page grand public lisible
+      const nextrocketSlug = (launch.slug ?? launch.id ?? '').toString();
+      const nextrocketUrl  = nextrocketSlug
+        ? `https://nextrocket.space/launch/${nextrocketSlug}`
+        : 'https://nextrocket.space';
+
       const sourceLinks: { label: string; url: string }[] = [
         {
-          label: 'API LaunchLibrary',
-          url: launch.url ?? 'https://thespacedevs.com'
+          label: 'Fiche lancement',
+          url: launchDetailUrl,
         },
         {
-          label: 'Space Launch Schedule',
-          url: 'https://www.spacelaunchschedule.com'
-        }
+          label: 'NextRocket.space',
+          url: nextrocketUrl,
+        },
       ];
 
       alerts.push({
@@ -100,17 +116,18 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
         region:      regionFromCoords(lat, lon),
         severity,
         phenomenon:  'Tir spatial',
-        eventType:   'LAUNCH',
+        eventType:   isBackup ? 'LAUNCH_BACKUP' : 'LAUNCH',
         country:     launch.pad?.location?.country_code ?? '',
         airports,
         lat, lon,
         validFrom:   new Date(windowStart).toISOString(),
         validTo:     new Date(windowEnd).toISOString(),
-        headline:    `${provider} — ${rocket} | ${siteName} | Tir prévu`,
+        headline:    `${provider} — ${rocket} | ${siteName}${backupSuffix}`,
         description: `Mission : ${missionName}. Vérifier NOTAMs aéroports impactés : ${airports.join(', ')}.`,
-        link:        launch.url ?? 'https://thespacedevs.com',
+        link:        launchDetailUrl,
         sourceLinks,
-      } as Alert & { sourceLinks: { label: string; url: string }[] });
+        isBackup,
+      } as Alert & { sourceLinks: { label: string; url: string }[]; isBackup: boolean });
     }
 
     console.log(`[LaunchLib] ${alerts.length} lancement(s) impactant(s) dans les 72h`);

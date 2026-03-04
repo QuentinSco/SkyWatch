@@ -76,17 +76,17 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
       const providerName: string    = launch.launch_service_provider?.name ?? provider;
       const nrUrl = nextrocketUrl(launch);
 
-      // Dernière MàJ LL2 — updates[0] est le plus récent
-      const lastUpdate = Array.isArray(launch.updates) && launch.updates.length > 0
-        ? launch.updates[0] : null;
+      // Dernier update = le plus récent (updates est ordonné du plus ancien au plus récent)
+      const updates = Array.isArray(launch.updates) ? launch.updates : [];
+      const lastUpdate = updates.length > 0 ? updates[updates.length - 1] : null;
       const lastUpdateUrl: string     = lastUpdate?.info_url ?? '';
       const lastUpdateComment: string = lastUpdate?.comment  ?? '';
 
       /**
        * Ordre de priorité des liens :
-       * 1. updates[0].info_url  → lien spécifique à la mission (communiqué, tweet, page lancement)
-       * 2. NextRocket.space     → fiche lisible aggrégateur si slug disponible
-       * 3. provider.info_url   → site générique du provider (fallback)
+       * 1. updates[last].info_url  → lien spécifique à la mission (communiqué, tweet, page lancement)
+       * 2. NextRocket.space        → fiche lisible agrégateur si slug disponible
+       * 3. provider.info_url       → site générique du provider (fallback)
        * On n'expose jamais l'URL LL2 brute.
        */
       const sourceLinks: { label: string; url: string }[] = [];

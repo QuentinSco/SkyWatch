@@ -72,25 +72,30 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
       const siteName    = launch.pad?.name ?? launch.pad?.location?.name ?? 'Site inconnu';
       const missionName = launch.mission?.name ?? launch.name ?? 'Mission inconnue';
 
-      // Liens utiles — on n'expose JAMAIS l'URL LL2 brute (illisible)
       const providerInfoUrl: string = launch.launch_service_provider?.info_url ?? '';
       const providerName: string    = launch.launch_service_provider?.name ?? provider;
       const nrUrl = nextrocketUrl(launch);
 
-      // Dernière MàJ (updates trié du plus récent au plus ancien par LL2)
+      // Dernière MàJ LL2 — updates[0] est le plus récent
       const lastUpdate = Array.isArray(launch.updates) && launch.updates.length > 0
         ? launch.updates[0] : null;
       const lastUpdateUrl: string     = lastUpdate?.info_url ?? '';
       const lastUpdateComment: string = lastUpdate?.comment  ?? '';
 
+      /**
+       * Ordre de priorité des liens :
+       * 1. updates[0].info_url  → lien spécifique à la mission (communiqué, tweet, page lancement)
+       * 2. NextRocket.space     → fiche lisible aggrégateur si slug disponible
+       * 3. provider.info_url   → site générique du provider (fallback)
+       * On n'expose jamais l'URL LL2 brute.
+       */
       const sourceLinks: { label: string; url: string }[] = [];
-      if (providerInfoUrl) sourceLinks.push({ label: providerName, url: providerInfoUrl });
-      if (nrUrl)           sourceLinks.push({ label: 'NextRocket.space', url: nrUrl });
       if (lastUpdateUrl)   sourceLinks.push({
-        label: lastUpdateComment ? `MàJ : ${lastUpdateComment.slice(0, 40)}` : 'Dernière MàJ',
+        label: lastUpdateComment ? lastUpdateComment.slice(0, 45) : 'Page lancement',
         url: lastUpdateUrl,
       });
-      // Si vraiment aucun lien : on n'affiche rien (sourceLinks vide = label "LaunchLib" seulement)
+      if (nrUrl)           sourceLinks.push({ label: 'NextRocket.space', url: nrUrl });
+      if (providerInfoUrl) sourceLinks.push({ label: providerName, url: providerInfoUrl });
 
       const launchDetailUrl = launch.url ?? `https://ll.thespacedevs.com/2.2.0/launch/${launch.id}/`;
 

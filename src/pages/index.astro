@@ -14,7 +14,7 @@ import '../styles/global.css';
   <script is:inline src="/lib/dark-mode.js"></script>
   
   <style>
-    /* ── Layout mobile (défaut) ─────────────────────────────────────── */
+    /* ── Layout mobile (défaut) ──────────────────────────────────────── */
     .main-grid {
       display: flex;
       flex-direction: column;
@@ -38,50 +38,40 @@ import '../styles/global.css';
         grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
         grid-template-rows: auto;
         align-items: start;
-        gap: 1rem; /* Réduit de 1.5rem à 1rem */
+        gap: 1rem;
       }
 
-      /* ✅ Colonne gauche : sticky + hauteur bornée.
-         PAS de overflow-y ici — overflow-y + sticky sur le même élément
-         crée un scroll context qui invalide sticky.
-         Le scroll CDG/ORY est délégué à #base-status-body. */
       .col-map {
         position: sticky;
         top: 1.5rem;
         display: flex;
         flex-direction: column;
-        gap: 1rem; /* Réduit de 1.5rem à 1rem */
-        height: calc(100vh - 2rem); /* Ajusté pour compenser les gaps réduits */
+        gap: 1rem;
+        height: calc(100vh - 2rem);
       }
 
-      /* Carte : hauteur fixe optimisée, ne se compresse pas */
       #alert-map {
-        height: clamp(350px, 45vh, 520px) !important; /* Réduit de 420px min à 350px min */
-        min-height: 350px; /* Réduit de 420px à 350px */
+        height: clamp(350px, 45vh, 520px) !important;
+        min-height: 350px;
         flex-shrink: 0;
       }
 
-      /* Slot CDG/ORY : prend toute la hauteur restante de col-map */
       #base-status-slot {
         display: flex;
         flex-direction: column;
         flex: 1;
-        min-height: 0; /* flex child peut retrécir sous son contenu */
+        min-height: 0;
       }
 
-      /* Corps du slot CDG/ORY : zone de scroll indépendante.
-         flex:1 + min-height:0 + overflow-y:auto = scroll borné dans
-         l'espace restant après l'entête du slot. */
       #base-status-body {
         flex: 1;
         min-height: 0;
         overflow-y: auto;
       }
 
-      /* Colonne droite : scroll indépendant */
       .col-alerts {
         overflow-y: auto;
-        height: calc(100vh - 2rem); /* Ajusté pour compenser les gaps réduits */
+        height: calc(100vh - 2rem);
         padding-right: 0.25rem;
       }
     }
@@ -118,7 +108,7 @@ import '../styles/global.css';
       <a href="#section-taf" class="sidebar-link flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition font-medium">
         🌩 TAF Risques AF <span id="nav-taf-count" class="ml-auto"></span>
       </a>
-      <!-- ─── Outils ─────────────────────────────────────────── -->
+      <!-- ─── Outils ────────────────────────────────────────────── -->
       <div class="mt-4 pt-4 border-t border-gray-100">
         <div class="text-[10px] uppercase font-semibold text-gray-400 tracking-widest mb-2">Outils</div>
         <a href="/briefing" class="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-purple-50 hover:text-purple-700 transition font-medium">
@@ -134,7 +124,7 @@ import '../styles/global.css';
     </div>
   </aside>
 
-  <!-- ─── Contenu principal ───────────────────────────────────── -->
+  <!-- ─── Contenu principal ──────────────────────────────────────────── -->
   <div class="flex-1 min-w-0 overflow-y-auto xl:overflow-hidden">
     <div class="px-4 py-6 xl:px-6">
 
@@ -178,7 +168,6 @@ import '../styles/global.css';
             <div class="bg-gray-50 border-b border-gray-200 px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide flex-shrink-0">
               🛫 État base CDG / ORY
             </div>
-            <!-- overflow-y:auto via CSS — scroll indépendant dans l'espace restant -->
             <div id="base-status-body" class="text-sm text-gray-400 italic px-4 py-3">
               Chargement…
             </div>
@@ -231,13 +220,8 @@ import '../styles/global.css';
     </div>
   </div>
 
-  <!-- 🚀 Rocket NOTAM Layer - Load before main.js -->
-  <script is:inline src="/lib/rocket-notam-layer.js"></script>
-  
   <script is:inline src="/lib/main.js"></script>
   <script is:inline src="/lib/taf-ui.js"></script>
-  
-  <!-- Lazy Loading Script -->
   <script is:inline src="/lib/lazy-load.js"></script>
 
   <script is:inline>
@@ -257,17 +241,12 @@ import '../styles/global.css';
       function tryMove() {
         const block = findBaseSection();
         if (!block) return false;
-        
-        // Clone le contenu SANS l'entête h2/h3 pour éviter la duplication
         const content = block.cloneNode(true);
         const heading = content.querySelector('h2, h3');
         if (heading) heading.remove();
-        
         slot.innerHTML = '';
         slot.classList.remove('text-gray-400', 'italic');
         slot.appendChild(content);
-        
-        // Masque la section originale sur grand écran
         block.style.display = 'none';
         return true;
       }

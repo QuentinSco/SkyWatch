@@ -11,30 +11,20 @@ const SEVERITY_BY_HOURS: { maxH: number; severity: 'red' | 'orange' | 'yellow' }
 
 const LAUNCH_IMPACT_RADIUS_KM = 500;
 
-// Statuts LL2 à exclure : lancements déjà terminés ou échoués
-const EXCLUDE_STATUS_IDS = new Set([4, 7]); // 4=Failed, 7=Partial Failure
+const EXCLUDE_STATUS_IDS = new Set([4, 7]);
+const BACKUP_STATUS_IDS  = new Set([2, 8]);
 
-// Statuts considérés comme "backup" (TBD/TBC)
-const BACKUP_STATUS_IDS = new Set([2, 8]); // 2=TBD, 8=TBC
-
-/** Extrait le slug depuis l'URL LL2, ex: https://ll.thespacedevs.com/2.2.0/launch/falcon-9-block-5-starlink-group-17-18/ → falcon-9-block-5-starlink-group-17-18 */
 function slugFromUrl(url: string | undefined): string {
   if (!url) return '';
-  // L'URL LL2 se termine par /<slug>/ ou /<uuid>/
   const m = url.replace(/\/$/, '').match(/\/([^\/]+)$/);
   return m ? m[1] : '';
 }
 
-/** Construit le lien NextRocket.space — utilise le slug si c'est un slug lisible (pas un UUID) */
 function nextrocketUrl(launch: any): string {
   const slug = slugFromUrl(launch.url);
-  // UUID = 8-4-4-4-12 hex
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
-  if (slug && !isUuid) {
-    return `https://nextrocket.space/launch/${slug}`;
-  }
-  // Fallback : page d'accueil NextRocket avec le nom en recherche
-  return 'https://nextrocket.space';
+  if (slug && !isUuid) return `https://nextrocket.space/launch/${slug}`;
+  return '';
 }
 
 export async function fetchRocketLaunches(): Promise<Alert[]> {
@@ -68,34 +58,15 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
 
       const isBackup = BACKUP_STATUS_IDS.has(statusId);
 
-      console.log(
-        `[LaunchLib] ${launch.name} | status=${statusId}(${launch.status?.abbrev ?? launch.status?.name})` +
-        ` | T-${Math.round(hoursUntil)}h | pad=(${launch.pad?.latitude},${launch.pad?.longitude})` +
-        (isBackup ? ' [BACKUP]' : '')
-      );
-
-      if (EXCLUDE_STATUS_IDS.has(statusId)) {
-        console.log(`  ↳ IGNORE (statut échec/partiel : ${statusId})`);
-        continue;
-      }
-
-      if (hoursUntil < 0 || hoursUntil > LAUNCH_WINDOW_HOURS) {
-        console.log(`  ↳ IGNORE (hors fenêtre 0-72h : T-${Math.round(hoursUntil)}h)`);
-        continue;
-      }
+      if (EXCLUDE_STATUS_IDS.has(statusId)) continue;
+      if (hoursUntil < 0 || hoursUntil > LAUNCH_WINDOW_HOURS) continue;
 
       const lat = launch.pad?.latitude  ? parseFloat(launch.pad.latitude)  : null;
       const lon = launch.pad?.longitude ? parseFloat(launch.pad.longitude) : null;
-      if (lat === null || lon === null) {
-        console.log('  ↳ IGNORE (pas de coordonnées pad)');
-        continue;
-      }
+      if (lat === null || lon === null) continue;
 
       const airports = getAirportsNearCoords(lat, lon, LAUNCH_IMPACT_RADIUS_KM);
-      if (airports.length === 0) {
-        console.log(`  ↳ IGNORE (aucun aéroport AF dans ${LAUNCH_IMPACT_RADIUS_KM}km)`);
-        continue;
-      }
+      if (airports.length === 0) continue;
 
       const severity = isBackup
         ? 'yellow'
@@ -106,19 +77,33 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
       const siteName    = launch.pad?.name ?? launch.pad?.location?.name ?? 'Site inconnu';
       const missionName = launch.mission?.name ?? launch.name ?? 'Mission inconnue';
 
+      // Lien site officiel du provider (plus lisible que la fiche LL2)
+      const providerInfoUrl: string = launch.launch_service_provider?.info_url ?? '';
+      const providerName: string    = launch.launch_service_provider?.name ?? provider;
+
+      // Dernière mise à jour LL2 : updates[0] (le plus récent)
+      const lastUpdate = Array.isArray(launch.updates) && launch.updates.length > 0
+        ? launch.updates[0]
+        : null;
+      const lastUpdateUrl: string     = lastUpdate?.info_url  ?? '';
+      const lastUpdateComment: string = lastUpdate?.comment   ?? '';
+
+      const nrUrl = nextrocketUrl(launch);
+
+      const sourceLinks: { label: string; url: string }[] = [];
+      if (providerInfoUrl) sourceLinks.push({ label: providerName, url: providerInfoUrl });
+      if (nrUrl)           sourceLinks.push({ label: 'NextRocket.space', url: nrUrl });
+      if (lastUpdateUrl)   sourceLinks.push({ label: lastUpdateComment ? `MàJ : ${lastUpdateComment.slice(0, 40)}` : 'Dernière MàJ', url: lastUpdateUrl });
+      // Fallback : si aucun lien utile, on garde la fiche LL2
+      if (sourceLinks.length === 0) {
+        const launchDetailUrl = launch.url ?? `https://ll.thespacedevs.com/2.2.0/launch/${launch.id}/`;
+        sourceLinks.push({ label: 'Fiche LL2', url: launchDetailUrl });
+      }
+
+      const launchDetailUrl = launch.url ?? `https://ll.thespacedevs.com/2.2.0/launch/${launch.id}/`;
       const backupSuffix = isBackup ? ' | Tir de secours (TBD)' : ' | Tir prévu';
 
       console.log(`  ↳ ALERTE ${severity.toUpperCase()}${isBackup ? ' [BACKUP]' : ''} — aéroports impactés : ${airports.join(', ')}`);
-
-      const launchDetailUrl = launch.url ?? `https://ll.thespacedevs.com/2.2.0/launch/${launch.id}/`;
-      const nrUrl = nextrocketUrl(launch);
-
-      const sourceLinks: { label: string; url: string }[] = [
-        { label: 'Fiche LL2', url: launchDetailUrl },
-        ...(nrUrl !== 'https://nextrocket.space'
-          ? [{ label: 'NextRocket.space', url: nrUrl }]
-          : []),
-      ];
 
       alerts.push({
         id:          `LAUNCH-${launch.id}`,
@@ -137,13 +122,12 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
         link:        launchDetailUrl,
         sourceLinks,
         isBackup,
-        // Champs supplémentaires pour le rendu
         provider,
         rocket,
         missionName,
         siteName,
         hoursUntil: Math.round(hoursUntil),
-      } as Alert & { sourceLinks: { label: string; url: string }[]; isBackup: boolean; provider: string; rocket: string; missionName: string; siteName: string; hoursUntil: number });
+      } as any);
     }
 
     console.log(`[LaunchLib] ${alerts.length} lancement(s) impactant(s) dans les 72h`);

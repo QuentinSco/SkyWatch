@@ -56,7 +56,6 @@
     'Gel / Verglas':         '🧊',
   };
 
-  // SVG rocket inline
   const ROCKET_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="display:inline;width:1em;height:1em;vertical-align:-0.15em" aria-hidden="true"><path d="M13.75 2c-1.79 0-3.5.7-4.77 1.95L4 8.93V11l2.5 2.5L9 11l1-1 4-4 3.1-.1c.8-.03 1.57.28 2.13.84l.03.03c.56.56.87 1.33.84 2.13L20 12l-4 4-1 1-2.5 2.5H15l4.98-4.98A6.74 6.74 0 0 0 22 10.25C22 5.7 18.3 2 13.75 2ZM9 15.5 4.5 20l-.01-.01A1.49 1.49 0 0 1 4 19H3a1 1 0 0 1-1-1v-1a1.49 1.49 0 0 1 .44-1.06L7 11.5 9 13.5l.5.5L9 15.5Zm5-6a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Z"/></svg>`;
 
   function formatShortDate(iso) {
@@ -79,31 +78,31 @@
     return null;
   }
 
-  /** Countdown T- vers validFrom : "T-4h30" ou "T-12j" */
-  function countdown(validFrom) {
-    if (!validFrom) return null;
+  /** Countdown T- inline discret, même style que le texte résumé */
+  function countdownLabel(validFrom) {
+    if (!validFrom) return '';
     const diff = new Date(validFrom).getTime() - Date.now();
-    if (diff <= 0) return { label: 'EN COURS', cls: 'text-red-600 font-bold animate-pulse' };
+    if (diff <= 0) return '<span class="text-red-600 font-semibold">EN COURS</span>';
     const totalMin = Math.floor(diff / 60000);
     const h = Math.floor(totalMin / 60);
     const m = totalMin % 60;
     let label, cls;
     if (h < 1) {
       label = `T-${m}min`;
-      cls   = 'text-red-600 font-bold';
+      cls   = 'text-red-600 font-semibold';
     } else if (h < 6) {
       label = `T-${h}h${m > 0 ? String(m).padStart(2,'0') : ''}`;
       cls   = 'text-orange-500 font-semibold';
     } else if (h < 24) {
       label = `T-${h}h`;
-      cls   = 'text-yellow-600 font-medium';
+      cls   = 'text-yellow-600';
     } else {
       const d = Math.floor(h / 24);
       const rh = h % 24;
       label = rh > 0 ? `T-${d}j${rh}h` : `T-${d}j`;
       cls   = 'text-gray-500';
     }
-    return { label, cls };
+    return `<span class="${cls}">${label}</span>`;
   }
 
   function groupByRegion(alerts) {
@@ -144,7 +143,6 @@
         ).join(' ')
       : '<span class="text-gray-400">—</span>';
 
-    // Source : liens ou simple label
     let sourceHtml;
     if (alert.sourceLinks && alert.sourceLinks.length > 0) {
       sourceHtml = `<div class="flex flex-col gap-0.5">
@@ -159,18 +157,19 @@
       sourceHtml = `<span class="text-xs font-semibold text-gray-400">${icon} ${alert.source}</span>`;
     }
 
-    // Résumé tir spatial : provider · rocket · mission + countdown
+    // Résumé tir spatial : timer inline discret + provider · rocket / mission / site
     let resumeHtml;
     if (isSpatial) {
       const provider    = alert.provider    || '';
       const rocket      = alert.rocket      || '';
-      const missionName = alert.missionName || alert.headline.split('|')[0].trim();
+      const missionName = alert.missionName || '';
       const siteName    = alert.siteName    || '';
-      const cd          = countdown(alert.validFrom);
+      const cdHtml      = countdownLabel(alert.validFrom);
+      // Ligne 1 : timer + provider · rocket  (même taille que le reste)
+      const providerRocket = [provider, rocket].filter(Boolean).join(' · ');
       resumeHtml = `
         <div class="text-xs leading-snug">
-          ${cd ? `<div class="text-base font-bold mb-0.5 ${cd.cls}">${cd.label}</div>` : ''}
-          <div class="font-semibold text-gray-800">${provider}${rocket ? ' · ' + rocket : ''}</div>
+          <div class="font-semibold text-gray-800">${cdHtml}${cdHtml ? ' — ' : ''}${providerRocket}</div>
           ${missionName ? `<div class="text-gray-500">${missionName}</div>` : ''}
           ${siteName    ? `<div class="text-gray-400 text-[11px]">${siteName}</div>` : ''}
         </div>`;
@@ -250,7 +249,6 @@
       attribution: '© OpenStreetMap contributors',
     }).addTo(leafletMap);
     markersLayer = L.layerGroup().addTo(leafletMap);
-    // Couche NOTAM fusée supprimée — pas d'API propre disponible
   }
 
   function updateMapMarkers(alerts) {
@@ -258,7 +256,6 @@
     markersLayer.clearLayers();
     for (const alert of alerts) {
       if (alert.lat == null || alert.lon == null) continue;
-      // Les tirs spatiaux n'ont pas de marqueur carte (couche NOTAM supprimée)
       if (alert.phenomenon === 'Tir spatial') continue;
       const color = SEVERITY_DOT[alert.severity] ?? '#6b7280';
       const emoji = phenomenonEmoji(alert.phenomenon);

@@ -84,7 +84,7 @@ export const AF_AIRPORTS = [
   { icao: 'FIMP', lat:-20.4302,  lon:  57.6836, iso3: 'MUS', name: 'Mauritius' },           // MRU
   { icao: 'KMSP', lat: 44.8848,  lon: -93.2223, iso3: 'USA', name: 'Minneapolis' },         // MSP
   { icao: 'MYNN', lat: 25.0390,  lon: -77.4662, iso3: 'BHS', name: 'Nassau' },              // NAS
-  { icao: 'OEJN', lat: 21.6796,  lon:  39.1565, iso3: 'SAU', name: 'Djeddah' },             // NBJ
+  { icao: 'FNBJ', lat: -8.8583,  lon:  13.2312, iso3: 'AGO', name: 'Luanda João Gomes' },   // NBJ
   { icao: 'HKJK', lat: -1.3192,  lon:  36.9275, iso3: 'KEN', name: 'Nairobi' },             // NBO
   { icao: 'LFMN', lat: 43.6584,  lon:   7.2159, iso3: 'FRA', name: 'Nice' },                // NCE
   { icao: 'FTTJ', lat: 12.1337,  lon:  15.0340, iso3: 'TCD', name: "N'Djaména" },           // NDJ

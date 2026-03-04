@@ -208,7 +208,7 @@ export const GET: APIRoute = async () => {
 
   } catch (e) {
     console.error('[API /briefing]', e);
-    return new Response(JSON.stringify({ error: String(e) }), {
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

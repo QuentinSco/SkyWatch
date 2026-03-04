@@ -1,5 +1,34 @@
 import type { APIRoute } from 'astro';
 
+// Whitelist des domaines autorisés — uniquement les sources météo/aviation officielles
+const ALLOWED_DOMAINS = new Set([
+  'api.weather.gov',
+  'www.gdacs.org',
+  'feeds.meteoalarm.org',
+  'services.swpc.noaa.gov',
+  'www.ospo.noaa.gov',
+  'www.weather.gov',
+  'weather.gc.ca',
+  'www.ssd.noaa.gov',
+  'vaac.meteo.fr',
+  'ds.data.jma.go.jp',
+  'www.bom.gov.au',
+  'vaac.metservice.com',
+  'notams.aim.faa.gov',
+  'aviationweather.gov',
+  'www.aviationweather.gov',
+]);
+
+function isAllowedUrl(urlStr: string): boolean {
+  try {
+    const url = new URL(urlStr);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return false;
+    return ALLOWED_DOMAINS.has(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export const prerender = false;
 
 export const GET: APIRoute = async ({ request }) => {
@@ -8,6 +37,10 @@ export const GET: APIRoute = async ({ request }) => {
 
   if (!targetUrl) {
     return new Response('Missing url param', { status: 400 });
+  }
+
+  if (!isAllowedUrl(targetUrl)) {
+    return new Response('URL not allowed', { status: 403 });
   }
 
   try {
@@ -33,6 +66,6 @@ export const GET: APIRoute = async ({ request }) => {
     });
   } catch (err) {
     console.error('[Proxy]', err);
-    return new Response(`Proxy error: ${String(err)}`, { status: 502 });
+    return new Response('Proxy error', { status: 502 });
   }
 };

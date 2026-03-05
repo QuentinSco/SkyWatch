@@ -24,7 +24,24 @@ export interface TafRisk {
   threats: TafThreat[];
 }
 
-// ─── Réseau AF complet (LC + MC + régional) — IATA → ICAO ───────────────────
+// ─── Réseau AF Long-Courrier uniquement ────────────────────────────────────
+// Ces codes IATA correspondent aux escales LC opérées par Air France
+const AF_LC_IATA = new Set([
+  'ABJ', 'ABV', 'ATL', 'BEY', 'BKK', 'BLR', 'BOG', 'BOM', 'BOS', 'BZV',
+  'CAI', 'CAY', 'CDG', 'CKY', 'COO', 'CPT', 'CUN', 'DEL', 'DEN', 'DFW',
+  'DLA', 'DSS', 'DTW', 'DUB', 'DXB', 'EWR', 'EZE', 'FDF', 'FIH', 'FOR',
+  'GDL', 'GIG', 'GRU', 'HAV', 'HKG', 'HKT', 'HND', 'IAD', 'IAH', 'ICN',
+  'JFK', 'JIB', 'JNB', 'JRO', 'KIX', 'KUL', 'LAS', 'LAX', 'LBV', 'LFW',
+  'LIM', 'LOS', 'MCO', 'MEX', 'MIA', 'MNL', 'MRU', 'MSP', 'NAS', 'NBJ',
+  'NBO', 'NCE', 'NDJ', 'NKC', 'NLU', 'NSI', 'ORD', 'ORY', 'PEK', 'PHX',
+  'PIK', 'PNR', 'PPT', 'PTP', 'PTY', 'PUJ', 'PVG', 'RDU', 'RUH', 'RUN',
+  'SAN', 'SCL', 'SEA', 'SFO', 'SGN', 'SIN', 'SJO', 'SSA', 'SSG', 'SXM',
+  'TLV', 'TNR', 'YOW', 'YUL', 'YVR', 'YYZ', 'ZNZ'
+]);
+
+// ─── Réseau AF complet (LC + MC + régional) — IATA → ICAO ──────────────────
+// Garde toutes les escales pour le croisement vols/TAF, mais uniquement
+// les LC seront retournées dans la liste des risques TAF.
 export const AF_IATA_TO_ICAO: Record<string, string> = {
   // ── Afrique ────────────────────────────────────────────────────────────────
   ABJ: 'DIAP', // Abidjan
@@ -91,13 +108,11 @@ export const AF_IATA_TO_ICAO: Record<string, string> = {
   NLU: 'MMSM', // Mexico City Felipe Ángeles
   ORD: 'KORD', // Chicago O'Hare
   PHX: 'KPHX', // Phoenix
-  PNR: 'FCPP', // Pointe-Noire (aussi Afrique)
   PPT: 'NTAA', // Papeete
   PTP: 'TFFR', // Pointe-à-Pitre
   PTY: 'MPTO', // Panama City
   PUJ: 'MDPC', // Punta Cana
   RDU: 'KRDU', // Raleigh-Durham
-  RUH: 'OERK', // Riyad
   SAN: 'KSAN', // San Diego
   SCL: 'SCEL', // Santiago
   SEA: 'KSEA', // Seattle
@@ -123,7 +138,6 @@ export const AF_IATA_TO_ICAO: Record<string, string> = {
   KUL: 'WMKK', // Kuala Lumpur
   MNL: 'RPLL', // Manille
   PEK: 'ZBAA', // Pékin Capital
-  PPT: 'NTAA', // Papeete (aussi Amériques)
   PVG: 'ZSPD', // Shanghai Pudong
   SGN: 'VVTS', // Ho Chi Minh City
   SIN: 'WSSS', // Singapour
@@ -134,6 +148,7 @@ export const AF_IATA_TO_ICAO: Record<string, string> = {
   DXB: 'OMDB', // Dubaï
   EVN: 'UDYZ', // Erevan
   IST: 'LTFM', // Istanbul
+  RUH: 'OERK', // Riyad
   TBS: 'UGTB', // Tbilissi
   TLV: 'LLBG', // Tel Aviv
 
@@ -205,7 +220,6 @@ export const AF_IATA_TO_ICAO: Record<string, string> = {
   NUE: 'EDDN', // Nuremberg
   OLB: 'LIEO', // Olbia
   OPO: 'LPPR', // Porto
-  ORD: 'KORD', // Chicago (aussi Amériques)
   ORK: 'EICK', // Cork
   ORN: 'DAOO', // Oran
   ORY: 'LFPO', // Paris Orly
@@ -230,9 +244,6 @@ export const AF_IATA_TO_ICAO: Record<string, string> = {
   WAW: 'EPWA', // Varsovie
   ZAG: 'LDZA', // Zagreb
   ZRH: 'LSZH', // Zurich
-
-  // ── Afrique du Nord (déjà listés ci-dessus mais rappel) ────────────────────
-  // ALG, CMN, ORN, RAK, RBA, TNG, TUN → déjà présents
 
   // ── Autres ─────────────────────────────────────────────────────────────────
   LDE: 'LFBT', // Lourdes-Tarbes
@@ -554,7 +565,11 @@ export async function fetchTafRisks(force = false): Promise<TafRisk[]> {
   const deduped = [...latestByIcao.values()];
   console.log(`[TAF] ${allTafs.length} TAFs bruts → ${deduped.length} après déduplication`);
 
-  const risks = parseTafToRisks(deduped);
+  const allRisks = parseTafToRisks(deduped);
+  
+  // ✅ Filtre : garde uniquement les aéroports LC
+  const risks = allRisks.filter(r => AF_LC_IATA.has(r.iata));
+  console.log(`[TAF] ${allRisks.length} risques total → ${risks.length} escales LC`);
 
   if (redis && risks.length > 0) {
     try {

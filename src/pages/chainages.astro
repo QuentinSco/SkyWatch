@@ -27,9 +27,9 @@ import '../styles/global.css';
     }
     .dark #ch-tooltip { background: #0f172a; color: #e2e8f0; }
 
-    /* ═══════════════════════════════════════════════════════
+    /* ══════════════════════════════════════════════════════════
        PRINT STYLES - A4 Noir & Blanc
-       ═══════════════════════════════════════════════════════ */
+       ══════════════════════════════════════════════════════════ */
     @media print {
       @page {
         size: A4 portrait;
@@ -52,6 +52,7 @@ import '../styles/global.css';
       /* Masquer les éléments non pertinents */
       aside,
       #btn-refresh,
+      #btn-print,
       #ch-tooltip,
       .airport-input,
       #btn-add-airport,
@@ -219,7 +220,7 @@ import '../styles/global.css';
 
 <body class="text-gray-900 dark:text-gray-100 min-h-screen flex bg-slate-50 dark:bg-gray-950">
 
-  <!-- ─ Sidebar ─────────────────────────────────────────── -->
+  <!-- ─ Sidebar ───────────────────────────────────────────── -->
   <aside class="hidden lg:flex flex-col w-56 shrink-0 sticky top-0 h-screen
                 border-r border-gray-200 dark:border-gray-800
                 bg-white dark:bg-gray-900
@@ -251,7 +252,7 @@ import '../styles/global.css';
     </div>
   </aside>
 
-  <!-- ─ Contenu ─────────────────────────────────────────── -->
+  <!-- ─ Contenu ───────────────────────────────────────────── -->
   <div class="flex-1 min-w-0 overflow-y-auto">
     <div class="max-w-5xl mx-auto px-4 py-6 xl:px-8">
 
@@ -262,6 +263,14 @@ import '../styles/global.css';
         </div>
         <div class="flex items-center gap-2">
           <span id="ch-age" class="text-xs text-gray-400 dark:text-gray-500"></span>
+          <button id="btn-print" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg
+                                         border border-gray-200 dark:border-gray-700
+                                         bg-white dark:bg-gray-800
+                                         hover:bg-gray-50 dark:hover:bg-gray-700
+                                         text-gray-600 dark:text-gray-300 transition"
+                  title="Imprimer au format A4">
+            🖨️ Imprimer
+          </button>
           <button id="btn-refresh" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg
                                           border border-gray-200 dark:border-gray-700
                                           bg-white dark:bg-gray-800
@@ -405,6 +414,7 @@ import '../styles/global.css';
     document.getElementById('btn-add-airport').addEventListener('click', addAirport);
     document.getElementById('airport-input').addEventListener('keydown', e => { if (e.key === 'Enter') addAirport(); });
     document.getElementById('btn-refresh').addEventListener('click', () => fetchChainages(true));
+    document.getElementById('btn-print').addEventListener('click', () => window.print());
 
     function hhmm(ms) {
       const d = new Date(ms);

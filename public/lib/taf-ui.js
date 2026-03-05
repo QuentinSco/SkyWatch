@@ -623,12 +623,13 @@
 
     // En mode widescreen (hideHeader=true) : on supprime la section/h2,
     // l'entête est déjà affichée dans la barre du slot CDG/ORY.
+    // On garde grid-cols-2 pour afficher CDG et ORY côte à côte.
     if (hideHeader) {
       return `
         <div class="px-4 py-3">
           ${badgesHtml}
           <p class="text-gray-500 text-xs mb-3">TAF actifs sur notre base — frise 24h. Hors croisement vols LC.</p>
-          <div class="grid grid-cols-1 gap-4">${cards}</div>
+          <div class="grid grid-cols-2 gap-3">${cards}</div>
         </div>`;
     }
 

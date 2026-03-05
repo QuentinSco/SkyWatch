@@ -256,12 +256,8 @@ import '../styles/global.css';
   }
 
   // ─── RENDU ────────────────────────────────────────────────────────────────
-  function renderResults(tafByIcao, flights) {
-    const flightsByIcao = {};
-    for (const f of flights) {
-      if (!flightsByIcao[f.icao]) flightsByIcao[f.icao] = [];
-      flightsByIcao[f.icao].push(f);
-    }
+  function renderResults(tafByIcao, flightsByIcao) {
+    // flightsByIcao est déjà un Record<icao, vol[]> renvoyé par l'API
     const html = [...selectedIcaos]
       .map(icao => renderAirportBlock(icao, tafByIcao[icao] ?? null, flightsByIcao[icao] ?? []))
       .join('');

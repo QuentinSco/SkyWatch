@@ -1,3 +1,4 @@
+---
 import '../styles/global.css';
 ---
 <!doctype html>
@@ -132,21 +133,16 @@ import '../styles/global.css';
     ZSPD: { iata: 'PVG', name: 'Shanghai PVG',          qfu: [170, 350] },
   };
 
-  // Seuils crosswind certifiés par type d'avion (kt, rafales incluses)
-  // Source : limitations opérationnelles Air France
   const AIRCRAFT_LIMITS = {
-    // ── Long-courriers ──────────────────────────────────────────────────
     '77W': { label: '777-300ER', dry: 38, wet: 38 },
     '772': { label: '777-200ER', dry: 38, wet: 38 },
     '789': { label: '787-9',     dry: 38, wet: 38 },
     '332': { label: 'A330-200',  dry: 38, wet: 38 },
     '333': { label: 'A330-300',  dry: 38, wet: 38 },
     '359': { label: 'A350-900',  dry: 38, wet: 38 },
-    // ── Moyen-courriers ─────────────────────────────────────────────────
     '320': { label: 'A320',      dry: 38, wet: 33 },
     '321': { label: 'A321',      dry: 38, wet: 33 },
     '319': { label: 'A319',      dry: 38, wet: 33 },
-    // ── Court-courriers / régionaux ──────────────────────────────────────
     'E90': { label: 'E190',      dry: 25, wet: 25 },
     '223': { label: 'A220-300',  dry: 29, wet: 29 },
     '220': { label: 'A220-100',  dry: 29, wet: 29 },
@@ -213,17 +209,6 @@ import '../styles/global.css';
           && f.wdir != null && f.wspd != null;
     });
     return { base, tempos };
-  }
-
-  function getCrosswindStatus(cw, dry, wet) {
-    function level(val, limit) {
-      const r = val / limit;
-      if (r < 0.6) return { bg: 'bg-green-100 dark:bg-green-900/30',   text: 'text-green-700 dark:text-green-400',   label: 'OK' };
-      if (r < 0.8) return { bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-700 dark:text-yellow-400', label: 'Attention' };
-      if (r < 1.0) return { bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-700 dark:text-orange-400', label: 'Limite' };
-      return         { bg: 'bg-red-100 dark:bg-red-900/30',            text: 'text-red-700 dark:text-red-400',       label: '⚠ Dépassé' };
-    }
-    return { dryStatus: level(cw, dry), wetStatus: level(cw, wet) };
   }
 
   function getCrosswindColor(cw, limit) {
@@ -322,15 +307,12 @@ import '../styles/global.css';
         const { crosswind: cwBase, bestQfu, vrb } = computeCrosswind(f.wdir, f.wspd, ap.qfu);
         const cwGust = f.wgst ? computeCrosswind(f.wdir, f.wgst, ap.qfu).crosswind : null;
         const worstCw = cwGust ?? cwBase;
-
         const wet = isFcstWet(f);
         const activeLimit = wet ? CONSERVATIVE_LIMIT_WET : CONSERVATIVE_LIMIT_DRY;
         const status = getCrosswindColor(worstCw, activeLimit);
-
         const wxBadge = wet
           ? `<span class="ml-1 px-1 py-0.5 rounded text-[9px] font-bold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">WET ${f.wxString ?? ''}</span>`
           : `<span class="ml-1 px-1 py-0.5 rounded text-[9px] font-bold bg-gray-100 dark:bg-gray-700 text-gray-500">DRY</span>`;
-
         const dirStr = isVrb ? 'VRB' : String(Number(f.wdir)).padStart(3, '0');
         const windStr = `${dirStr}/${String(f.wspd).padStart(2,'0')}${f.wgst ? 'G'+f.wgst : ''}KT`;
         const qfuCell = vrb
@@ -367,30 +349,23 @@ import '../styles/global.css';
         const etaStr = eta
           ? new Date(eta).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + 'z'
           : '–';
-
         const { base: baseWind, tempos: tempoWinds } = etaEpochSec ? getWindAtTime(fcsts, etaEpochSec) : { base: null, tempos: [] };
         const acInfo = AIRCRAFT_LIMITS[f.aircraftType ?? ''] ?? DEFAULT_LIMIT;
-
         let windCell = `<td class="px-3 py-2 text-xs text-gray-400 font-mono">–</td>`;
         let riskCell = `<td class="px-3 py-2 text-xs text-gray-400">–</td>`;
-
         if (baseWind) {
           const spd = baseWind.wgst ?? baseWind.wspd;
           const { crosswind, bestQfu, vrb } = computeCrosswind(baseWind.wdir, spd, ap.qfu);
-
           const wet = isWetAtTime(fcsts, etaEpochSec);
           const activeLimit = wet ? acInfo.wet : acInfo.dry;
           const status = getCrosswindColor(crosswind, activeLimit);
-
           const isVrbBase = String(baseWind.wdir ?? '').toUpperCase() === 'VRB';
           const dirStr = isVrbBase ? 'VRB' : String(Number(baseWind.wdir)).padStart(3,'0');
           const windStr = `${dirStr}/${String(baseWind.wspd).padStart(2,'0')}${baseWind.wgst ? 'G'+baseWind.wgst : ''}KT`;
           const qfuStr = vrb ? '<span class="text-gray-400 italic">VRB</span>' : `QFU ${String(bestQfu).padStart(3,'0')}`;
-
           const condBadge = wet
             ? `<span class="px-1 py-0.5 rounded text-[9px] font-bold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">WET</span>`
             : `<span class="px-1 py-0.5 rounded text-[9px] font-bold bg-gray-100 dark:bg-gray-700 text-gray-500">DRY</span>`;
-
           let tempoStr = '';
           if (tempoWinds.length > 0) {
             let worstCw = 0, worstTempo = null;
@@ -405,7 +380,6 @@ import '../styles/global.css';
               tempoStr = `<div class="text-[10px] ${tt} mt-0.5">${worstTempo.changeIndicator ?? 'TEMPO'} : ${worstCw} kt (${tl})</div>`;
             }
           }
-
           windCell = `<td class="px-3 py-2 text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap">${windStr} <span class="text-gray-400">${qfuStr}</span></td>`;
           riskCell = `<td class="px-3 py-2 text-xs">
             <div class="flex flex-wrap items-center gap-1">
@@ -417,7 +391,6 @@ import '../styles/global.css';
             ${tempoStr}
           </td>`;
         }
-
         flightRows += `
           <tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition">
             <td class="px-3 py-2 text-xs font-bold font-mono text-gray-800 dark:text-gray-200">${f.flightId ?? '–'}</td>
@@ -473,7 +446,6 @@ import '../styles/global.css';
             </div>
           </div>
         </div>
-        <!-- TAF brut dépliable -->
         <div class="border-t border-gray-100 dark:border-gray-700">
           <button
             class="w-full flex items-center justify-between px-5 py-2.5 text-xs text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition font-medium"

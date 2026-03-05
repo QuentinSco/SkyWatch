@@ -1,0 +1,218 @@
+---
+import '../styles/global.css';
+---
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SkyWatch – Chaînages</title>
+  <script is:inline src="/lib/dark-mode.js"></script>
+</head>
+
+<body class="text-gray-900 min-h-screen flex" style="background:#f8fafc">
+
+  <!-- ─── Sidebar -->
+  <aside class="hidden lg:flex flex-col w-56 shrink-0 sticky top-0 h-screen border-r border-gray-200 bg-white px-4 py-6 overflow-y-auto">
+    <div class="mb-6">
+      <div class="text-2xl font-bold tracking-tight text-gray-900">🛡 SkyWatch</div>
+      <div class="text-gray-400 text-xs mt-1">Superviseur dispatch</div>
+    </div>
+    <nav class="flex flex-col gap-1 text-sm">
+      <div class="text-[10px] uppercase font-semibold text-gray-400 tracking-widest mb-2">Navigation</div>
+      <a href="/" class="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition font-medium">🗺️ Tableau de bord</a>
+      <div class="mt-4 pt-4 border-t border-gray-100">
+        <div class="text-[10px] uppercase font-semibold text-gray-400 tracking-widest mb-2">Outils</div>
+        <a href="/briefing" class="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-purple-50 hover:text-purple-700 transition font-medium">🗒 Trame briefing</a>
+        <a href="/chainages" class="flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 font-semibold">🔗 Chaînages</a>
+      </div>
+    </nav>
+    <div class="mt-auto pt-6 border-t border-gray-100 text-[10px] text-gray-400 leading-relaxed">
+      <strong class="text-gray-500">Horizon :</strong> 24h glissantes<br>
+      Vols AF long-courrier uniquement.<br>
+      Chaînage par immatriculation.
+    </div>
+  </aside>
+
+  <!-- ─── Contenu principal -->
+  <div class="flex-1 min-w-0 overflow-y-auto">
+    <div class="max-w-4xl mx-auto px-4 py-6 xl:px-8">
+
+      <!-- Header -->
+      <div class="flex items-center justify-between flex-wrap gap-4 mb-6">
+        <div>
+          <h1 class="text-2xl font-bold tracking-tight text-gray-900">🔗 Chaînages</h1>
+          <p class="text-gray-500 text-xs mt-1">Rotations par immatriculation sur une escale — Fenêtre <strong>maintenant → +24h</strong> · Vols AF LC uniquement</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="ch-age" class="text-xs text-gray-400"></span>
+          <button id="btn-refresh" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 transition">
+            🔄 Actualiser
+          </button>
+        </div>
+      </div>
+
+      <!-- Saisie aéroports -->
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-6">
+        <div class="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">Aéroports à surveiller</div>
+        <div class="flex items-center gap-2 mb-3">
+          <input
+            id="airport-input"
+            type="text"
+            maxlength="4"
+            placeholder="IATA (JFK) ou OACI (KJFK)"
+            class="w-48 border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono uppercase
+                   focus:outline-none focus:ring-2 focus:ring-indigo-300 placeholder-gray-400"
+          />
+          <button id="btn-add-airport"
+            class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition">
+            ＋ Ajouter
+          </button>
+        </div>
+        <!-- Tags aéroports sélectionnés -->
+        <div id="airport-tags" class="flex flex-wrap gap-2 min-h-[28px]">
+          <span class="text-xs text-gray-400 italic" id="no-airport-hint">Aucun aéroport sélectionné</span>
+        </div>
+      </div>
+
+      <!-- Résultats -->
+      <div id="chainages-result">
+        <div class="text-gray-400 text-sm italic text-center py-12">Ajoutez un aéroport pour afficher les chaînages.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <script is:inline>
+  (function () {
+
+    const airports = new Set();
+
+    function renderTags() {
+      const container = document.getElementById('airport-tags');
+      const hint = document.getElementById('no-airport-hint');
+      const existing = container.querySelectorAll('.ap-tag');
+      existing.forEach(el => el.remove());
+
+      if (airports.size === 0) {
+        if (hint) hint.style.display = '';
+        return;
+      }
+      if (hint) hint.style.display = 'none';
+
+      airports.forEach(code => {
+        const tag = document.createElement('span');
+        tag.className = 'ap-tag inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-800 text-xs font-mono font-semibold';
+        tag.innerHTML = `${code} <button data-code="${code}" class="ap-remove text-indigo-400 hover:text-red-500 font-bold leading-none transition" title="Supprimer">✕</button>`;
+        container.appendChild(tag);
+      });
+
+      container.querySelectorAll('.ap-remove').forEach(btn => {
+        btn.addEventListener('click', () => {
+          airports.delete(btn.getAttribute('data-code'));
+          renderTags();
+          fetchChainages();
+        });
+      });
+    }
+
+    function addAirport() {
+      const input = document.getElementById('airport-input');
+      const val = input.value.trim().toUpperCase();
+      if (!val || val.length < 3) return;
+      airports.add(val);
+      input.value = '';
+      renderTags();
+      fetchChainages();
+    }
+
+    document.getElementById('btn-add-airport').addEventListener('click', addAirport);
+    document.getElementById('airport-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') addAirport();
+    });
+    document.getElementById('btn-refresh').addEventListener('click', () => fetchChainages(true));
+
+    // ── Formatage ligne chaînage ──────────────────────────────────────────────
+    function dirBadge(dir) {
+      if (dir === 'ARR') return '<span class="inline-block px-1.5 py-0.5 rounded bg-green-100 text-green-700 text-[10px] font-bold font-mono">ARR</span>';
+      return '<span class="inline-block px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold font-mono">DEP</span>';
+    }
+
+    function renderChainages(data) {
+      const container = document.getElementById('chainages-result');
+      const age = document.getElementById('ch-age');
+
+      if (age && data.generatedAt) {
+        const d = new Date(data.generatedAt);
+        age.textContent = `Données à ${String(d.getUTCHours()).padStart(2,'0')}${String(d.getUTCMinutes()).padStart(2,'0')}z`;
+      }
+
+      const list = data.chainages || [];
+
+      if (list.length === 0) {
+        container.innerHTML = '<div class="text-gray-400 text-sm italic text-center py-12">Aucun chaînage trouvé pour cette fenêtre 24h.</div>';
+        return;
+      }
+
+      let html = `<div class="text-xs text-gray-500 mb-3">${list.length} immatriculation${list.length > 1 ? 's' : ''} trouvée${list.length > 1 ? 's' : ''}</div>`;
+      html += '<div class="space-y-3">';
+
+      for (const ch of list) {
+        html += `<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">`;
+
+        // Header immat
+        html += `<div class="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100">`;
+        html += `<span class="font-bold text-gray-900 font-mono text-sm">${ch.registration}</span>`;
+        if (ch.aircraftType) html += `<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 font-mono">${ch.aircraftType}</span>`;
+        html += `</div>`;
+
+        // Legs
+        html += `<div class="divide-y divide-gray-50">`;
+        for (const leg of ch.legs) {
+          const timeDisplay = leg.time === '----'
+            ? '<span class="text-gray-300 font-mono">----</span>'
+            : `<span class="font-mono font-semibold text-gray-800">${leg.time}</span>`;
+          html += `<div class="flex items-center gap-3 px-4 py-2.5 text-sm">`;
+          html += dirBadge(leg.direction);
+          html += `<span class="text-xs text-gray-400 font-mono w-20">${leg.date}</span>`;
+          html += timeDisplay;
+          html += `<span class="font-bold text-blue-700 font-mono">${leg.flight}</span>`;
+          html += `<span class="ml-auto text-xs font-semibold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-mono">${leg.iata}</span>`;
+          html += `</div>`;
+        }
+        html += `</div></div>`;
+      }
+
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+    async function fetchChainages(force = false) {
+      if (airports.size === 0) {
+        document.getElementById('chainages-result').innerHTML =
+          '<div class="text-gray-400 text-sm italic text-center py-12">Ajoutez un aéroport pour afficher les chaînages.</div>';
+        return;
+      }
+
+      document.getElementById('chainages-result').innerHTML =
+        '<div class="text-gray-400 text-sm italic text-center py-8">Chargement…</div>';
+
+      const codes = Array.from(airports).join(',');
+      const url = `/api/chainages?airports=${encodeURIComponent(codes)}${force ? '&force=1' : ''}`;
+
+      try {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        renderChainages(data);
+      } catch (e) {
+        document.getElementById('chainages-result').innerHTML =
+          `<div class="text-red-500 text-sm text-center py-8">⚠️ Erreur : ${e.message}</div>`;
+      }
+    }
+
+  })();
+  </script>
+
+</body>
+</html>

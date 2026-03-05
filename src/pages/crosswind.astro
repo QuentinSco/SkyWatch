@@ -132,20 +132,13 @@ import '../styles/global.css';
         border-radius: 2px;
       }
 
-      /* ─ Grille des tableaux :
-         En impression on passe en colonne unique pour maximiser la hauteur
-         disponible et permettre les sauts de page entre les deux moitiés.    */
+      /* ─ Grille des tableaux : colonne unique en impression ─ */
       .grid.grid-cols-1.xl\:grid-cols-2 { 
         display: block !important;
       }
       .grid.grid-cols-1.xl\:grid-cols-2 > div { 
         background: white !important;
         border-top: 1px solid #ddd !important;
-        /* Chaque moitié (TAF / Vols) ne se coupe pas en son sein
-           seulement si elle tient sur une page, sinon les lignes
-           individuelles prennent le relais ci-dessous.              */
-        break-inside: avoid !important;
-        page-break-inside: avoid !important;
       }
 
       /* En-tête de sous-section (📋 TAF / ✈️ Vols) : colle à son tableau */
@@ -163,6 +156,12 @@ import '../styles/global.css';
         background: transparent !important;
       }
 
+      /* Le wrapper overflow-x-auto colle à l'en-tête qui précède */
+      .grid.grid-cols-1.xl\:grid-cols-2 > div .overflow-x-auto {
+        break-before: avoid !important;
+        page-break-before: avoid !important;
+      }
+
       /* ─ Tableaux ─ */
       table { 
         font-size: 7pt !important;
@@ -171,7 +170,7 @@ import '../styles/global.css';
         background: white !important;
       }
 
-      /* L'en-tête de tableau se répète sur chaque page si le tableau s'étend */
+      /* thead répété sur chaque page si le tableau s'étend */
       thead { 
         background: #eeeeee !important;
         display: table-header-group !important;
@@ -185,7 +184,7 @@ import '../styles/global.css';
         text-align: left;
       }
 
-      /* Chaque ligne de tableau est la vraie unité insécable */
+      /* Chaque ligne est l'unité insécable — taille raisonnable, respectée */
       tbody tr { 
         border-bottom: 0.5px solid #ddd !important;
         break-inside: avoid !important;
@@ -266,9 +265,15 @@ import '../styles/global.css';
       thead th:nth-child(5) { width: 26%; }
       thead th:nth-child(6) { width: 18%; }
 
-      /* ─ Section TAF brut masquée via classe sémantique ─ */
+      /* ─ Section TAF brut : masquée à l'impression ─
+         Plusieurs propriétés pour résister à d'éventuels overrides Tailwind   */
       .taf-raw-section { 
-        display: none !important; 
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
       }
 
       /* ─ Footer impression ─ */

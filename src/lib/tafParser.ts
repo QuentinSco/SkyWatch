@@ -519,13 +519,19 @@ export function parseTafToRisks(tafData: any[]): TafRisk[] {
 const KV_KEY_TAF     = 'taf_risks_cache';
 const KV_TTL_TAF_SEC = 30 * 60;
 
-export async function fetchTafRisks(force = false): Promise<TafRisk[]> {
+/**
+ * Récupère les risques TAF pour le réseau Air France.
+ * @param force - Force le rafraîchissement du cache
+ * @param lcOnly - Si true, filtre uniquement les escales Long-Courrier (défaut: true)
+ */
+export async function fetchTafRisks(force = false, lcOnly = true): Promise<TafRisk[]> {
   if (!force && redis) {
     try {
       const cached = await redis.get<TafRisk[]>(KV_KEY_TAF);
       if (cached && cached.length > 0) {
         console.log(`[TAF] Cache KV HIT — ${cached.length} aéroports avec risques`);
-        return cached;
+        // Applique le filtre LC si demandé, même sur le cache
+        return lcOnly ? cached.filter(r => AF_LC_IATA.has(r.iata)) : cached;
       }
     } catch (e) {
       console.warn('[TAF] KV read error:', e);
@@ -567,14 +573,15 @@ export async function fetchTafRisks(force = false): Promise<TafRisk[]> {
 
   const allRisks = parseTafToRisks(deduped);
   
-  // ✅ Filtre : garde uniquement les aéroports LC
-  const risks = allRisks.filter(r => AF_LC_IATA.has(r.iata));
-  console.log(`[TAF] ${allRisks.length} risques total → ${risks.length} escales LC`);
+  // ✅ Applique le filtre LC uniquement si demandé
+  const risks = lcOnly ? allRisks.filter(r => AF_LC_IATA.has(r.iata)) : allRisks;
+  console.log(`[TAF] ${allRisks.length} risques total → ${risks.length} ${lcOnly ? 'escales LC' : 'tous aéroports'}`);
 
-  if (redis && risks.length > 0) {
+  // Cache tous les risques (sans filtre) pour flexibilité
+  if (redis && allRisks.length > 0) {
     try {
-      await redis.set(KV_KEY_TAF, risks, { ex: KV_TTL_TAF_SEC });
-      console.log(`[TAF] ${risks.length} risques stockés en KV (TTL ${KV_TTL_TAF_SEC}s)`);
+      await redis.set(KV_KEY_TAF, allRisks, { ex: KV_TTL_TAF_SEC });
+      console.log(`[TAF] ${allRisks.length} risques stockés en KV (TTL ${KV_TTL_TAF_SEC}s)`);
     } catch (e) {
       console.warn('[TAF] KV write error:', e);
     }

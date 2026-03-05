@@ -12,7 +12,7 @@ import '../styles/global.css';
 
 <body class="text-gray-900 dark:text-gray-100 min-h-screen flex bg-slate-50 dark:bg-gray-950">
 
-  <!-- ─ Sidebar ───────────────────────────────────────────── -->
+  <!-- ─ Sidebar ─────────────────────────────────────────────────────────────── -->
   <aside class="hidden lg:flex flex-col w-56 shrink-0 sticky top-0 h-screen
                 border-r border-gray-200 dark:border-gray-800
                 bg-white dark:bg-gray-900
@@ -48,7 +48,7 @@ import '../styles/global.css';
     </div>
   </aside>
 
-  <!-- ─ Contenu ───────────────────────────────────────────── -->
+  <!-- ─ Contenu ─────────────────────────────────────────────────────────────── -->
   <div class="flex-1 min-w-0 overflow-y-auto">
     <div class="max-w-7xl mx-auto px-4 py-6 xl:px-8">
 
@@ -107,9 +107,9 @@ import '../styles/global.css';
   </div>
 
   <script is:inline>
-  // ─── CONFIG : pistes & QFU par aéroport ─────────────────────────────────────
+  // ─── CONFIG : pistes & QFU par aéroport ───────────────────────────────────
   const AIRPORT_RUNWAYS = {
-    LFPG: { iata: 'CDG', name: 'Paris CDG',          qfu: [8, 26, 9, 27, 82, 262, 92, 272] },
+    LFPG: { iata: 'CDG', name: 'Paris CDG',          qfu: [8, 26, 9, 27] },
     LFPO: { iata: 'ORY', name: 'Paris ORY',          qfu: [8, 26, 6, 24] },
     EGLL: { iata: 'LHR', name: 'Londres LHR',        qfu: [9, 27] },
     EHAM: { iata: 'AMS', name: 'Amsterdam AMS',      qfu: [18, 36, 6, 24, 4, 22, 9, 27, 12, 30] },
@@ -140,7 +140,7 @@ import '../styles/global.css';
     ZSPD: { iata: 'PVG', name: 'Shanghai PVG',       qfu: [17, 35] },
   };
 
-  // ─── Mapping complet IATA → ICAO (191 escales AF) ───────────────────────────
+  // ─── Mapping complet IATA → ICAO (191 escales AF) ─────────────────────────
   const AF_IATA_TO_ICAO = {
     // Afrique
     ABJ: 'DIAP', ABV: 'DNAA', BZV: 'FCBB', CKY: 'GUCY', CMN: 'GMMN', COO: 'DBBB',
@@ -371,7 +371,8 @@ import '../styles/global.css';
   function renderAirportBlock(icao, tafData, flights) {
     const iataKey = Object.keys(AF_IATA_TO_ICAO).find(k => AF_IATA_TO_ICAO[k] === icao) ?? icao;
     const apName = AIRPORT_RUNWAYS[icao]?.name ?? icao;
-    const defaultQfuList = AIRPORT_RUNWAYS[icao]?.qfu.map(q => Math.round(q / 10)) ?? [];
+    // Les QFU dans AIRPORT_RUNWAYS sont déjà en format 2 chiffres (4, 22, etc.)
+    const defaultQfuList = AIRPORT_RUNWAYS[icao]?.qfu ?? [];
     const activeQfu = customQfuByIcao.get(icao) ?? (defaultQfuList.length ? defaultQfuList[0] : null);
 
     const fcsts = tafData?.fcsts ?? [];

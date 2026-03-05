@@ -207,7 +207,7 @@ import '../styles/global.css';
 
   // ─── ÉTAT & SÉLECTEUR ─────────────────────────────────────────────────────
   const ALL_ICAOS = Object.keys(AIRPORT_RUNWAYS);
-  let selectedIcaos = new Set(['LFPG', 'LFPO', 'EGLL', 'KJFK', 'KLAX', 'OMDB']);
+  let selectedIcaos = new Set([]);
 
   function renderAirportSelector() {
     document.getElementById('airport-selector').innerHTML = ALL_ICAOS.map(icao => {
@@ -223,7 +223,7 @@ import '../styles/global.css';
   }
 
   function toggleAirport(icao) {
-    if (selectedIcaos.has(icao)) { if (selectedIcaos.size > 1) selectedIcaos.delete(icao); }
+    if (selectedIcaos.has(icao)) selectedIcaos.delete(icao);
     else selectedIcaos.add(icao);
     renderAirportSelector();
     loadCrosswind(false);
@@ -232,6 +232,18 @@ import '../styles/global.css';
   // ─── CHARGEMENT ───────────────────────────────────────────────────────────
   async function loadCrosswind(force = false) {
     const container = document.getElementById('crosswind-container');
+
+    if (selectedIcaos.size === 0) {
+      container.innerHTML = `
+        <div class="flex items-center justify-center py-20 text-gray-400">
+          <div class="text-center">
+            <div class="text-4xl mb-3">✈️</div>
+            <p class="text-sm">Sélectionnez une ou plusieurs escales ci-dessus.</p>
+          </div>
+        </div>`;
+      return;
+    }
+
     container.innerHTML = `
       <div class="flex items-center justify-center py-20 text-gray-400">
         <div class="text-center"><div class="text-2xl mb-3 animate-spin">↻</div><p class="text-sm">Récupération TAF + vols…</p></div>
@@ -478,6 +490,7 @@ import '../styles/global.css';
 
   document.addEventListener('DOMContentLoaded', () => {
     renderAirportSelector();
+    // Pas de chargement automatique : aucune escale sélectionnée par défaut
     loadCrosswind(false);
   });
   </script>

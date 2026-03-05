@@ -37,8 +37,30 @@ export const GET: APIRoute = async ({ url }) => {
     else { const icao = AF_IATA_TO_ICAO[code]; if (icao) targetIcaos.add(icao); }
   }
 
+  // ── Plage horaire : par défaut 24h glissantes, ou personnalisée ───────────────
   const now = Date.now();
-  const end = now + 24 * 60 * 60 * 1000;
+  let wStart: number;
+  let wEnd: number;
+
+  const startParam = url.searchParams.get('start');
+  const endParam = url.searchParams.get('end');
+
+  if (startParam && endParam) {
+    // Plage personnalisée
+    const customStart = ms(startParam);
+    const customEnd = ms(endParam);
+    if (customStart === null || customEnd === null || customEnd <= customStart) {
+      return new Response(JSON.stringify({ error: 'Paramètres start/end invalides' }), {
+        status: 400, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    wStart = customStart;
+    wEnd = customEnd;
+  } else {
+    // Par défaut : 24h glissantes à partir de maintenant
+    wStart = now;
+    wEnd = now + 24 * 60 * 60 * 1000;
+  }
 
   try {
     const { arrivals, departures } = await getCachedAfFlights(false);
@@ -50,9 +72,10 @@ export const GET: APIRoute = async ({ url }) => {
       if (reg && dep.departureIcao) depIndex.set(`${reg}-${dep.departureIcao}`, dep);
     }
 
+    // Filtrer arrivées dans la fenêtre (avec marge de 2h avant pour capturer les avions déjà au sol)
     const windowArrivals = arrivals.filter(f => {
       const t = ms(f.estimatedTouchDownTime ?? f.scheduledArrival);
-      return t !== null && t >= now - 2 * 60 * 60 * 1000 && t <= end && targetIcaos.has(f.icao);
+      return t !== null && t >= wStart - 2 * 60 * 60 * 1000 && t <= wEnd && targetIcaos.has(f.icao);
     });
 
     const stops: ChainageStop[] = [];
@@ -72,12 +95,6 @@ export const GET: APIRoute = async ({ url }) => {
     }
 
     stops.sort((a, b) => a.arrMs - b.arrMs);
-
-    // ── Fenêtre visuelle : TOUJOURS 24h glissantes à partir de maintenant ───────────
-    // Cela garantit que la timeline affiche l'intégralité de l'horizon temporel,
-    // même si les données sont partielles ou absentes sur certaines périodes.
-    const wStart = now;
-    const wEnd   = now + 24 * 60 * 60 * 1000;
 
     return new Response(
       JSON.stringify({ stops, generatedAt: new Date().toISOString(), windowStart: wStart, windowEnd: wEnd }),

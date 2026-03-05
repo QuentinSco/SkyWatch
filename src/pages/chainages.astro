@@ -42,7 +42,7 @@ import '../styles/global.css';
       <div class="flex items-center justify-between flex-wrap gap-4 mb-6">
         <div>
           <h1 class="text-2xl font-bold tracking-tight text-gray-900">🔗 Chaînages</h1>
-          <p class="text-gray-500 text-xs mt-1">Rotations par immatriculation sur une escale — Fenêtre <strong>maintenant → +24h</strong> · Vols AF LC uniquement</p>
+          <p class="text-gray-500 text-xs mt-1">Rotations par immatriculation — Fenêtre <strong>maintenant → +24h</strong> · Vols AF long-courrier</p>
         </div>
         <div class="flex items-center gap-2">
           <span id="ch-age" class="text-xs text-gray-400"></span>
@@ -66,10 +66,9 @@ import '../styles/global.css';
           />
           <button id="btn-add-airport"
             class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition">
-            ＋ Ajouter
+            + Ajouter
           </button>
         </div>
-        <!-- Tags aéroports sélectionnés -->
         <div id="airport-tags" class="flex flex-wrap gap-2 min-h-[28px]">
           <span class="text-xs text-gray-400 italic" id="no-airport-hint">Aucun aéroport sélectionné</span>
         </div>
@@ -87,18 +86,16 @@ import '../styles/global.css';
   (function () {
 
     const airports = new Set();
+    let serverNow = Date.now(); // mis à jour à chaque réponse API
 
+    // ── Tags aéroports ──────────────────────────────────────────────
     function renderTags() {
       const container = document.getElementById('airport-tags');
       const hint = document.getElementById('no-airport-hint');
-      const existing = container.querySelectorAll('.ap-tag');
-      existing.forEach(el => el.remove());
+      container.querySelectorAll('.ap-tag').forEach(el => el.remove());
 
-      if (airports.size === 0) {
-        if (hint) hint.style.display = '';
-        return;
-      }
-      if (hint) hint.style.display = 'none';
+      if (airports.size === 0) { hint.style.display = ''; return; }
+      hint.style.display = 'none';
 
       airports.forEach(code => {
         const tag = document.createElement('span');
@@ -127,24 +124,87 @@ import '../styles/global.css';
     }
 
     document.getElementById('btn-add-airport').addEventListener('click', addAirport);
-    document.getElementById('airport-input').addEventListener('keydown', e => {
-      if (e.key === 'Enter') addAirport();
-    });
+    document.getElementById('airport-input').addEventListener('keydown', e => { if (e.key === 'Enter') addAirport(); });
     document.getElementById('btn-refresh').addEventListener('click', () => fetchChainages(true));
 
-    // ── Formatage ligne chaînage ──────────────────────────────────────────────
-    function dirBadge(dir) {
-      if (dir === 'ARR') return '<span class="inline-block px-1.5 py-0.5 rounded bg-green-100 text-green-700 text-[10px] font-bold font-mono">ARR</span>';
-      return '<span class="inline-block px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold font-mono">DEP</span>';
+    // ── Statut contextuel ───────────────────────────────────────────
+    // etaMs : timestamp ms de l'arrée, refNow : heure de la réponse serveur
+    function arrStatus(etaMs) {
+      const diffMin = Math.round((etaMs - serverNow) / 60000);
+      if (diffMin < -10) {
+        // arrivé il y a plus de 10 min
+        return '<span class="text-green-600 text-xs font-medium">✓ arrivé</span>';
+      } else if (diffMin < 0) {
+        // dans les 10 dernières minutes
+        return '<span class="text-green-500 text-xs font-medium">≈ en approche</span>';
+      } else {
+        const h = Math.floor(diffMin / 60);
+        const m = diffMin % 60;
+        const label = h > 0 ? `ETA dans ${h}h${m > 0 ? String(m).padStart(2,'0') : ''}` : `ETA dans ${m}min`;
+        return `<span class="text-gray-400 text-xs">${label}</span>`;
+      }
     }
 
+    // ── Rendu d’une paire ARR / DEP ──────────────────────────────────
+    function renderPair(arr, dep) {
+      // ARR row
+      const arrTimeHtml = arr.time
+        ? `<span class="font-mono font-semibold text-gray-900 text-sm">${arr.time}</span>`
+        : '<span class="text-gray-300 font-mono text-sm">——:——z</span>';
+      const arrStatusHtml = arr.etaMs !== null ? ' ' + arrStatus(arr.etaMs) : '';
+
+      const arrRow = `
+        <div class="flex items-center gap-3 px-4 py-2.5">
+          <span class="text-lg select-none text-green-500" title="Arrivée">↓</span>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-bold text-blue-700 font-mono">${arr.flight}</span>
+              <span class="text-xs text-gray-400 font-mono">${arr.date}</span>
+              ${arrTimeHtml}
+              ${arrStatusHtml}
+            </div>
+          </div>
+          <span class="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-50 text-indigo-600 font-mono shrink-0">${arr.iata}</span>
+        </div>`;
+
+      // DEP row
+      let depContent;
+      if (!dep || (!dep.flight && dep.time === null)) {
+        depContent = '<span class="text-gray-300 text-xs italic">Départ non disponible dans les données</span>';
+      } else {
+        const depTimeHtml = dep.time
+          ? `<span class="font-mono font-semibold text-gray-900 text-sm">${dep.time}</span>`
+          : '<span class="text-gray-300 font-mono text-sm">——:——z</span>';
+        depContent = `
+          <span class="font-bold text-blue-700 font-mono">${dep.flight}</span>
+          <span class="text-xs text-gray-400 font-mono">${dep.date}</span>
+          ${depTimeHtml}`;
+      }
+
+      const depRow = `
+        <div class="flex items-center gap-3 px-4 py-2.5 border-t border-gray-50">
+          <span class="text-lg select-none text-blue-400" title="Départ">↑</span>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              ${depContent}
+            </div>
+          </div>
+          <span class="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-50 text-indigo-600 font-mono shrink-0">${arr.iata}</span>
+        </div>`;
+
+      return arrRow + depRow;
+    }
+
+    // ── Rendu principal ──────────────────────────────────────────────
     function renderChainages(data) {
       const container = document.getElementById('chainages-result');
       const age = document.getElementById('ch-age');
 
+      if (data.serverNow) serverNow = data.serverNow;
+
       if (age && data.generatedAt) {
         const d = new Date(data.generatedAt);
-        age.textContent = `Données à ${String(d.getUTCHours()).padStart(2,'0')}${String(d.getUTCMinutes()).padStart(2,'0')}z`;
+        age.textContent = `Données à ${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}z`;
       }
 
       const list = data.chainages || [];
@@ -158,42 +218,43 @@ import '../styles/global.css';
       html += '<div class="space-y-3">';
 
       for (const ch of list) {
-        html += `<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">`;
-
         // Header immat
-        html += `<div class="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-100">`;
-        html += `<span class="font-bold text-gray-900 font-mono text-sm">${ch.registration}</span>`;
-        if (ch.aircraftType) html += `<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 font-mono">${ch.aircraftType}</span>`;
+        const typeLabel = ch.aircraftType
+          ? `<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-mono">${ch.aircraftType}</span>`
+          : '';
+
+        html += `<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">`;
+        html += `<div class="flex items-center gap-2 px-4 py-3 bg-gray-50 border-b border-gray-100">`;
+        html += `<span class="font-bold text-gray-900 font-mono">${ch.registration}</span>${typeLabel}`;
         html += `</div>`;
 
-        // Legs
-        html += `<div class="divide-y divide-gray-50">`;
-        for (const leg of ch.legs) {
-          const timeDisplay = leg.time === '----'
-            ? '<span class="text-gray-300 font-mono">----</span>'
-            : `<span class="font-mono font-semibold text-gray-800">${leg.time}</span>`;
-          html += `<div class="flex items-center gap-3 px-4 py-2.5 text-sm">`;
-          html += dirBadge(leg.direction);
-          html += `<span class="text-xs text-gray-400 font-mono w-20">${leg.date}</span>`;
-          html += timeDisplay;
-          html += `<span class="font-bold text-blue-700 font-mono">${leg.flight}</span>`;
-          html += `<span class="ml-auto text-xs font-semibold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-mono">${leg.iata}</span>`;
-          html += `</div>`;
+        // Grouper les legs en paires ARR+DEP
+        const legs = ch.legs;
+        let pairsHtml = '';
+        for (let i = 0; i < legs.length; i += 2) {
+          const arr = legs[i];
+          const dep = legs[i + 1] ?? null;
+          if (arr.direction === 'ARR') {
+            if (i > 0) pairsHtml += '<div class="border-t border-dashed border-gray-100"></div>'; // séparateur entre escales
+            pairsHtml += renderPair(arr, dep);
+          }
         }
-        html += `</div></div>`;
+
+        html += pairsHtml;
+        html += `</div>`;
       }
 
       html += '</div>';
       container.innerHTML = html;
     }
 
+    // ── Fetch ────────────────────────────────────────────────────────────
     async function fetchChainages(force = false) {
       if (airports.size === 0) {
         document.getElementById('chainages-result').innerHTML =
           '<div class="text-gray-400 text-sm italic text-center py-12">Ajoutez un aéroport pour afficher les chaînages.</div>';
         return;
       }
-
       document.getElementById('chainages-result').innerHTML =
         '<div class="text-gray-400 text-sm italic text-center py-8">Chargement…</div>';
 

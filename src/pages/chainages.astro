@@ -460,7 +460,7 @@ import '../styles/global.css';
     document.getElementById('btn-refresh').addEventListener('click', () => fetchChainages(true));
     
     // Fonction commune pour préparer l'impression
-    function preparePrint() {
+    async function preparePrint() {
       isPrintMode = true;
       const h1 = document.querySelector('h1');
       if (h1 && !h1.hasAttribute('data-print-date')) {
@@ -468,7 +468,7 @@ import '../styles/global.css';
         const dateStr = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
         h1.setAttribute('data-print-date', dateStr);
       }
-      if (lastData) renderChainages(lastData);
+      if (lastData) await renderChainages(lastData);
     }
 
     function cleanupPrint() {
@@ -478,15 +478,10 @@ import '../styles/global.css';
       if (lastData) renderChainages(lastData);
     }
 
-    // Bouton imprimer - préparer AVANT d'ouvrir le dialogue
-    document.getElementById('btn-print').addEventListener('click', () => {
-      preparePrint();
-      // Double requestAnimationFrame pour garantir le rendu complet
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          window.print();
-        });
-      });
+    // Bouton imprimer - attendre que les canvas soient redessinés avant d'ouvrir le dialogue
+    document.getElementById('btn-print').addEventListener('click', async () => {
+      await preparePrint();
+      window.print();
     });
 
     function hhmm(ms) {
@@ -736,10 +731,13 @@ import '../styles/global.css';
         container.appendChild(section);
       });
 
-      requestAnimationFrame(() => {
-        for (const { canvas, airStops, pal } of pendingDraws) {
-          drawAirportTimeline(canvas, airStops, data.windowStart, data.windowEnd, pal);
-        }
+      return new Promise(resolve => {
+        requestAnimationFrame(() => {
+          for (const { canvas, airStops, pal } of pendingDraws) {
+            drawAirportTimeline(canvas, airStops, data.windowStart, data.windowEnd, pal);
+          }
+          resolve();
+        });
       });
     }
 

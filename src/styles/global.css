@@ -32,21 +32,16 @@
   --toggle-bg-hover: #64748b;
 }
 
-/* Lien Trame briefing dans sidebar */
-.dark aside a[href="/briefing"] {
-  color: var(--text-secondary);
-}
-
+/* Hover purple pour le lien Trame briefing */
 .dark aside a[href="/briefing"]:hover {
-  background: rgba(139, 92, 246, 0.15);
+  background: rgba(109, 40, 217, 0.15);
   color: #c084fc;
 }
 
-/* Lien briefing mobile */
-.dark .lg\:hidden a[href="/briefing"] {
-  background: rgba(139, 92, 246, 0.15) !important;
-  border-color: rgba(139, 92, 246, 0.3) !important;
-  color: #c084fc !important;
+/* État actif du lien Trame briefing (briefing.astro) */
+.dark aside a[href="/briefing"].bg-blue-50 {
+  background: var(--hover-bg);
+  color: var(--hover-text);
 }
 
 /* Smooth transitions for theme switching */

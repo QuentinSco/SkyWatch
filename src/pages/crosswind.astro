@@ -585,14 +585,20 @@ import '../styles/global.css';
           <div class="hidden px-5 pb-4">
             <pre class="font-mono text-[11px] text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 whitespace-pre-wrap break-words leading-relaxed">${
               tafData?.rawTaf
-                ? tafData.rawTaf.trim()
-                    .replace(/(TEMPO|BECMG|PROB\d{2})/g, '\n$1')
-                    .trim()
+                ? formatTafForDisplay(tafData.rawTaf.trim())
                 : 'TAF non disponible'
             }</pre>
           </div>
         </div>
       </div>`;
+  }
+
+  function formatTafForDisplay(rawTaf) {
+    // Ne pas ajouter de saut de ligne si PROB30 ou PROB40 est suivi de TEMPO
+    return rawTaf
+      .replace(/\s+(TEMPO|BECMG)\s+/g, '\n$1 ')
+      .replace(/\s+(PROB\d{2})\s+(?!TEMPO)/g, '\n$1 ')
+      .trim();
   }
 
   function formatEpoch(epochSec) {

@@ -459,9 +459,34 @@ import '../styles/global.css';
     document.getElementById('airport-input').addEventListener('keydown', e => { if (e.key === 'Enter') addAirport(); });
     document.getElementById('btn-refresh').addEventListener('click', () => fetchChainages(true));
     
-    // Bouton imprimer
+    // Fonction commune pour préparer l'impression
+    function preparePrint() {
+      isPrintMode = true;
+      const h1 = document.querySelector('h1');
+      if (h1 && !h1.hasAttribute('data-print-date')) {
+        const now = new Date();
+        const dateStr = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        h1.setAttribute('data-print-date', dateStr);
+      }
+      if (lastData) renderChainages(lastData);
+    }
+
+    function cleanupPrint() {
+      isPrintMode = false;
+      const h1 = document.querySelector('h1');
+      if (h1) h1.removeAttribute('data-print-date');
+      if (lastData) renderChainages(lastData);
+    }
+
+    // Bouton imprimer - préparer AVANT d'ouvrir le dialogue
     document.getElementById('btn-print').addEventListener('click', () => {
-      window.print();
+      preparePrint();
+      // Double requestAnimationFrame pour garantir le rendu complet
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          window.print();
+        });
+      });
     });
 
     function hhmm(ms) {
@@ -722,23 +747,8 @@ import '../styles/global.css';
     window.addEventListener('themechange', () => { if (lastData) renderChainages(lastData); });
 
     // Gestion impression via Ctrl+P
-    window.addEventListener('beforeprint', () => {
-      isPrintMode = true;
-      const h1 = document.querySelector('h1');
-      if (h1 && !h1.hasAttribute('data-print-date')) {
-        const now = new Date();
-        const dateStr = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-        h1.setAttribute('data-print-date', dateStr);
-      }
-      if (lastData) renderChainages(lastData);
-    });
-
-    window.addEventListener('afterprint', () => {
-      isPrintMode = false;
-      const h1 = document.querySelector('h1');
-      if (h1) h1.removeAttribute('data-print-date');
-      if (lastData) renderChainages(lastData);
-    });
+    window.addEventListener('beforeprint', preparePrint);
+    window.addEventListener('afterprint', cleanupPrint);
 
     async function fetchChainages(force = false) {
       if (airports.size === 0) {

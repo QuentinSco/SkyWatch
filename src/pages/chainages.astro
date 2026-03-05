@@ -30,7 +30,6 @@ import '../styles/global.css';
 
 <body class="text-gray-900 min-h-screen flex" style="background:#f8fafc">
 
-  <!-- ─ Sidebar ─────────────────────────────────────────── -->
   <aside class="hidden lg:flex flex-col w-56 shrink-0 sticky top-0 h-screen border-r border-gray-200 bg-white px-4 py-6 overflow-y-auto">
     <div class="mb-6">
       <div class="text-2xl font-bold tracking-tight text-gray-900">🛡 SkyWatch</div>
@@ -51,14 +50,13 @@ import '../styles/global.css';
     </div>
   </aside>
 
-  <!-- ─ Contenu ─────────────────────────────────────────── -->
   <div class="flex-1 min-w-0 overflow-y-auto">
     <div class="max-w-5xl mx-auto px-4 py-6 xl:px-8">
 
       <div class="flex items-center justify-between flex-wrap gap-4 mb-6">
         <div>
           <h1 class="text-2xl font-bold tracking-tight text-gray-900">🔗 Chaînages</h1>
-          <p class="text-gray-500 text-xs mt-1">Temps de rotation des appareils AF LC — Fenêtre <strong>maintenant → +24h</strong></p>
+          <p class="text-gray-500 text-xs mt-1">Temps de rotation des appareils AF LC — fenêtre adaptée aux données</p>
         </div>
         <div class="flex items-center gap-2">
           <span id="ch-age" class="text-xs text-gray-400"></span>
@@ -123,9 +121,8 @@ import '../styles/global.css';
     const ROW_PAD    = 8;
     const BAR_H      = ROW_H - ROW_PAD * 2;
     const LABEL_W    = 92;
-    const CHART_PAD  = 12;
+    const CHART_PAD  = 16;
     const HEADER_H   = 28;
-    const TICK_EVERY = 2;
     const FONT       = '11px/1 Inter, system-ui, sans-serif';
     const FONT_BOLD  = 'bold 11px/1 Inter, system-ui, sans-serif';
     const FONT_SM    = 'bold 10px/1 Inter, system-ui, sans-serif';
@@ -134,16 +131,15 @@ import '../styles/global.css';
     const COLOR_LABEL = '#64748b';
     const COLOR_BG_ALT = '#f8fafc';
 
-    // Seuils de largeur pour le texte adaptatif (px)
-    const W_FULL   = 130;  // ARR gauche + durée centre + DEP droite
-    const W_SPLIT  = 72;   // ARR gauche + DEP droite, sans durée
-    const W_SHORT  = 34;   // numéros abrégés centrés "006·005"
-    // < W_SHORT   = rien (tooltip seul)
+    const W_FULL  = 130;
+    const W_SPLIT = 72;
+    const W_SHORT = 34;
 
     const airports = new Set();
     let lastData   = null;
     const tooltip  = document.getElementById('ch-tooltip');
 
+    // ── Tags ────────────────────────────────────────────────────
     function renderTags() {
       const container = document.getElementById('airport-tags');
       const hint = document.getElementById('no-airport-hint');
@@ -162,19 +158,18 @@ import '../styles/global.css';
         btn.addEventListener('click', () => { airports.delete(btn.getAttribute('data-code')); renderTags(); fetchChainages(); });
       });
     }
-
     function addAirport() {
       const input = document.getElementById('airport-input');
       const val = input.value.trim().toUpperCase();
       if (!val || val.length < 3) return;
-      paletteFor(val);
-      airports.add(val); input.value = '';
+      paletteFor(val); airports.add(val); input.value = '';
       renderTags(); fetchChainages();
     }
     document.getElementById('btn-add-airport').addEventListener('click', addAirport);
     document.getElementById('airport-input').addEventListener('keydown', e => { if (e.key === 'Enter') addAirport(); });
     document.getElementById('btn-refresh').addEventListener('click', () => fetchChainages(true));
 
+    // ── Helpers ────────────────────────────────────────────────────
     function hhmm(ms) {
       const d = new Date(ms);
       return String(d.getUTCHours()).padStart(2,'0') + ':' + String(d.getUTCMinutes()).padStart(2,'0') + 'z';
@@ -183,15 +178,29 @@ import '../styles/global.css';
       const d = new Date(ms);
       return String(d.getUTCDate()).padStart(2,'0') + '/' + String(d.getUTCMonth()+1).padStart(2,'0');
     }
-    // Ex: "AF006" → "006"
     function shortFlight(f) { return f ? f.replace(/^AF0*/, '') : ''; }
 
+    // ── Calcul des ticks adaptés à la fenêtre ─────────────────────────────
+    function tickInterval(spanMs, availW) {
+      // On vise ~8-12 graduations visibles, espacements possibles en minutes
+      const targets = [15, 30, 60, 120, 180, 240, 360];
+      for (const mins of targets) {
+        const nbTicks = spanMs / (mins * 60_000);
+        const pxPerTick = availW / nbTicks;
+        if (pxPerTick >= 50) return mins * 60_000;
+      }
+      return 360 * 60_000; // 6h par défaut
+    }
+
+    // ── Dessine UN canvas pour UN aéroport ────────────────────────────
     function drawAirportTimeline(canvas, stops, wStart, wEnd, pal) {
       const nowMs  = Date.now();
       const span   = wEnd - wStart;
       const dpr    = window.devicePixelRatio || 1;
       const wrap   = canvas.parentElement;
-      const availW = Math.max(wrap.clientWidth - LABEL_W - CHART_PAD, 200);
+
+      // Largeur réelle du conteneur (après rendu DOM)
+      const availW  = Math.max(wrap.getBoundingClientRect().width - LABEL_W - CHART_PAD, 200);
       const canvasW = LABEL_W + availW + CHART_PAD;
       const canvasH = HEADER_H + stops.length * ROW_H;
 
@@ -204,33 +213,46 @@ import '../styles/global.css';
       ctx.scale(dpr, dpr);
       const toX = t => LABEL_W + ((t - wStart) / span) * availW;
 
+      // Fond
       ctx.fillStyle = '#fff';
       ctx.fillRect(0, 0, canvasW, canvasH);
       stops.forEach((_, i) => {
         if (i % 2 === 1) { ctx.fillStyle = COLOR_BG_ALT; ctx.fillRect(0, HEADER_H + i * ROW_H, canvasW, ROW_H); }
       });
 
+      // Grille + header heures (interval adapté)
+      const tickMs = tickInterval(span, availW);
+      // Premier tick : arrondi au multiple de tickMs supérieur à wStart
+      const firstTick = Math.ceil(wStart / tickMs) * tickMs;
+
       ctx.strokeStyle = COLOR_GRID; ctx.lineWidth = 1;
       ctx.font = FONT; ctx.fillStyle = COLOR_LABEL;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      for (let h = 0; h <= 24; h += TICK_EVERY) {
-        const t = wStart + h * 3600000;
+
+      for (let t = firstTick; t <= wEnd; t += tickMs) {
         const x = toX(t);
         ctx.beginPath(); ctx.moveTo(x, HEADER_H); ctx.lineTo(x, canvasH); ctx.stroke();
-        ctx.fillText(hhmm(t).slice(0,5), x, HEADER_H / 2);
+        // Label : affiche DD/MM si changement de jour
+        const prev = new Date(t - tickMs);
+        const curr = new Date(t);
+        const label = (curr.getUTCDate() !== prev.getUTCDate())
+          ? ddmm(t) + ' ' + hhmm(t).slice(0,5)
+          : hhmm(t).slice(0,5);
+        ctx.fillText(label, x, HEADER_H / 2);
       }
+
+      // Séparateurs
       ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(LABEL_W, HEADER_H); ctx.lineTo(canvasW, HEADER_H); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(LABEL_W, 0); ctx.lineTo(LABEL_W, canvasH); ctx.stroke();
 
+      // ── Blocs ────────────────────────────────────────────────────
       const hitZones = [];
-
       stops.forEach((stop, i) => {
         const y0   = HEADER_H + i * ROW_H;
         const barY = y0 + ROW_PAD;
         const midY = barY + BAR_H / 2;
 
-        // Matricule + type
         ctx.font = FONT_BOLD; ctx.fillStyle = '#1e293b';
         ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
         ctx.fillText(stop.registration, 6, y0 + ROW_H / 2);
@@ -240,10 +262,9 @@ import '../styles/global.css';
           ctx.fillText(stop.aircraftType, 6 + lw + 4, y0 + ROW_H / 2);
         }
 
-        // Bloc
-        const xArr  = toX(stop.arrMs);
+        const xArr  = Math.max(toX(stop.arrMs), LABEL_W);
         const known = stop.depMs !== null;
-        const xDep  = known ? toX(stop.depMs) : canvasW - CHART_PAD;
+        const xDep  = known ? Math.min(toX(stop.depMs), canvasW - CHART_PAD) : canvasW - CHART_PAD;
         const barW  = Math.max(xDep - xArr, 4);
 
         ctx.fillStyle = known ? pal.bar : pal.barU;
@@ -259,69 +280,48 @@ import '../styles/global.css';
           ctx.restore();
         }
 
-        // ── Texte adaptatif selon largeur du bloc ─────────────────────────────
+        // Texte adaptatif
         const textColor = known ? '#fff' : pal.text;
-        ctx.font = FONT_SM;
-        ctx.textBaseline = 'middle';
-
+        ctx.font = FONT_SM; ctx.textBaseline = 'middle';
         const arrLabel = '↓ ' + stop.arrFlight;
         const depLabel = stop.depFlight ? '↑ ' + stop.depFlight : null;
         const arrW = ctx.measureText(arrLabel).width;
         const depW = depLabel ? ctx.measureText(depLabel).width : 0;
 
         if (barW >= W_FULL) {
-          // Mode complet : ARR gauche | durée centre | DEP droite
           ctx.fillStyle = textColor;
-          ctx.textAlign = 'left';
-          ctx.fillText(arrLabel, xArr + 5, midY);
-          if (depLabel) {
-            ctx.textAlign = 'right';
-            ctx.fillText(depLabel, xDep - 5, midY);
-          }
+          ctx.textAlign = 'left'; ctx.fillText(arrLabel, xArr + 5, midY);
+          if (depLabel) { ctx.textAlign = 'right'; ctx.fillText(depLabel, xDep - 5, midY); }
           if (known) {
             const dm = Math.round((stop.depMs - stop.arrMs) / 60000);
             const dh = Math.floor(dm / 60), mm = String(dm % 60).padStart(2,'0');
             const durLabel = dh > 0 ? `${dh}h${mm}` : `${dm}min`;
-            // Vérifier qu'il reste de la place entre les deux textes
             const midX = (xArr + xDep) / 2;
-            const durW  = ctx.measureText(durLabel).width;
-            if (xDep - 8 - depW - 8 > xArr + 8 + arrW + durW / 2) {
-              ctx.font = FONT;
+            ctx.font = FONT;
+            const durW = ctx.measureText(durLabel).width;
+            const leftEdge  = xArr + 5 + arrW + 6;
+            const rightEdge = xDep - 5 - depW - 6;
+            if (rightEdge - leftEdge > durW) {
               ctx.fillStyle = 'rgba(255,255,255,0.8)';
               ctx.textAlign = 'center';
               ctx.fillText(durLabel, midX, midY);
             }
           }
-
         } else if (barW >= W_SPLIT) {
-          // Mode réduit : ARR gauche | DEP droite, pas de durée
-          // Vérifier qu'ils ne se touchent pas (8px de marge entre les deux)
-          if (arrW + depW + 18 <= barW) {
-            ctx.fillStyle = textColor;
-            ctx.textAlign = 'left';
-            ctx.fillText(arrLabel, xArr + 5, midY);
-            if (depLabel) {
-              ctx.textAlign = 'right';
-              ctx.fillText(depLabel, xDep - 5, midY);
-            }
-          } else if (arrW + 10 <= barW) {
-            // Juste l'ARR
-            ctx.fillStyle = textColor;
-            ctx.textAlign = 'left';
-            ctx.fillText(arrLabel, xArr + 5, midY);
-          }
-
-        } else if (barW >= W_SHORT) {
-          // Mode abrégé : "006·005" centré
-          const a = shortFlight(stop.arrFlight);
-          const d = stop.depFlight ? shortFlight(stop.depFlight) : null;
-          const short = d ? `${a}·${d}` : a;
           ctx.fillStyle = textColor;
-          ctx.textAlign = 'center';
+          if (arrW + depW + 18 <= barW) {
+            ctx.textAlign = 'left'; ctx.fillText(arrLabel, xArr + 5, midY);
+            if (depLabel) { ctx.textAlign = 'right'; ctx.fillText(depLabel, xDep - 5, midY); }
+          } else if (arrW + 10 <= barW) {
+            ctx.textAlign = 'left'; ctx.fillText(arrLabel, xArr + 5, midY);
+          }
+        } else if (barW >= W_SHORT) {
+          const short = [shortFlight(stop.arrFlight), stop.depFlight ? shortFlight(stop.depFlight) : null]
+            .filter(Boolean).join('·');
+          ctx.fillStyle = textColor; ctx.textAlign = 'center';
           ctx.fillText(short, (xArr + xDep) / 2, midY);
-
         }
-        // < W_SHORT : rien — tooltip seul
+        // < W_SHORT : rien
 
         hitZones.push({ x1: xArr, y1: barY, x2: xDep, y2: barY + BAR_H, stop });
       });
@@ -360,15 +360,12 @@ import '../styles/global.css';
           tooltip.style.opacity = '1';
           tooltip.style.left = (e.clientX + 14) + 'px';
           tooltip.style.top  = (e.clientY - 10) + 'px';
-        } else {
-          tooltip.style.opacity = '0';
-        }
+        } else { tooltip.style.opacity = '0'; }
       });
       canvas.addEventListener('mouseleave', () => { tooltip.style.opacity = '0'; });
-
-      return hitZones;
     }
 
+    // ── Rendu principal ────────────────────────────────────────────
     function renderChainages(data) {
       lastData = data;
       const container = document.getElementById('chainages-result');
@@ -401,6 +398,9 @@ import '../styles/global.css';
 
       container.innerHTML = '';
 
+      // On insère d'abord le HTML, puis on dessine dans un rAF pour avoir les vraies dimensions
+      const pendingDraws = [];
+
       byAirport.forEach((airStops, code) => {
         const pal = paletteFor(code);
         const section = document.createElement('div');
@@ -431,9 +431,17 @@ import '../styles/global.css';
           canvas.className = 'timeline-canvas';
           wrap.appendChild(canvas);
           section.appendChild(wrap);
-          drawAirportTimeline(canvas, airStops, data.windowStart, data.windowEnd, pal);
+          // Différer le dessin après le rendu DOM
+          pendingDraws.push({ canvas, airStops, pal });
         }
         container.appendChild(section);
+      });
+
+      // Dessiner après que le navigateur a calculé les dimensions
+      requestAnimationFrame(() => {
+        for (const { canvas, airStops, pal } of pendingDraws) {
+          drawAirportTimeline(canvas, airStops, data.windowStart, data.windowEnd, pal);
+        }
       });
     }
 

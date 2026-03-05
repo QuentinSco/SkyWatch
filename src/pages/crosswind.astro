@@ -319,6 +319,18 @@ import '../styles/global.css';
     renderResults(cachedData.tafs, cachedData.flights);
   }
 
+  function setCustomQfuForAirport(icao) {
+    const qfuValue = prompt(`Saisir le QFU pour ${icao} (ex: 27, 09, 18)`);
+    if (!qfuValue) return;
+    const normalized = normalizeQfu(qfuValue);
+    if (normalized === null) {
+      alert('QFU invalide. Veuillez entrer un nombre entre 0 et 36.');
+      return;
+    }
+    customQfuByIcao.set(icao, normalized);
+    renderResults(cachedData.tafs, cachedData.flights);
+  }
+
   document.getElementById('btn-add-airport')?.addEventListener('click', addAirport);
   document.getElementById('airport-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') addAirport(); });
 
@@ -371,31 +383,44 @@ import '../styles/global.css';
   function renderAirportBlock(icao, tafData, flights) {
     const iataKey = Object.keys(AF_IATA_TO_ICAO).find(k => AF_IATA_TO_ICAO[k] === icao) ?? icao;
     const apName = AIRPORT_RUNWAYS[icao]?.name ?? icao;
-    // Les QFU dans AIRPORT_RUNWAYS sont déjà en format 2 chiffres (4, 22, etc.)
     const defaultQfuList = AIRPORT_RUNWAYS[icao]?.qfu ?? [];
-    const activeQfu = customQfuByIcao.get(icao) ?? (defaultQfuList.length ? defaultQfuList[0] : null);
+    const hasDefaultQfu = defaultQfuList.length > 0;
+    const activeQfu = customQfuByIcao.get(icao) ?? (hasDefaultQfu ? defaultQfuList[0] : null);
 
     const fcsts = tafData?.fcsts ?? [];
     const periodsWithWind = fcsts.filter(f => f.wdir != null && f.wspd != null);
 
-    // QFU selector dropdown
-    const qfuOptions = defaultQfuList.length > 0
-      ? defaultQfuList.map(q => `<option value="${q}" ${q === activeQfu ? 'selected' : ''}>QFU ${String(q).padStart(2,'0')}</option>`).join('')
-      : '<option value="">QFU inconnu</option>';
-    
-    const qfuSelector = `
-      <div class="flex items-center gap-2">
-        <label class="text-xs text-gray-500">Piste :</label>
-        <select onchange="changeQfu('${icao}', this.value)" class="text-xs font-mono font-semibold px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200">
-          ${qfuOptions}
-        </select>
-      </div>`;
+    // QFU selector
+    let qfuSelector = '';
+    if (hasDefaultQfu) {
+      const qfuOptions = defaultQfuList.map(q => `<option value="${q}" ${q === activeQfu ? 'selected' : ''}>QFU ${String(q).padStart(2,'0')}</option>`).join('');
+      qfuSelector = `
+        <div class="flex items-center gap-2">
+          <label class="text-xs text-gray-500">Piste :</label>
+          <select onchange="changeQfu('${icao}', this.value)" class="text-xs font-mono font-semibold px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+            ${qfuOptions}
+          </select>
+        </div>`;
+    } else {
+      qfuSelector = `
+        <div class="flex items-center gap-2">
+          ${activeQfu !== null 
+            ? `<span class="text-xs font-mono font-semibold px-2 py-1 rounded bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700">QFU ${String(activeQfu).padStart(2,'0')}</span>`
+            : '<span class="text-xs text-orange-500 font-semibold">⚠️ QFU non défini</span>'
+          }
+          <button onclick="setCustomQfuForAirport('${icao}')" class="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition">
+            ${activeQfu !== null ? '✏️ Modifier' : '+ Définir QFU'}
+          </button>
+        </div>`;
+    }
 
     let tafRows = '';
     if (!tafData) {
       tafRows = `<tr><td colspan="6" class="px-4 py-3 text-xs text-gray-400 italic">TAF non disponible pour ${icao}</td></tr>`;
     } else if (periodsWithWind.length === 0) {
       tafRows = `<tr><td colspan="6" class="px-4 py-3 text-xs text-gray-400 italic">Aucun vent dans le TAF</td></tr>`;
+    } else if (activeQfu === null) {
+      tafRows = `<tr><td colspan="6" class="px-4 py-3 text-xs text-orange-500 italic">⚠️ Définir un QFU pour calculer les composantes</td></tr>`;
     } else {
       for (const f of periodsWithWind) {
         const ci = f.changeIndicator
@@ -415,7 +440,7 @@ import '../styles/global.css';
         const windStr = `${dirStr}/${String(f.wspd).padStart(2,'0')}${f.wgst ? 'G'+f.wgst : ''}KT`;
         const qfuCell = vrb
           ? '<span class="text-gray-400 italic text-[10px]">VRB</span>'
-          : (activeQfu != null ? String(activeQfu).padStart(2,'0') : '–');
+          : String(activeQfu).padStart(2,'0');
         const cwNote = vrb
           ? ' <span class="text-gray-400 text-[10px]">(pire cas)</span>'
           : (cwGust != null ? ` <span class="text-gray-400 text-[10px]">(G ${cwGust})</span>` : '');
@@ -440,6 +465,8 @@ import '../styles/global.css';
     let flightRows = '';
     if (sortedFlights.length === 0) {
       flightRows = `<tr><td colspan="5" class="px-3 py-3 text-xs text-gray-400 italic">Aucun vol AF prévu</td></tr>`;
+    } else if (activeQfu === null) {
+      flightRows = `<tr><td colspan="5" class="px-3 py-3 text-xs text-orange-500 italic">⚠️ Définir un QFU pour calculer les composantes</td></tr>`;
     } else {
       for (const flight of sortedFlights) {
         const eta = flight.estimatedTouchDownTime || flight.scheduledArrival;

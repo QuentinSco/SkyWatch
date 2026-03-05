@@ -73,21 +73,11 @@ export const GET: APIRoute = async ({ url }) => {
 
     stops.sort((a, b) => a.arrMs - b.arrMs);
 
-    // ── Fenêtre visuelle : alignée sur les données ───────────────────────────────
-    // On prend le plus tôt entre NOW et la première arrivée, et on finit
-    // 30min après le dernier départ (ou la dernière arrivée si pas de départ).
-    // Minimum 6h de fenêtre pour que la frise soit lisible.
-    const MIN_SPAN = 6 * 3600_000;
-    let wStart = now;
-    let wEnd   = now + MIN_SPAN;
-
-    if (stops.length > 0) {
-      const firstArr = stops[0].arrMs;
-      const lastEnd  = stops.reduce((mx, s) => Math.max(mx, s.depMs ?? s.arrMs + 3600_000), 0);
-      wStart = Math.min(now, firstArr) - 15 * 60_000;          // 15min avant le premier event
-      wEnd   = Math.max(now, lastEnd)  + 30 * 60_000;          // 30min après le dernier
-      if (wEnd - wStart < MIN_SPAN) wEnd = wStart + MIN_SPAN;  // plancher 6h
-    }
+    // ── Fenêtre visuelle : TOUJOURS 24h glissantes à partir de maintenant ───────────
+    // Cela garantit que la timeline affiche l'intégralité de l'horizon temporel,
+    // même si les données sont partielles ou absentes sur certaines périodes.
+    const wStart = now;
+    const wEnd   = now + 24 * 60 * 60 * 1000;
 
     return new Response(
       JSON.stringify({ stops, generatedAt: new Date().toISOString(), windowStart: wStart, windowEnd: wEnd }),

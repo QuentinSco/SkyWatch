@@ -91,32 +91,67 @@ import '../styles/global.css';
     ZSPD: { iata: 'PVG', name: 'Shanghai PVG',          qfu: [170, 350] },
   };
 
-  // Seuils crosswind certifiés par type d'avion (kt)
+  // Seuils crosswind certifiés par type d'avion (kt, rafales incluses)
+  // Source : limitations opérationnelles Air France
   const AIRCRAFT_LIMITS = {
-    '77W': { label: '777-300ER', limit: 38 },
-    '772': { label: '777-200ER', limit: 38 },
-    '789': { label: '787-9',     limit: 38 },
-    '332': { label: 'A330-200',  limit: 38 },
-    '333': { label: 'A330-300',  limit: 38 },
-    '359': { label: 'A350-900',  limit: 38 },
-    'E90': { label: 'E190',      limit: 25 },
-    '223': { label: 'A220-300',  limit: 25 },
-    '220': { label: 'A220',      limit: 25 },
-    '320': { label: 'A320',      limit: 29 },
-    '321': { label: 'A321',      limit: 29 },
-    '319': { label: 'A319',      limit: 29 },
+    // ── Long-courriers ──────────────────────────────────────────────────
+    '77W': { label: '777-300ER', dry: 38, wet: 38 },
+    '772': { label: '777-200ER', dry: 38, wet: 38 },
+    '789': { label: '787-9',     dry: 38, wet: 38 },
+    '332': { label: 'A330-200',  dry: 38, wet: 38 },
+    '333': { label: 'A330-300',  dry: 38, wet: 38 },
+    '359': { label: 'A350-900',  dry: 38, wet: 38 },
+    // ── Moyen-courriers ─────────────────────────────────────────────────
+    '320': { label: 'A320',      dry: 38, wet: 33 },
+    '321': { label: 'A321',      dry: 38, wet: 33 },
+    '319': { label: 'A319',      dry: 38, wet: 33 },
+    // ── Court-courriers / régionaux ──────────────────────────────────────
+    'E90': { label: 'E190',      dry: 25, wet: 25 },  // à confirmer
+    '223': { label: 'A220-300',  dry: 29, wet: 29 },
+    '220': { label: 'A220-100',  dry: 29, wet: 29 },
   };
-  const DEFAULT_LIMIT = { label: 'Inconnu', limit: 25 };
-  const CONSERVATIVE_LIMIT = 25; // seuil planning pour le tableau TAF (E190 = le plus restrictif)
+  const DEFAULT_LIMIT = { label: 'Inconnu', dry: 25, wet: 25 };
+  // Seuil conservateur pour le tableau TAF (type avion inconnu → A220 = le plus restrictif)
+  const CONSERVATIVE_LIMIT_DRY = 29;
+  const CONSERVATIVE_LIMIT_WET = 29;
 
-  // ─── CALCUL CROSSWIND ─────────────────────────────────────────────────────
+  // ─── DÉTECTION CONDITIONS HUMIDES ────────────────────────────────────────
+  // RA, SN ou TSRA dans le wxString → piste considérée WET → limite WET applicable
+  // On inclut aussi FZRA, SHRA, GR (grêle), PL (grésil) par sécurité
+  const WET_WX_TOKENS = /\b(RA|SN|TSRA|FZRA|SHRA|RASN|SNRA|GR|GS|PL)\b/;
+
+  /**
+   * Retourne true si une période TAF couvrant l'instant donné contient RA/SN/TSRA.
+   * On teste BASE + TEMPO/PROB (pire cas → si même TEMPO apporte de la pluie, on prend WET).
+   */
+  function isWetAtTime(fcsts, targetEpochSec) {
+    if (!fcsts || targetEpochSec == null) return false;
+    return fcsts.some(f =>
+      f.timeFrom != null && f.timeTo != null &&
+      targetEpochSec >= f.timeFrom && targetEpochSec < f.timeTo &&
+      WET_WX_TOKENS.test(f.wxString ?? '')
+    );
+  }
+
+  /** Retourne true si la période TAF (fcst individuel) contient RA/SN/TSRA. */
+  function isFcstWet(fcst) {
+    return WET_WX_TOKENS.test(fcst.wxString ?? '');
+  }
   function computeCrosswind(windDir, windSpd, qfuList) {
     if (!windSpd || windSpd === 0 || windDir == null) {
-      return { crosswind: 0, bestQfu: qfuList[0] ?? null, headwind: 0 };
+      return { crosswind: 0, bestQfu: qfuList[0] ?? null, headwind: 0, vrb: false };
+    }
+    // VRB (variable) : direction inconnue → worst case = vent à 90° de la piste
+    if (String(windDir).toUpperCase() === 'VRB' || windDir === 'VRB') {
+      return { crosswind: Math.round(windSpd), bestQfu: null, headwind: 0, vrb: true };
+    }
+    const dir = Number(windDir);
+    if (isNaN(dir)) {
+      return { crosswind: Math.round(windSpd), bestQfu: null, headwind: 0, vrb: true };
     }
     let minCrosswind = Infinity, bestQfu = null, bestHeadwind = 0;
     for (const qfu of qfuList) {
-      const diff = Math.abs(windDir - qfu);
+      const diff = Math.abs(dir - qfu);
       const angle = Math.min(diff, 360 - diff);
       const cw = Math.abs(windSpd * Math.sin((angle * Math.PI) / 180));
       if (cw < minCrosswind) {
@@ -125,7 +160,7 @@ import '../styles/global.css';
         bestHeadwind = windSpd * Math.cos((angle * Math.PI) / 180);
       }
     }
-    return { crosswind: Math.round(minCrosswind), bestQfu, headwind: Math.round(bestHeadwind) };
+    return { crosswind: Math.round(minCrosswind), bestQfu, headwind: Math.round(bestHeadwind), vrb: false };
   }
 
   // Trouve les groupes TAF actifs à un instant donné (epoch seconds)
@@ -150,12 +185,24 @@ import '../styles/global.css';
   }
 
   // ─── COULEURS ─────────────────────────────────────────────────────────────
+  // Retourne le statut pour DRY et WET séparément
+  function getCrosswindStatus(cw, dry, wet) {
+    function level(val, limit) {
+      const r = val / limit;
+      if (r < 0.6) return { bg: 'bg-green-100 dark:bg-green-900/30',   text: 'text-green-700 dark:text-green-400',   label: 'OK' };
+      if (r < 0.8) return { bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-700 dark:text-yellow-400', label: 'Attention' };
+      if (r < 1.0) return { bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-700 dark:text-orange-400', label: 'Limite' };
+      return         { bg: 'bg-red-100 dark:bg-red-900/30',            text: 'text-red-700 dark:text-red-400',       label: '⚠ Dépassé' };
+    }
+    return { dryStatus: level(cw, dry), wetStatus: level(cw, wet) };
+  }
+  // Compat : pour le tableau TAF (limite conservative, pire cas)
   function getCrosswindColor(cw, limit) {
     const r = cw / limit;
     if (r < 0.6) return { bg: 'bg-green-100 dark:bg-green-900/30',   text: 'text-green-700 dark:text-green-400',   label: 'OK' };
     if (r < 0.8) return { bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-700 dark:text-yellow-400', label: 'Attention' };
     if (r < 1.0) return { bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-700 dark:text-orange-400', label: 'Limite' };
-    return         { bg: 'bg-red-100 dark:bg-red-900/30',    text: 'text-red-700 dark:text-red-400',    label: '⚠ Dépassé' };
+    return         { bg: 'bg-red-100 dark:bg-red-900/30',            text: 'text-red-700 dark:text-red-400',       label: '⚠ Dépassé' };
   }
 
   // ─── ÉTAT & SÉLECTEUR ─────────────────────────────────────────────────────
@@ -239,20 +286,38 @@ import '../styles/global.css';
         const ci = f.changeIndicator
           ? `<span class="text-[10px] font-semibold px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500">${f.changeIndicator}</span>`
           : '<span class="text-[10px] text-gray-400">BASE</span>';
-        const { crosswind: cwBase, bestQfu } = computeCrosswind(f.wdir, f.wspd, ap.qfu);
+        const isVrb = String(f.wdir ?? '').toUpperCase() === 'VRB';
+        const { crosswind: cwBase, bestQfu, vrb } = computeCrosswind(f.wdir, f.wspd, ap.qfu);
         const cwGust = f.wgst ? computeCrosswind(f.wdir, f.wgst, ap.qfu).crosswind : null;
         const worstCw = cwGust ?? cwBase;
-        const { bg, text, label } = getCrosswindColor(worstCw, CONSERVATIVE_LIMIT);
-        const windStr = `${String(f.wdir).padStart(3,'0')}/${String(f.wspd).padStart(2,'0')}${f.wgst ? 'G'+f.wgst : ''}KT`;
-        const cwStr = cwGust != null ? `${cwBase} kt <span class="text-gray-400 text-[10px]">(G ${cwGust})</span>` : `${cwBase} kt`;
+
+        // Détection WET sur cette période précise
+        const wet = isFcstWet(f);
+        const activeLimit = wet ? CONSERVATIVE_LIMIT_WET : CONSERVATIVE_LIMIT_DRY;
+        const status = getCrosswindColor(worstCw, activeLimit);
+
+        // Badge état piste
+        const wxBadge = wet
+          ? `<span class="ml-1 px-1 py-0.5 rounded text-[9px] font-bold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">WET ${f.wxString ?? ''}</span>`
+          : `<span class="ml-1 px-1 py-0.5 rounded text-[9px] font-bold bg-gray-100 dark:bg-gray-700 text-gray-500">DRY</span>`;
+
+        const dirStr = isVrb ? 'VRB' : String(Number(f.wdir)).padStart(3, '0');
+        const windStr = `${dirStr}/${String(f.wspd).padStart(2,'0')}${f.wgst ? 'G'+f.wgst : ''}KT`;
+        const qfuCell = vrb
+          ? '<span class="text-gray-400 italic text-[10px]">VRB</span>'
+          : (bestQfu != null ? String(bestQfu).padStart(3,'0') + '°' : '–');
+        const cwNote = vrb
+          ? ' <span class="text-gray-400 text-[10px]">(pire cas)</span>'
+          : (cwGust != null ? ` <span class="text-gray-400 text-[10px]">(G ${cwGust})</span>` : '');
+        const cwStr = `${cwBase} kt${cwNote}`;
         tafRows += `
-          <tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition">
+          <tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition ${wet ? 'bg-blue-50/30 dark:bg-blue-900/10' : ''}">
             <td class="px-4 py-2 text-xs font-mono text-gray-500 whitespace-nowrap">${formatEpoch(f.timeFrom)}→${formatEpoch(f.timeTo)}</td>
             <td class="px-4 py-2 text-xs">${ci}</td>
-            <td class="px-4 py-2 text-xs font-mono font-semibold text-gray-800 dark:text-gray-200">${windStr}</td>
-            <td class="px-4 py-2 text-xs font-mono text-gray-500">${bestQfu != null ? String(bestQfu).padStart(3,'0') + '°' : '–'}</td>
-            <td class="px-4 py-2 text-xs font-bold font-mono ${text}">${cwStr}</td>
-            <td class="px-4 py-2 text-xs"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${bg} ${text}">${label}</span></td>
+            <td class="px-4 py-2 text-xs font-mono font-semibold text-gray-800 dark:text-gray-200">${windStr}${wxBadge}</td>
+            <td class="px-4 py-2 text-xs font-mono text-gray-500">${qfuCell}</td>
+            <td class="px-4 py-2 text-xs font-bold font-mono ${status.text}">${cwStr}</td>
+            <td class="px-4 py-2 text-xs"><span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${status.bg} ${status.text}">${status.label}</span></td>
           </tr>`;
       }
     }
@@ -282,11 +347,24 @@ import '../styles/global.css';
 
         if (baseWind) {
           const spd = baseWind.wgst ?? baseWind.wspd;
-          const { crosswind, bestQfu } = computeCrosswind(baseWind.wdir, spd, ap.qfu);
-          const { bg, text, label } = getCrosswindColor(crosswind, acInfo.limit);
-          const windStr = `${String(baseWind.wdir).padStart(3,'0')}/${String(baseWind.wspd).padStart(2,'0')}${baseWind.wgst ? 'G'+baseWind.wgst : ''}KT`;
+          const { crosswind, bestQfu, vrb } = computeCrosswind(baseWind.wdir, spd, ap.qfu);
 
-          // Pire TEMPO couvrant l'ETA
+          // Détection WET à l'ETA (BASE + TEMPO/PROB)
+          const wet = isWetAtTime(fcsts, etaEpochSec);
+          const activeLimit = wet ? acInfo.wet : acInfo.dry;
+          const status = getCrosswindColor(crosswind, activeLimit);
+
+          const isVrbBase = String(baseWind.wdir ?? '').toUpperCase() === 'VRB';
+          const dirStr = isVrbBase ? 'VRB' : String(Number(baseWind.wdir)).padStart(3,'0');
+          const windStr = `${dirStr}/${String(baseWind.wspd).padStart(2,'0')}${baseWind.wgst ? 'G'+baseWind.wgst : ''}KT`;
+          const qfuStr = vrb ? '<span class="text-gray-400 italic">VRB</span>' : `QFU ${String(bestQfu).padStart(3,'0')}`;
+
+          // Badge état piste actif
+          const condBadge = wet
+            ? `<span class="px-1 py-0.5 rounded text-[9px] font-bold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">WET</span>`
+            : `<span class="px-1 py-0.5 rounded text-[9px] font-bold bg-gray-100 dark:bg-gray-700 text-gray-500">DRY</span>`;
+
+          // Pire TEMPO couvrant l'ETA (vent)
           let tempoStr = '';
           if (tempoWinds.length > 0) {
             let worstCw = 0, worstTempo = null;
@@ -295,15 +373,22 @@ import '../styles/global.css';
               if (cwt > worstCw) { worstCw = cwt; worstTempo = t; }
             }
             if (worstTempo) {
-              const { text: tt, label: tl } = getCrosswindColor(worstCw, acInfo.limit);
-              tempoStr = ` <span class="ml-1 text-[10px] ${tt}">${worstTempo.changeIndicator ?? 'TEMPO'}: ${worstCw}kt (${tl})</span>`;
+              const tempoWet = wet || WET_WX_TOKENS.test(worstTempo.wxString ?? '');
+              const tempoLimit = tempoWet ? acInfo.wet : acInfo.dry;
+              const { text: tt, label: tl } = getCrosswindColor(worstCw, tempoLimit);
+              tempoStr = `<div class="text-[10px] ${tt} mt-0.5">${worstTempo.changeIndicator ?? 'TEMPO'} : ${worstCw} kt (${tl})</div>`;
             }
           }
 
-          windCell = `<td class="px-3 py-2 text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap">${windStr} <span class="text-gray-400">QFU ${String(bestQfu).padStart(3,'0')}</span></td>`;
+          windCell = `<td class="px-3 py-2 text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap">${windStr} <span class="text-gray-400">${qfuStr}</span></td>`;
           riskCell = `<td class="px-3 py-2 text-xs">
-            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-bold text-[11px] ${bg} ${text}">${crosswind} kt · ${label}</span>
-            <span class="ml-1 text-[10px] text-gray-400">${acInfo.label} (max ${acInfo.limit}kt)</span>${tempoStr}
+            <div class="flex flex-wrap items-center gap-1">
+              <span class="font-bold font-mono ${status.text}">${crosswind} kt</span>
+              ${condBadge}
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${status.bg} ${status.text}">${status.label}</span>
+            </div>
+            <div class="text-[10px] text-gray-400 mt-0.5">${acInfo.label} · max ${activeLimit} kt${wet && acInfo.dry !== acInfo.wet ? ` (DRY ${acInfo.dry})` : ''}</div>
+            ${tempoStr}
           </td>`;
         }
 
@@ -337,7 +422,7 @@ import '../styles/global.css';
                   <tr>
                     <th class="px-4 py-2">Période (UTC)</th><th class="px-4 py-2">Type</th>
                     <th class="px-4 py-2">Vent TAF</th><th class="px-4 py-2">Meilleur QFU</th>
-                    <th class="px-4 py-2">Composante travers</th><th class="px-4 py-2">Niveau</th>
+                    <th class="px-4 py-2">Composante travers</th><th class="px-4 py-2">DRY / WET</th>
                   </tr>
                 </thead>
                 <tbody>${tafRows}</tbody>
@@ -360,6 +445,31 @@ import '../styles/global.css';
                 <tbody>${flightRows}</tbody>
               </table>
             </div>
+          </div>
+        </div>
+        <!-- TAF brut dépliable -->
+        <div class="border-t border-gray-100 dark:border-gray-700">
+          <button
+            class="w-full flex items-center justify-between px-5 py-2.5 text-xs text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition font-medium"
+            onclick="(function(btn){
+              const block = btn.nextElementSibling;
+              const isHidden = block.classList.contains('hidden');
+              block.classList.toggle('hidden');
+              btn.querySelector('.taf-toggle-icon').textContent = isHidden ? '▼' : '▶';
+            })(this)"
+          >
+            <span>📄 TAF brut — ${icao}</span>
+            <span class="taf-toggle-icon text-gray-400">▶</span>
+          </button>
+          <div class="hidden px-5 pb-4">
+            <pre class="font-mono text-[11px] text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 whitespace-pre-wrap break-words leading-relaxed">${
+              tafData?.rawTaf
+                ? tafData.rawTaf.trim()
+                    // Met en évidence les groupes TEMPO/BECMG/PROB
+                    .replace(/(TEMPO|BECMG|PROB\d{2})/g, '\n$1')
+                    .trim()
+                : 'TAF non disponible'
+            }</pre>
           </div>
         </div>
       </div>`;

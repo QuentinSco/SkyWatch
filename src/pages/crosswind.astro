@@ -151,7 +151,7 @@ import '../styles/global.css';
 
   <script is:inline>
   // ─── CONFIG : pistes & QFU par aéroport ───────────────────────────────────
-const AIRPORT_RUNWAYS: Record<string, { iata: string; name: string; qfu: number[] }> = {
+const AIRPORT_RUNWAYS = {
   CYOW: { iata: 'YOW', name: 'Ottawa', qfu: [7, 25, 14, 32] },
   CYUL: { iata: 'YUL', name: 'Montreal', qfu: [6, 24] },
   CYVR: { iata: 'YVR', name: 'Vancouver', qfu: [8, 26, 13, 31] },

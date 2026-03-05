@@ -7,33 +7,47 @@ const kv = new Redis({
   token: import.meta.env.KV_REST_API_TOKEN,
 });
 
+/** Un leg vu du côté arrivée (indexé sur iata/icao = aéroport d'arrivée) */
 export interface AfFlightArrival {
-  flightId: string;
-  marketingCarrier: string;
-  flightNumber: string;
-  // Arrée
-  iata: string;
-  icao: string;
-  scheduledArrival: string;
+  flightId:               string;
+  marketingCarrier:       string;
+  flightNumber:           string;
+  // Arrivée
+  iata:                   string;
+  icao:                   string;
+  scheduledArrival:       string;
   estimatedTouchDownTime?: string;
-  timeToArrivalMinutes?: number;
-  // Départ
-  departureIata?: string;
-  departureIcao?: string;
-  scheduledDeparture?: string;
-  estimatedDepartureTime?: string;
+  timeToArrivalMinutes?:  number;
   // Avion
-  registration?: string;
-  aircraftType?: string;
-  haul?: string;
+  registration?:          string;
+  aircraftType?:          string;
+  haul?:                  string;
+}
+
+/** Un leg vu du côté départ (indexé sur departureIata/departureIcao) */
+export interface AfFlightDeparture {
+  flightId:                string;
+  marketingCarrier:        string;
+  flightNumber:            string;
+  // Départ
+  departureIata:           string;
+  departureIcao:           string;
+  scheduledDeparture:      string;
+  estimatedDepartureTime?: string;
+  // Arrivée (destination)
+  arrivalIata?:            string;
+  // Avion
+  registration?:           string;
+  aircraftType?:           string;
 }
 
 export interface AfFlightsCache {
-  flights: AfFlightArrival[];
-  fetchedAt: number;
+  arrivals:   AfFlightArrival[];
+  departures: AfFlightDeparture[];
+  fetchedAt:  number;
 }
 
-const KV_KEY       = 'af_flights_cache';
+const KV_KEY       = 'af_flights_cache_v2';  // nouvelle clé pour éviter conflit avec ancien format
 const KV_LOCK_KEY  = 'af_flights_lock';
 const KV_TTL_SEC   = 2 * 60 * 60;
 const KV_EMPTY_TTL = 5 * 60;
@@ -51,53 +65,34 @@ function minutesToArrival(etaIso: string | undefined): number | undefined {
   return Math.round((new Date(etaIso).getTime() - Date.now()) / 60000);
 }
 
-// Map ICAO → IATA (inverse)
-const ICAO_TO_IATA: Record<string, string> = Object.fromEntries(
-  Object.entries(AF_IATA_TO_ICAO).map(([iata, icao]) => [icao, iata])
-);
-
-function mapLegToArrival(operationalFlight: any, leg: any): AfFlightArrival | null {
+/** Construit un AfFlightArrival depuis un leg (côté arrivée) */
+function mapLegToArrival(op: any, leg: any): AfFlightArrival | null {
   try {
-    const carrier = operationalFlight.airline?.code ?? 'AF';
-    const fn      = String(operationalFlight.flightNumber ?? '').padStart(3, '0');
+    const carrier = op.airline?.code ?? 'AF';
+    const fn      = String(op.flightNumber ?? '').padStart(3, '0');
 
-    // ── Arrivée ────────────────────────────────────────────────────────────
     const arrCode = leg.arrivalInformation?.airport?.code;
     if (!arrCode) return null;
     const iata = arrCode.toUpperCase();
     const icao = AF_IATA_TO_ICAO[iata];
     if (!icao) return null;
 
-    const arrTimes    = leg.arrivalInformation?.times ?? {};
-    const scheduled   = arrTimes.scheduled ?? arrTimes.latestPublished ?? arrTimes.estimatedArrival;
-    const estimated   = arrTimes.estimatedTouchDownTime ?? arrTimes.estimated?.value ?? arrTimes.actual;
+    const times     = leg.arrivalInformation?.times ?? {};
+    const scheduled = times.scheduled ?? times.latestPublished ?? times.estimatedArrival;
+    const estimated = times.estimatedTouchDownTime ?? times.estimated?.value ?? times.actual;
     if (!scheduled) return null;
 
-    // ── Départ ────────────────────────────────────────────────────────────
-    const depCode  = leg.departureInformation?.airport?.code;
-    const depIata  = depCode ? depCode.toUpperCase() : undefined;
-    const depIcao  = depIata ? AF_IATA_TO_ICAO[depIata] : undefined;
-
-    const depTimes            = leg.departureInformation?.times ?? {};
-    const scheduledDeparture  = depTimes.scheduled ?? depTimes.latestPublished ?? depTimes.estimatedDeparture;
-    const estimatedDeparture  = depTimes.estimatedOffBlockTime ?? depTimes.estimated?.value ?? depTimes.actual;
-
     return {
-      flightId:               `${carrier}${fn}-${operationalFlight.flightScheduleDate ?? ''}`,
+      flightId:               `${carrier}${fn}-${op.flightScheduleDate ?? ''}`,
       marketingCarrier:       carrier,
       flightNumber:           fn,
-      iata,
-      icao,
+      iata, icao,
       scheduledArrival:       scheduled,
       estimatedTouchDownTime: estimated,
       timeToArrivalMinutes:   minutesToArrival(estimated ?? scheduled),
-      departureIata:          depIata,
-      departureIcao:          depIcao,
-      scheduledDeparture:     scheduledDeparture,
-      estimatedDepartureTime: estimatedDeparture,
       registration:           leg.aircraft?.registration ?? undefined,
       aircraftType:           leg.aircraft?.typeCode ?? undefined,
-      haul:                   operationalFlight.haul ?? undefined,
+      haul:                   op.haul ?? undefined,
     };
   } catch (e) {
     console.error('[AF mapLegToArrival]', e);
@@ -105,9 +100,46 @@ function mapLegToArrival(operationalFlight: any, leg: any): AfFlightArrival | nu
   }
 }
 
-async function callAfApi(): Promise<AfFlightArrival[]> {
+/** Construit un AfFlightDeparture depuis un leg (côté départ) */
+function mapLegToDeparture(op: any, leg: any): AfFlightDeparture | null {
+  try {
+    const carrier = op.airline?.code ?? 'AF';
+    const fn      = String(op.flightNumber ?? '').padStart(3, '0');
+
+    const depCode = leg.departureInformation?.airport?.code;
+    if (!depCode) return null;
+    const departureIata = depCode.toUpperCase();
+    const departureIcao = AF_IATA_TO_ICAO[departureIata];
+    if (!departureIcao) return null;
+
+    const times              = leg.departureInformation?.times ?? {};
+    const scheduledDeparture = times.scheduled ?? times.latestPublished ?? times.estimatedDeparture;
+    const estimatedDeparture = times.estimatedOffBlockTime ?? times.estimated?.value ?? times.actual;
+    if (!scheduledDeparture) return null;
+
+    const arrCode    = leg.arrivalInformation?.airport?.code;
+    const arrivalIata = arrCode ? arrCode.toUpperCase() : undefined;
+
+    return {
+      flightId:               `${carrier}${fn}-${op.flightScheduleDate ?? ''}`,
+      marketingCarrier:       carrier,
+      flightNumber:           fn,
+      departureIata, departureIcao,
+      scheduledDeparture,
+      estimatedDepartureTime: estimatedDeparture,
+      arrivalIata,
+      registration:           leg.aircraft?.registration ?? undefined,
+      aircraftType:           leg.aircraft?.typeCode ?? undefined,
+    };
+  } catch (e) {
+    console.error('[AF mapLegToDeparture]', e);
+    return null;
+  }
+}
+
+async function callAfApi(): Promise<{ arrivals: AfFlightArrival[]; departures: AfFlightDeparture[] }> {
   const API_KEY = import.meta.env.AF_API_KEY;
-  if (!API_KEY) { console.warn('[AF Flights] AF_API_KEY manquante'); return []; }
+  if (!API_KEY) { console.warn('[AF Flights] AF_API_KEY manquante'); return { arrivals: [], departures: [] }; }
 
   const now   = new Date();
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
@@ -131,18 +163,17 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
   console.log('[AF Flights] → requête API AF', start.toISOString(), '→', end.toISOString());
 
   const res = await fetch(url.toString(), { method: 'GET', headers, signal: AbortSignal.timeout(15000) });
-
   if (!res.ok) {
     const body = await res.text();
     console.error('[AF Flights] HTTP', res.status, body);
     if (res.status === 429) throw new Error(`Quota API Air France dépassé (429)`);
-    return [];
+    return { arrivals: [], departures: [] };
   }
 
   const json       = await res.json();
   const ops: any[] = Array.isArray(json.operationalFlights) ? json.operationalFlights : [];
   const totalPages = json.page?.totalPages ?? 1;
-  console.log(`[AF Flights] page 0/${totalPages} — ${ops.length} vols (avant filtre LC)`);
+  console.log(`[AF Flights] page 0/${totalPages} — ${ops.length} vols bruts`);
 
   for (let p = 1; p < totalPages; p++) {
     await new Promise(r => setTimeout(r, 1100));
@@ -152,99 +183,89 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
     if (r.ok) {
       const j = await r.json();
       ops.push(...(j.operationalFlights ?? []));
-      console.log(`[AF Flights] page ${p}/${totalPages} — +${j.operationalFlights?.length ?? 0} vols`);
     } else {
       console.warn(`[AF Flights] page ${p} HTTP`, r.status);
-      if (r.status === 429) throw new Error(`Quota API AF dépassé (429) à la page ${p}`);
+      if (r.status === 429) throw new Error(`Quota AF dépassé (429) page ${p}`);
     }
   }
 
-  const arrivals: AfFlightArrival[] = [];
-  let skippedAirline = 0, skippedAircraft = 0;
+  const arrivals:   AfFlightArrival[]   = [];
+  const departures: AfFlightDeparture[] = [];
+  const dedupArr = new Map<string, AfFlightArrival>();
+  const dedupDep = new Map<string, AfFlightDeparture>();
 
   for (const op of ops) {
-    if ((op.airline?.code ?? '') !== 'AF') { skippedAirline++; continue; }
+    if ((op.airline?.code ?? '') !== 'AF') continue;
     for (const leg of (op.flightLegs ?? [])) {
-      if (!isLongHaulAircraft(leg.aircraft?.typeCode)) { skippedAircraft++; continue; }
-      const mapped = mapLegToArrival(op, leg);
-      if (mapped) arrivals.push(mapped);
+      if (!isLongHaulAircraft(leg.aircraft?.typeCode)) continue;
+
+      const arr = mapLegToArrival(op, leg);
+      if (arr) dedupArr.set(`${arr.flightId}-${arr.icao}`, arr);
+
+      const dep = mapLegToDeparture(op, leg);
+      if (dep) dedupDep.set(`${dep.flightId}-${dep.departureIcao}`, dep);
     }
   }
 
-  console.log(`[AF Flights] ${arrivals.length} legs LC retenus — ${skippedAirline} partenaires filtrés — ${skippedAircraft} non-LC filtrés`);
-
-  const dedup = new Map<string, AfFlightArrival>();
-  for (const f of arrivals) dedup.set(`${f.flightId}-${f.icao}`, f);
-  return Array.from(dedup.values());
+  console.log(`[AF Flights] ${dedupArr.size} arrivées LC + ${dedupDep.size} départs LC`);
+  return { arrivals: Array.from(dedupArr.values()), departures: Array.from(dedupDep.values()) };
 }
 
-export async function getCachedAfArrivals(force = false): Promise<AfFlightArrival[]> {
+export async function getCachedAfFlights(force = false): Promise<AfFlightsCache> {
   const now = Date.now();
 
   if (!force) {
     try {
       const cached = await kv.get<AfFlightsCache>(KV_KEY);
-      if (cached && Array.isArray(cached.flights)) {
-        const futureFlights = cached.flights.filter(f => {
-          const eta = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
-          return eta >= now;
-        });
+      if (cached && Array.isArray(cached.arrivals)) {
         const age = Math.round((now - cached.fetchedAt) / 60000);
-        console.log(`[AF Flights] Cache KV HIT — ${futureFlights.length}/${cached.flights.length} vols futurs (age: ${age}min)`);
-        return futureFlights;
+        console.log(`[AF Flights] Cache KV HIT — ${cached.arrivals.length} ARR / ${cached.departures.length} DEP (age: ${age}min)`);
+        return cached;
       }
     } catch (e) { console.warn('[AF Flights] KV read error:', e); }
-  } else {
-    console.log('[AF Flights] Force refresh — bypass cache');
   }
 
   const lockAcquired = await kv.set(KV_LOCK_KEY, '1', { nx: true, ex: LOCK_TTL });
-
   if (!lockAcquired) {
-    console.log('[AF Flights] Lock non acquis — attente cache...');
     for (let i = 0; i < 20; i++) {
       await new Promise(r => setTimeout(r, 2000));
       try {
         const cached = await kv.get<AfFlightsCache>(KV_KEY);
-        if (cached && Array.isArray(cached.flights)) {
-          return cached.flights.filter(f =>
-            new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime() >= now
-          );
-        }
+        if (cached && Array.isArray(cached.arrivals)) return cached;
       } catch { /* continue */ }
     }
-    console.warn('[AF Flights] Timeout attente cache');
-    return [];
+    return { arrivals: [], departures: [], fetchedAt: now };
   }
 
   try {
-    const result = await callAfApi();
+    const { arrivals, departures } = await callAfApi();
     const fetchedAt = Date.now();
-    const futureFlights = result.filter(f =>
-      new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime() >= now
-    );
-    const ttl = futureFlights.length > 0 ? KV_TTL_SEC : KV_EMPTY_TTL;
-    await kv.set(KV_KEY, { flights: futureFlights, fetchedAt }, { ex: ttl });
-    console.log(`[AF Flights] ${futureFlights.length}/${result.length} vols futurs stockés en KV (TTL ${ttl}s)`);
-    return futureFlights;
+    const cache: AfFlightsCache = { arrivals, departures, fetchedAt };
+    const ttl = arrivals.length > 0 ? KV_TTL_SEC : KV_EMPTY_TTL;
+    await kv.set(KV_KEY, cache, { ex: ttl });
+    console.log(`[AF Flights] Cache KV écrit (TTL ${ttl}s)`);
+    return cache;
   } finally {
     await kv.del(KV_LOCK_KEY);
   }
+}
+
+// Compatibilité ascendante pour les autres pages qui appellent getCachedAfArrivals
+export async function getCachedAfArrivals(force = false): Promise<AfFlightArrival[]> {
+  const cache = await getCachedAfFlights(force);
+  return cache.arrivals;
 }
 
 export async function getCacheFetchedAt(): Promise<number | null> {
   try {
     const cached = await kv.get<AfFlightsCache>(KV_KEY);
     return cached?.fetchedAt ?? null;
-  } catch (e) {
-    console.warn('[AF Flights] Error reading cache timestamp:', e);
-    return null;
-  }
+  } catch { return null; }
 }
 
 export async function getArrivalsForAirport(icao: string, force = false): Promise<AfFlightArrival[]> {
-  const all = await getCachedAfArrivals(force);
-  return all
+  const { arrivals } = await getCachedAfFlights(force);
+  return arrivals
     .filter(f => f.icao === icao)
     .sort((a, b) =>
       new Date(a.estimatedTouchDownTime ?? a.scheduledArrival).getTime() -

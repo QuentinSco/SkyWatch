@@ -1,8 +1,7 @@
 // src/pages/api/chainages.ts
-// ─── API Chaînages — vue escale par aéroport ─────────────────────────────────
 import type { APIRoute } from 'astro';
-import { getCachedAfArrivals } from '../../lib/afFlights';
-import { AF_IATA_TO_ICAO }    from '../../lib/tafParser';
+import { getCachedAfFlights } from '../../lib/afFlights';
+import { AF_IATA_TO_ICAO }   from '../../lib/tafParser';
 
 export const prerender = false;
 
@@ -19,7 +18,7 @@ export interface ChainageStop {
   arrFlight:    string;
   depFlight:    string | null;
   arrMs:        number;
-  depMs:        number | null;   // maintenant rempli si disponible dans l'API
+  depMs:        number | null;
 }
 
 export const GET: APIRoute = async ({ url }) => {
@@ -32,13 +31,18 @@ export const GET: APIRoute = async ({ url }) => {
     });
   }
 
+  // Normalise en ICAO
   const targetIcaos = new Set<string>();
+  const icaoToIata  = new Map<string, string>();
   for (const code of inputCodes) {
     if (code.length === 4) {
       targetIcaos.add(code);
+      for (const [iata, icao] of Object.entries(AF_IATA_TO_ICAO)) {
+        if (icao === code) { icaoToIata.set(code, iata); break; }
+      }
     } else {
       const icao = AF_IATA_TO_ICAO[code];
-      if (icao) targetIcaos.add(icao);
+      if (icao) { targetIcaos.add(icao); icaoToIata.set(icao, code); }
     }
   }
 
@@ -46,71 +50,44 @@ export const GET: APIRoute = async ({ url }) => {
   const end = now + 24 * 60 * 60 * 1000;
 
   try {
-    const allFlights = await getCachedAfArrivals(false);
+    const { arrivals, departures } = await getCachedAfFlights(false);
 
-    // Fenêtre : 2h passées → +24h
-    const windowFlights = allFlights.filter(f => {
-      const t = ms(f.estimatedTouchDownTime ?? f.scheduledArrival);
-      return t !== null && t >= now - 2 * 60 * 60 * 1000 && t <= end;
-    });
-
-    // Groupe par immatriculation, tri chronologique
-    const byReg = new Map<string, typeof windowFlights[number][]>();
-    for (const f of windowFlights) {
-      const reg = (f.registration ?? 'UNKNOWN').toUpperCase();
-      if (!byReg.has(reg)) byReg.set(reg, []);
-      byReg.get(reg)!.push(f);
+    // ── Index des départs par immatriculation + aéroport de départ ───────────────
+    // clé : `REG-ICAO`  ex: "FGSQA-KJFK"
+    const depIndex = new Map<string, typeof departures[number]>();
+    for (const dep of departures) {
+      const reg = (dep.registration ?? '').toUpperCase();
+      if (!reg || !dep.departureIcao) continue;
+      depIndex.set(`${reg}-${dep.departureIcao}`, dep);
     }
+
+    // ── Filtrer les arrivées sur fenêtre et aéroports demandés ──────────────
+    const windowArrivals = arrivals.filter(f => {
+      const t = ms(f.estimatedTouchDownTime ?? f.scheduledArrival);
+      return t !== null
+        && t >= now - 2 * 60 * 60 * 1000
+        && t <= end
+        && targetIcaos.has(f.icao);
+    });
 
     const stops: ChainageStop[] = [];
 
-    for (const [reg, legs] of byReg) {
-      if (!legs.some(f => targetIcaos.has(f.icao))) continue;
+    for (const arr of windowArrivals) {
+      const reg  = (arr.registration ?? 'UNKNOWN').toUpperCase();
+      const arrMs = ms(arr.estimatedTouchDownTime ?? arr.scheduledArrival)!;
 
-      legs.sort((a, b) => {
-        const ta = ms(a.estimatedTouchDownTime ?? a.scheduledArrival) ?? 0;
-        const tb = ms(b.estimatedTouchDownTime ?? b.scheduledArrival) ?? 0;
-        return ta - tb;
+      // Chercher le départ direct : même immatriculation, même aéroport
+      const dep = depIndex.get(`${reg}-${arr.icao}`);
+
+      stops.push({
+        registration: reg,
+        aircraftType: arr.aircraftType ?? '',
+        iata:         arr.iata,
+        arrFlight:    `AF${arr.flightNumber}`,
+        depFlight:    dep ? `AF${dep.flightNumber}` : null,
+        arrMs,
+        depMs:        dep ? (ms(dep.estimatedDepartureTime ?? dep.scheduledDeparture)) : null,
       });
-
-      for (let i = 0; i < legs.length; i++) {
-        const leg = legs[i];
-        if (!targetIcaos.has(leg.icao)) continue;
-
-        const arrMs = ms(leg.estimatedTouchDownTime ?? leg.scheduledArrival);
-        if (arrMs === null) continue;
-
-        // Vol sortant : chercher dans la liste le prochain leg dont
-        // departureIata correspond à l'aéroport d'arrivée de ce leg
-        let depFlight: string | null = null;
-        let depMs: number | null     = null;
-
-        for (let j = i + 1; j < legs.length; j++) {
-          const next = legs[j];
-          // Vérifier que l'avion part bien de cet aéroport
-          if (next.departureIata === leg.iata || next.departureIcao === leg.icao) {
-            depFlight = `AF${next.flightNumber}`;
-            // Heure de départ du leg suivant = scheduledDeparture ou estimatedDepartureTime
-            depMs = ms(next.estimatedDepartureTime ?? next.scheduledDeparture);
-            break;
-          }
-          // Fallback : si pas de match exact, prendre le premier leg suivant
-          if (j === i + 1) {
-            depFlight = `AF${next.flightNumber}`;
-            depMs = ms(next.estimatedDepartureTime ?? next.scheduledDeparture);
-          }
-        }
-
-        stops.push({
-          registration: reg,
-          aircraftType: leg.aircraftType ?? '',
-          iata:         leg.iata,
-          arrFlight:    `AF${leg.flightNumber}`,
-          depFlight,
-          arrMs,
-          depMs,
-        });
-      }
     }
 
     stops.sort((a, b) => a.arrMs - b.arrMs);

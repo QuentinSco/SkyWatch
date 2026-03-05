@@ -7,7 +7,6 @@ import '../styles/global.css';
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SkyWatch – Composante Vent de Travers</title>
-  <!-- Dark Mode Script - Load early to prevent flash -->
   <script is:inline src="/lib/dark-mode.js"></script>
 </head>
 <body class="bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 min-h-screen">
@@ -25,9 +24,7 @@ import '../styles/global.css';
         id="btn-refresh"
         class="flex items-center gap-1.5 text-xs bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 px-3 py-1.5 rounded-lg font-semibold transition"
         onclick="loadCrosswind(true)"
-      >
-        ↻ Actualiser
-      </button>
+      >↻ Actualiser</button>
     </div>
   </header>
 
@@ -37,16 +34,10 @@ import '../styles/global.css';
     <!-- Config panel -->
     <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5 mb-6">
       <div class="flex flex-wrap items-end gap-4">
-
-        <!-- Escale selector -->
         <div class="flex-1 min-w-[200px]">
           <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">Escales à analyser</label>
-          <div id="airport-selector" class="flex flex-wrap gap-2">
-            <!-- Populated by JS -->
-          </div>
+          <div id="airport-selector" class="flex flex-wrap gap-2"></div>
         </div>
-
-        <!-- Légende codes couleurs -->
         <div class="flex flex-wrap gap-3 items-center text-xs font-semibold">
           <span class="text-gray-400 uppercase tracking-wide mr-1">Seuils :</span>
           <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-green-400"></span> OK</span>
@@ -54,384 +45,315 @@ import '../styles/global.css';
           <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-orange-400"></span> Limite</span>
           <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-red-500"></span> Dépassé</span>
         </div>
-
       </div>
     </div>
 
     <!-- Results -->
     <div id="crosswind-container">
       <div class="flex items-center justify-center py-20 text-gray-400">
-        <div class="text-center">
-          <div class="text-4xl mb-3">💨</div>
-          <p class="text-sm">Chargement des données TAF…</p>
-        </div>
+        <div class="text-center"><div class="text-4xl mb-3">💨</div><p class="text-sm">Chargement…</p></div>
       </div>
     </div>
 
   </main>
 
   <script is:inline>
-  // ─────────────────────────────────────────────────────────────────────────────
-  // CONFIGURATION : pistes & QFU par aéroport AF
-  // Les QFU représentent toutes les orientations possibles d'une piste donnée.
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ─── CONFIG : pistes & QFU par aéroport ───────────────────────────────────
   const AIRPORT_RUNWAYS = {
-    // CDG : pistes 08L/26R, 09R/27L, 08R/26L, 09L/27R
-    LFPG: { iata: 'CDG', name: 'Paris CDG',      qfu: [80, 260, 90, 270, 82, 262, 92, 272] },
-    LFPO: { iata: 'ORY', name: 'Paris ORY',       qfu: [80, 260, 60, 240] },
-    EGLL: { iata: 'LHR', name: 'Londres LHR',     qfu: [90, 270] },
-    EHAM: { iata: 'AMS', name: 'Amsterdam AMS',   qfu: [180, 360, 60, 240, 40, 220, 90, 270, 120, 300] },
-    EDDF: { iata: 'FRA', name: 'Francfort FRA',   qfu: [70, 250, 80, 260] },
-    LEMD: { iata: 'MAD', name: 'Madrid MAD',       qfu: [180, 360, 140, 320] },
-    LIRF: { iata: 'FCO', name: 'Rome FCO',         qfu: [70, 250, 160, 340] },
-    LFMN: { iata: 'NCE', name: 'Nice NCE',         qfu: [40, 220] },
-    KJFK: { iata: 'JFK', name: 'New York JFK',     qfu: [40, 220, 130, 310] },
-    KLAX: { iata: 'LAX', name: 'Los Angeles LAX',  qfu: [60, 240, 70, 250] },
-    KORD: { iata: 'ORD', name: 'Chicago ORD',      qfu: [100, 280, 90, 270, 140, 320] },
-    OMDB: { iata: 'DXB', name: 'Dubaï DXB',        qfu: [120, 300] },
-    VHHH: { iata: 'HKG', name: 'Hong Kong HKG',    qfu: [70, 250] },
-    RJTT: { iata: 'HND', name: 'Tokyo HND',         qfu: [160, 340, 40, 220] },
-    WSSS: { iata: 'SIN', name: 'Singapour SIN',    qfu: [20, 200] },
-    YSSY: { iata: 'SYD', name: 'Sydney SYD',        qfu: [70, 250, 160, 340] },
-    FACT: { iata: 'CPT', name: 'Le Cap CPT',        qfu: [10, 190, 70, 250] },
-    FAOR: { iata: 'JNB', name: 'Johannesburg JNB', qfu: [30, 210] },
-    HECA: { iata: 'CAI', name: 'Le Caire CAI',      qfu: [50, 230] },
-    CYYZ: { iata: 'YYZ', name: 'Toronto YYZ',       qfu: [60, 240, 150, 330] },
-    SBGR: { iata: 'GRU', name: 'São Paulo GRU',     qfu: [100, 280, 90, 270] },
-    SCEL: { iata: 'SCL', name: 'Santiago SCL',      qfu: [170, 350] },
+    LFPG: { iata: 'CDG', name: 'Paris CDG',          qfu: [80, 260, 90, 270, 82, 262, 92, 272] },
+    LFPO: { iata: 'ORY', name: 'Paris ORY',           qfu: [80, 260, 60, 240] },
+    EGLL: { iata: 'LHR', name: 'Londres LHR',         qfu: [90, 270] },
+    EHAM: { iata: 'AMS', name: 'Amsterdam AMS',       qfu: [180, 360, 60, 240, 40, 220, 90, 270, 120, 300] },
+    EDDF: { iata: 'FRA', name: 'Francfort FRA',       qfu: [70, 250, 80, 260] },
+    LEMD: { iata: 'MAD', name: 'Madrid MAD',           qfu: [180, 360, 140, 320] },
+    LIRF: { iata: 'FCO', name: 'Rome FCO',             qfu: [70, 250, 160, 340] },
+    LFMN: { iata: 'NCE', name: 'Nice NCE',             qfu: [40, 220] },
+    KJFK: { iata: 'JFK', name: 'New York JFK',         qfu: [40, 220, 130, 310] },
+    KLAX: { iata: 'LAX', name: 'Los Angeles LAX',      qfu: [60, 240, 70, 250] },
+    KORD: { iata: 'ORD', name: 'Chicago ORD',          qfu: [100, 280, 90, 270, 140, 320] },
+    KMIA: { iata: 'MIA', name: 'Miami MIA',             qfu: [90, 270, 120, 300] },
+    KBOS: { iata: 'BOS', name: 'Boston BOS',           qfu: [40, 220, 150, 330] },
+    OMDB: { iata: 'DXB', name: 'Dubaï DXB',            qfu: [120, 300] },
+    VHHH: { iata: 'HKG', name: 'Hong Kong HKG',        qfu: [70, 250] },
+    RJTT: { iata: 'HND', name: 'Tokyo HND',             qfu: [160, 340, 40, 220] },
+    RJAA: { iata: 'NRT', name: 'Tokyo NRT',             qfu: [160, 340] },
+    WSSS: { iata: 'SIN', name: 'Singapour SIN',        qfu: [20, 200] },
+    YSSY: { iata: 'SYD', name: 'Sydney SYD',            qfu: [70, 250, 160, 340] },
+    FAOR: { iata: 'JNB', name: 'Johannesburg JNB',     qfu: [30, 210] },
+    FACT: { iata: 'CPT', name: 'Le Cap CPT',            qfu: [10, 190, 70, 250] },
+    HECA: { iata: 'CAI', name: 'Le Caire CAI',          qfu: [50, 230] },
+    CYYZ: { iata: 'YYZ', name: 'Toronto YYZ',           qfu: [60, 240, 150, 330] },
+    CYUL: { iata: 'YUL', name: 'Montréal YUL',          qfu: [60, 240, 100, 280] },
+    SBGR: { iata: 'GRU', name: 'São Paulo GRU',         qfu: [100, 280, 90, 270] },
+    SCEL: { iata: 'SCL', name: 'Santiago SCL',          qfu: [170, 350] },
+    VIDP: { iata: 'DEL', name: 'Delhi DEL',             qfu: [110, 290, 270, 90] },
+    ZBAA: { iata: 'PEK', name: 'Pékin PEK',             qfu: [180, 360, 10, 190] },
+    ZSPD: { iata: 'PVG', name: 'Shanghai PVG',          qfu: [170, 350] },
   };
 
-  // Seuils crosswind en kt par type d'avion (composante de travers max certifiée)
+  // Seuils crosswind certifiés par type d'avion (kt)
   const AIRCRAFT_LIMITS = {
     '77W': { label: '777-300ER', limit: 38 },
+    '772': { label: '777-200ER', limit: 38 },
     '789': { label: '787-9',     limit: 38 },
     '332': { label: 'A330-200',  limit: 38 },
+    '333': { label: 'A330-300',  limit: 38 },
     '359': { label: 'A350-900',  limit: 38 },
     'E90': { label: 'E190',      limit: 25 },
     '223': { label: 'A220-300',  limit: 25 },
+    '220': { label: 'A220',      limit: 25 },
     '320': { label: 'A320',      limit: 29 },
     '321': { label: 'A321',      limit: 29 },
-    'default': { label: 'Inconnu', limit: 25 },
+    '319': { label: 'A319',      limit: 29 },
   };
+  const DEFAULT_LIMIT = { label: 'Inconnu', limit: 25 };
+  const CONSERVATIVE_LIMIT = 25; // seuil planning pour le tableau TAF (E190 = le plus restrictif)
 
-  // Code couleur selon % du seuil max
-  function getCrosswindColor(crosswindKt, limitKt) {
-    const ratio = crosswindKt / limitKt;
-    if (ratio < 0.6)  return { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-400', label: 'OK' };
-    if (ratio < 0.8)  return { bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-700 dark:text-yellow-400', label: 'Attention' };
-    if (ratio < 1.0)  return { bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-700 dark:text-orange-400', label: 'Limite' };
-    return { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-700 dark:text-red-400', label: '⚠ Dépassé' };
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // CALCUL CROSSWIND
-  // windDir : direction d'où vient le vent (°vrais)
-  // windSpd : vitesse (kt)
-  // qfuList : liste de tous les QFU possibles pour l'aéroport
-  // Retourne la composante de travers minimale (scénario le moins pénalisant)
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ─── CALCUL CROSSWIND ─────────────────────────────────────────────────────
   function computeCrosswind(windDir, windSpd, qfuList) {
-    if (!windSpd || windSpd === 0) return { crosswind: 0, bestQfu: null, headwind: windSpd || 0 };
-    let minCrosswind = Infinity;
-    let bestQfu = null;
-    let bestHeadwind = 0;
-
+    if (!windSpd || windSpd === 0 || windDir == null) {
+      return { crosswind: 0, bestQfu: qfuList[0] ?? null, headwind: 0 };
+    }
+    let minCrosswind = Infinity, bestQfu = null, bestHeadwind = 0;
     for (const qfu of qfuList) {
-      const angle = Math.abs(windDir - qfu);
-      const normalizedAngle = Math.min(angle, 360 - angle); // 0..180
-      const crosswind = Math.abs(windSpd * Math.sin((normalizedAngle * Math.PI) / 180));
-      if (crosswind < minCrosswind) {
-        minCrosswind = crosswind;
+      const diff = Math.abs(windDir - qfu);
+      const angle = Math.min(diff, 360 - diff);
+      const cw = Math.abs(windSpd * Math.sin((angle * Math.PI) / 180));
+      if (cw < minCrosswind) {
+        minCrosswind = cw;
         bestQfu = qfu;
-        bestHeadwind = windSpd * Math.cos((normalizedAngle * Math.PI) / 180);
+        bestHeadwind = windSpd * Math.cos((angle * Math.PI) / 180);
       }
     }
-    return {
-      crosswind: Math.round(minCrosswind),
-      bestQfu,
-      headwind: Math.round(bestHeadwind),
-    };
+    return { crosswind: Math.round(minCrosswind), bestQfu, headwind: Math.round(bestHeadwind) };
   }
 
-  // Récupère le vent prévu au moment de l'arrivée depuis les fcsts TAF
-  function getWindAtTime(fcsts, targetEpoch) {
-    if (!fcsts || fcsts.length === 0) return null;
-    // Cherche la période qui couvre l'heure d'arrivée
-    for (const f of fcsts) {
-      const from = f.timeFrom;
-      const to   = f.timeTo;
-      if (from && to && targetEpoch >= from && targetEpoch < to) {
-        // Préfère TEMPO/BECMG si leur vent est plus défavorable
-        // Pour l'instant : prend le groupe "base" (FM/BECMG principal)
-        if (f.wdir != null && f.wspd != null) {
-          return { wdir: f.wdir, wspd: f.wspd, wgst: f.wgst ?? null, ci: f.changeIndicator ?? null };
-        }
-      }
-    }
-    // Fallback : premier groupe avec vent disponible
-    for (const f of fcsts) {
-      if (f.wdir != null && f.wspd != null) {
-        return { wdir: f.wdir, wspd: f.wspd, wgst: f.wgst ?? null, ci: f.changeIndicator ?? null };
-      }
-    }
-    return null;
+  // Trouve les groupes TAF actifs à un instant donné (epoch seconds)
+  function getWindAtTime(fcsts, targetEpochSec) {
+    if (!fcsts || fcsts.length === 0) return { base: null, tempos: [] };
+    const baseGroups = fcsts.filter(f => {
+      const ci = f.changeIndicator ?? '';
+      return !ci.includes('TEMPO') && !ci.includes('PROB')
+          && f.timeFrom != null && f.timeTo != null
+          && targetEpochSec >= f.timeFrom && targetEpochSec < f.timeTo
+          && f.wdir != null && f.wspd != null;
+    });
+    const base = baseGroups.length ? baseGroups.reduce((a,b) => a.timeFrom > b.timeFrom ? a : b) : null;
+    const tempos = fcsts.filter(f => {
+      const ci = f.changeIndicator ?? '';
+      return (ci.includes('TEMPO') || ci.includes('PROB'))
+          && f.timeFrom != null && f.timeTo != null
+          && targetEpochSec >= f.timeFrom && targetEpochSec < f.timeTo
+          && f.wdir != null && f.wspd != null;
+    });
+    return { base, tempos };
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // ÉTAT UI
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ─── COULEURS ─────────────────────────────────────────────────────────────
+  function getCrosswindColor(cw, limit) {
+    const r = cw / limit;
+    if (r < 0.6) return { bg: 'bg-green-100 dark:bg-green-900/30',   text: 'text-green-700 dark:text-green-400',   label: 'OK' };
+    if (r < 0.8) return { bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-700 dark:text-yellow-400', label: 'Attention' };
+    if (r < 1.0) return { bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-700 dark:text-orange-400', label: 'Limite' };
+    return         { bg: 'bg-red-100 dark:bg-red-900/30',    text: 'text-red-700 dark:text-red-400',    label: '⚠ Dépassé' };
+  }
+
+  // ─── ÉTAT & SÉLECTEUR ─────────────────────────────────────────────────────
   const ALL_ICAOS = Object.keys(AIRPORT_RUNWAYS);
-  // Par défaut : sélection des escales les plus fréquentes
-  let selectedIcaos = new Set(['LFPG', 'EGLL', 'KJFK', 'KLAX', 'OMDB', 'WSSS']);
+  let selectedIcaos = new Set(['LFPG', 'LFPO', 'EGLL', 'KJFK', 'KLAX', 'OMDB']);
 
   function renderAirportSelector() {
-    const container = document.getElementById('airport-selector');
-    container.innerHTML = ALL_ICAOS.map(icao => {
+    document.getElementById('airport-selector').innerHTML = ALL_ICAOS.map(icao => {
       const ap = AIRPORT_RUNWAYS[icao];
-      const isSelected = selectedIcaos.has(icao);
-      return `<button
-        data-icao="${icao}"
-        onclick="toggleAirport('${icao}')"
-        class="airport-btn px-2.5 py-1 rounded-lg text-xs font-bold border transition ${
-          isSelected
+      const sel = selectedIcaos.has(icao);
+      return `<button data-icao="${icao}" onclick="toggleAirport('${icao}')"
+        class="px-2.5 py-1 rounded-lg text-xs font-bold border transition ${
+          sel
             ? 'bg-blue-600 text-white border-blue-600'
             : 'bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-blue-400'
-        }"
-      >${ap.iata}</button>`;
+        }">${ap.iata}</button>`;
     }).join('');
   }
 
   function toggleAirport(icao) {
-    if (selectedIcaos.has(icao)) {
-      if (selectedIcaos.size > 1) selectedIcaos.delete(icao);
-    } else {
-      selectedIcaos.add(icao);
-    }
+    if (selectedIcaos.has(icao)) { if (selectedIcaos.size > 1) selectedIcaos.delete(icao); }
+    else selectedIcaos.add(icao);
     renderAirportSelector();
     loadCrosswind(false);
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // CHARGEMENT & RENDU
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ─── CHARGEMENT ───────────────────────────────────────────────────────────
   async function loadCrosswind(force = false) {
     const container = document.getElementById('crosswind-container');
     container.innerHTML = `
       <div class="flex items-center justify-center py-20 text-gray-400">
-        <div class="text-center">
-          <div class="text-3xl mb-3 animate-spin">↻</div>
-          <p class="text-sm">Récupération TAF + vols…</p>
-        </div>
+        <div class="text-center"><div class="text-2xl mb-3 animate-spin">↻</div><p class="text-sm">Récupération TAF + vols…</p></div>
       </div>`;
 
+    const qs = `icaos=${[...selectedIcaos].join(',')}${force ? '&force=1' : ''}`;
+
     try {
-      // On récupère TAF + vols en parallèle
-      const [tafRes, flightsRes] = await Promise.all([
-        fetch(`/api/tafs${force ? '?force=1' : ''}`).then(r => r.ok ? r.json() : Promise.reject('tafs ' + r.status)),
-        fetch(`/api/taf-vol-risks${force ? '?force=1' : ''}`).then(r => r.ok ? r.json() : Promise.reject('taf-vol-risks ' + r.status)),
-      ]);
-
-      renderResults(tafRes, flightsRes);
-
-      const updated = document.getElementById('crosswind-updated');
-      if (updated) updated.textContent = 'Mis à jour ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) + 'z';
-
+      const res = await fetch(`/api/crosswind.json?${qs}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status} — /api/crosswind.json`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      renderResults(data.tafs ?? {}, data.flights ?? []);
+      const el = document.getElementById('crosswind-updated');
+      if (el) el.textContent = 'Mis à jour ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + 'z';
     } catch (err) {
       container.innerHTML = `
-        <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-xl p-5 text-red-700 dark:text-red-400 text-sm">
-          ⚠️ Erreur lors du chargement : ${err}
+        <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-5 text-red-700 dark:text-red-400 text-sm">
+          ⚠️ Erreur lors du chargement : ${err.message ?? err}
         </div>`;
     }
   }
 
-  // Regroupe les vols par escale
-  function groupFlightsByAirport(flightsData) {
-    const byIcao = {};
-    const hits = [...(flightsData.hits || []), ...(flightsData.baseHits || [])];
-    for (const h of hits) {
-      const icao = h.flight?.icao;
-      if (!icao) continue;
-      if (!byIcao[icao]) byIcao[icao] = [];
-      byIcao[icao].push(h);
+  // ─── RENDU ────────────────────────────────────────────────────────────────
+  function renderResults(tafByIcao, flights) {
+    const flightsByIcao = {};
+    for (const f of flights) {
+      if (!flightsByIcao[f.icao]) flightsByIcao[f.icao] = [];
+      flightsByIcao[f.icao].push(f);
     }
-    return byIcao;
+    const html = [...selectedIcaos]
+      .map(icao => renderAirportBlock(icao, tafByIcao[icao] ?? null, flightsByIcao[icao] ?? []))
+      .join('');
+    document.getElementById('crosswind-container').innerHTML =
+      html || '<p class="text-gray-400 text-sm text-center py-10">Aucune donnée disponible.</p>';
   }
 
-  function renderResults(tafData, flightsData) {
-    const container = document.getElementById('crosswind-container');
-
-    // TAFs disponibles indexés par ICAO
-    const tafByIcao = {};
-    for (const t of (tafData.risks || [])) {
-      tafByIcao[t.icao] = t;
-    }
-    for (const t of (tafData.baseTafs || [])) {
-      tafByIcao[t.icao] = t;
-    }
-
-    // Vols regroupés par ICAO
-    const flightsByIcao = groupFlightsByAirport(flightsData);
-
-    const icaos = [...selectedIcaos];
-    if (icaos.length === 0) {
-      container.innerHTML = `<p class="text-gray-400 text-center py-10 text-sm">Sélectionnez au moins une escale.</p>`;
-      return;
-    }
-
-    let html = '';
-    for (const icao of icaos) {
-      html += renderAirportSection(icao, tafByIcao[icao] ?? null, flightsByIcao[icao] ?? []);
-    }
-    container.innerHTML = html || '<p class="text-gray-400 text-sm text-center py-10">Aucune donnée disponible.</p>';
-  }
-
-  function renderAirportSection(icao, taf, flights) {
+  function renderAirportBlock(icao, tafData, flights) {
     const ap = AIRPORT_RUNWAYS[icao];
-    const iata = ap?.iata ?? icao;
+    if (!ap) return '';
+    const fcsts = tafData?.fcsts ?? [];
+    const periodsWithWind = fcsts.filter(f => f.wdir != null && f.wspd != null);
 
-    // -- Synthèse TAF vent par période -----------------------------------------------
-    let tafPeriodRows = '';
-    const fcsts = taf?.fcsts ?? [];
-    const allPeriods = fcsts.filter(f => f.wdir != null && f.wspd != null);
-
-    if (allPeriods.length === 0 && taf) {
-      tafPeriodRows = `<tr><td colspan="6" class="px-4 py-3 text-xs text-gray-400 italic">Aucun vent explicite dans le TAF</td></tr>`;
-    }
-
-    for (const f of allPeriods) {
-      const ci = f.changeIndicator ? `<span class="text-[10px] font-semibold text-gray-500 ml-1">${f.changeIndicator}</span>` : '';
-      const { crosswind, bestQfu, headwind } = computeCrosswind(f.wdir, f.wspd, ap.qfu);
-      const gustLine = f.wgst
-        ? (() => {
-            const { crosswind: gc } = computeCrosswind(f.wdir, f.wgst, ap.qfu);
-            return ` <span class="text-gray-500">(rafales : ${gc} kt)</span>`;
-          })()
-        : '';
-
-      // Couleur basée sur le pire avion du terrain (E190 = 25 kt par défaut)
-      const worstLimit = 25;
-      const { bg, text, label } = getCrosswindColor(crosswind, worstLimit);
-
-      const fromH = f.timeFrom ? formatUTC(f.timeFrom) : '–';
-      const toH   = f.timeTo   ? formatUTC(f.timeTo)   : '–';
-      const windStr = `${String(f.wdir).padStart(3,'0')}/${String(f.wspd).padStart(2,'0')}${f.wgst ? 'G'+f.wgst : ''}KT`;
-
-      tafPeriodRows += `
-        <tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-          <td class="px-4 py-2 text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap">${fromH}→${toH}</td>
-          <td class="px-4 py-2 text-xs">${ci}</td>
-          <td class="px-4 py-2 text-xs font-mono font-semibold text-gray-800 dark:text-gray-200">${windStr}</td>
-          <td class="px-4 py-2 text-xs font-mono text-gray-500 dark:text-gray-400">${bestQfu != null ? String(bestQfu).padStart(3,'0') : '–'}°</td>
-          <td class="px-4 py-2 text-xs font-bold font-mono ${text}">
-            ${crosswind} kt${gustLine}
-          </td>
-          <td class="px-4 py-2 text-xs">
-            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${bg} ${text}">${label}</span>
-          </td>
-        </tr>`;
-    }
-
-    if (!taf) {
-      tafPeriodRows = `<tr><td colspan="6" class="px-4 py-3 text-xs text-gray-400 italic">TAF non disponible pour ${icao}</td></tr>`;
-    }
-
-    // -- Vols arrivants ------------------------------------------------------------
-    let flightRows = '';
-    const sortedFlights = [...flights].sort((a, b) => {
-      const ta = new Date(a.flight?.scheduledArrival || 0).getTime();
-      const tb = new Date(b.flight?.scheduledArrival || 0).getTime();
-      return ta - tb;
-    });
-
-    for (const hit of sortedFlights) {
-      const f = hit.flight;
-      if (!f) continue;
-
-      const eta = f.estimatedTouchDownTime || f.scheduledArrival;
-      const etaEpoch = eta ? Math.floor(new Date(eta).getTime() / 1000) : null;
-      const etaStr = eta ? new Date(eta).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + 'z' : '–';
-
-      // Vent au moment de l'arrivée
-      const wind = etaEpoch ? getWindAtTime(taf?.fcsts ?? [], etaEpoch) : null;
-
-      let crosswindCell = `<td class="px-3 py-2 text-xs text-gray-400">–</td><td></td>`;
-      if (wind) {
-        const speedForCalc = wind.wgst ?? wind.wspd;
-        const { crosswind, bestQfu } = computeCrosswind(wind.wdir, speedForCalc, ap.qfu);
-        const acType = f.aircraftType ?? 'default';
-        const acInfo = AIRCRAFT_LIMITS[acType] ?? AIRCRAFT_LIMITS['default'];
-        const { bg, text, label } = getCrosswindColor(crosswind, acInfo.limit);
-        const windStr = `${String(wind.wdir).padStart(3,'0')}/${String(wind.wspd).padStart(2,'0')}${wind.wgst ? 'G'+wind.wgst : ''}KT`;
-        crosswindCell = `
-          <td class="px-3 py-2 text-xs font-mono text-gray-600 dark:text-gray-400">${windStr} <span class="text-gray-400">(QFU ${String(bestQfu).padStart(3,'0')})</span></td>
-          <td class="px-3 py-2 text-xs">
-            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-bold text-[11px] ${bg} ${text}">
-              ${crosswind} kt · ${label}
-            </span>
-            <span class="ml-1 text-[10px] text-gray-400">${acInfo.label} (max ${acInfo.limit}kt)</span>
-          </td>`;
+    // ── TAF rows ─────────────────────────────────────────────────────────────
+    let tafRows = '';
+    if (!tafData) {
+      tafRows = `<tr><td colspan="6" class="px-4 py-3 text-xs text-gray-400 italic">TAF non disponible pour ${icao}</td></tr>`;
+    } else if (periodsWithWind.length === 0) {
+      tafRows = `<tr><td colspan="6" class="px-4 py-3 text-xs text-gray-400 italic">Aucun vent dans le TAF</td></tr>`;
+    } else {
+      for (const f of periodsWithWind) {
+        const ci = f.changeIndicator
+          ? `<span class="text-[10px] font-semibold px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500">${f.changeIndicator}</span>`
+          : '<span class="text-[10px] text-gray-400">BASE</span>';
+        const { crosswind: cwBase, bestQfu } = computeCrosswind(f.wdir, f.wspd, ap.qfu);
+        const cwGust = f.wgst ? computeCrosswind(f.wdir, f.wgst, ap.qfu).crosswind : null;
+        const worstCw = cwGust ?? cwBase;
+        const { bg, text, label } = getCrosswindColor(worstCw, CONSERVATIVE_LIMIT);
+        const windStr = `${String(f.wdir).padStart(3,'0')}/${String(f.wspd).padStart(2,'0')}${f.wgst ? 'G'+f.wgst : ''}KT`;
+        const cwStr = cwGust != null ? `${cwBase} kt <span class="text-gray-400 text-[10px]">(G ${cwGust})</span>` : `${cwBase} kt`;
+        tafRows += `
+          <tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition">
+            <td class="px-4 py-2 text-xs font-mono text-gray-500 whitespace-nowrap">${formatEpoch(f.timeFrom)}→${formatEpoch(f.timeTo)}</td>
+            <td class="px-4 py-2 text-xs">${ci}</td>
+            <td class="px-4 py-2 text-xs font-mono font-semibold text-gray-800 dark:text-gray-200">${windStr}</td>
+            <td class="px-4 py-2 text-xs font-mono text-gray-500">${bestQfu != null ? String(bestQfu).padStart(3,'0') + '°' : '–'}</td>
+            <td class="px-4 py-2 text-xs font-bold font-mono ${text}">${cwStr}</td>
+            <td class="px-4 py-2 text-xs"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${bg} ${text}">${label}</span></td>
+          </tr>`;
       }
-
-      flightRows += `
-        <tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-          <td class="px-3 py-2 text-xs font-bold text-gray-800 dark:text-gray-200 font-mono">${f.flightId ?? '–'}</td>
-          <td class="px-3 py-2 text-xs font-mono text-blue-600 dark:text-blue-400 font-semibold">${etaStr}</td>
-          <td class="px-3 py-2 text-xs text-gray-500 dark:text-gray-400 font-mono">${f.aircraftType ?? '–'}</td>
-          ${crosswindCell}
-        </tr>`;
     }
 
+    // ── Flight rows ───────────────────────────────────────────────────────────
+    const sortedFlights = [...flights].sort((a,b) =>
+      new Date(a.estimatedTouchDownTime ?? a.scheduledArrival).getTime() -
+      new Date(b.estimatedTouchDownTime ?? b.scheduledArrival).getTime()
+    );
+
+    let flightRows = '';
     if (sortedFlights.length === 0) {
-      flightRows = `<tr><td colspan="5" class="px-3 py-3 text-xs text-gray-400 italic">Aucun vol AF prévu sur cette période</td></tr>`;
+      flightRows = `<tr><td colspan="5" class="px-3 py-3 text-xs text-gray-400 italic">Aucun vol AF prévu</td></tr>`;
+    } else {
+      for (const f of sortedFlights) {
+        const eta = f.estimatedTouchDownTime || f.scheduledArrival;
+        const etaEpochSec = eta ? Math.floor(new Date(eta).getTime() / 1000) : null;
+        const etaStr = eta
+          ? new Date(eta).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + 'z'
+          : '–';
+
+        const { base: baseWind, tempos: tempoWinds } = etaEpochSec ? getWindAtTime(fcsts, etaEpochSec) : { base: null, tempos: [] };
+        const acInfo = AIRCRAFT_LIMITS[f.aircraftType ?? ''] ?? DEFAULT_LIMIT;
+
+        let windCell = `<td class="px-3 py-2 text-xs text-gray-400 font-mono">–</td>`;
+        let riskCell = `<td class="px-3 py-2 text-xs text-gray-400">–</td>`;
+
+        if (baseWind) {
+          const spd = baseWind.wgst ?? baseWind.wspd;
+          const { crosswind, bestQfu } = computeCrosswind(baseWind.wdir, spd, ap.qfu);
+          const { bg, text, label } = getCrosswindColor(crosswind, acInfo.limit);
+          const windStr = `${String(baseWind.wdir).padStart(3,'0')}/${String(baseWind.wspd).padStart(2,'0')}${baseWind.wgst ? 'G'+baseWind.wgst : ''}KT`;
+
+          // Pire TEMPO couvrant l'ETA
+          let tempoStr = '';
+          if (tempoWinds.length > 0) {
+            let worstCw = 0, worstTempo = null;
+            for (const t of tempoWinds) {
+              const { crosswind: cwt } = computeCrosswind(t.wdir, t.wgst ?? t.wspd, ap.qfu);
+              if (cwt > worstCw) { worstCw = cwt; worstTempo = t; }
+            }
+            if (worstTempo) {
+              const { text: tt, label: tl } = getCrosswindColor(worstCw, acInfo.limit);
+              tempoStr = ` <span class="ml-1 text-[10px] ${tt}">${worstTempo.changeIndicator ?? 'TEMPO'}: ${worstCw}kt (${tl})</span>`;
+            }
+          }
+
+          windCell = `<td class="px-3 py-2 text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap">${windStr} <span class="text-gray-400">QFU ${String(bestQfu).padStart(3,'0')}</span></td>`;
+          riskCell = `<td class="px-3 py-2 text-xs">
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-bold text-[11px] ${bg} ${text}">${crosswind} kt · ${label}</span>
+            <span class="ml-1 text-[10px] text-gray-400">${acInfo.label} (max ${acInfo.limit}kt)</span>${tempoStr}
+          </td>`;
+        }
+
+        flightRows += `
+          <tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition">
+            <td class="px-3 py-2 text-xs font-bold font-mono text-gray-800 dark:text-gray-200">${f.flightId ?? '–'}</td>
+            <td class="px-3 py-2 text-xs font-mono text-blue-600 dark:text-blue-400 font-semibold">${etaStr}</td>
+            <td class="px-3 py-2 text-xs font-mono text-gray-500">${f.aircraftType ?? '–'}</td>
+            ${windCell}${riskCell}
+          </tr>`;
+      }
     }
+
+    const qfuDisplay = [...new Set(ap.qfu)].sort((a,b)=>a-b).map(q=>String(q).padStart(3,'0')).join(' / ');
 
     return `
       <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm mb-5 overflow-hidden">
-
-        <!-- Airport header -->
         <div class="flex items-center gap-3 px-5 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-750">
-          <span class="text-lg font-black text-gray-800 dark:text-gray-100 font-mono">${iata}</span>
-          <span class="text-sm text-gray-500 dark:text-gray-400">${ap?.name ?? icao}</span>
-          <span class="ml-auto text-[10px] text-gray-400 font-mono">QFU : ${ap?.qfu.map(q => String(q).padStart(3,'0')).join(' / ')}</span>
+          <span class="text-lg font-black font-mono text-gray-800 dark:text-gray-100">${ap.iata}</span>
+          <span class="text-sm text-gray-500">${ap.name}</span>
+          <span class="ml-auto text-[10px] text-gray-400 font-mono">QFU : ${qfuDisplay}</span>
         </div>
-
         <div class="grid grid-cols-1 xl:grid-cols-2 divide-y xl:divide-y-0 xl:divide-x divide-gray-100 dark:divide-gray-700">
-
-          <!-- TAF crosswind par période -->
           <div>
             <div class="px-5 py-2 border-b border-gray-100 dark:border-gray-700">
-              <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">📋 TAF — Vent de travers par période</span>
+              <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">📋 TAF — Travers par période</span>
             </div>
             <div class="overflow-x-auto">
               <table class="w-full text-sm text-left">
                 <thead class="text-[10px] uppercase text-gray-400 border-b border-gray-100 dark:border-gray-700">
                   <tr>
-                    <th class="px-4 py-2">Période</th>
-                    <th class="px-4 py-2">Type</th>
-                    <th class="px-4 py-2">Vent TAF</th>
-                    <th class="px-4 py-2">Meilleur QFU</th>
-                    <th class="px-4 py-2">Composante Travers</th>
-                    <th class="px-4 py-2">Niveau</th>
+                    <th class="px-4 py-2">Période (UTC)</th><th class="px-4 py-2">Type</th>
+                    <th class="px-4 py-2">Vent TAF</th><th class="px-4 py-2">Meilleur QFU</th>
+                    <th class="px-4 py-2">Composante travers</th><th class="px-4 py-2">Niveau</th>
                   </tr>
                 </thead>
-                <tbody>${tafPeriodRows}</tbody>
+                <tbody>${tafRows}</tbody>
               </table>
             </div>
           </div>
-
-          <!-- Vols AF avec crosswind calculé -->
           <div>
             <div class="px-5 py-2 border-b border-gray-100 dark:border-gray-700">
-              <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">✈️ Vols AF — Composante à l'ETA</span>
+              <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">✈️ Vols AF — Travers à l'ETA</span>
             </div>
             <div class="overflow-x-auto">
               <table class="w-full text-sm text-left">
                 <thead class="text-[10px] uppercase text-gray-400 border-b border-gray-100 dark:border-gray-700">
                   <tr>
-                    <th class="px-3 py-2">Vol</th>
-                    <th class="px-3 py-2">ETA</th>
-                    <th class="px-3 py-2">Avion</th>
-                    <th class="px-3 py-2">Vent prévu</th>
+                    <th class="px-3 py-2">Vol</th><th class="px-3 py-2">ETA</th>
+                    <th class="px-3 py-2">Avion</th><th class="px-3 py-2">Vent prévu</th>
                     <th class="px-3 py-2">Travers / Risque</th>
                   </tr>
                 </thead>
@@ -439,20 +361,15 @@ import '../styles/global.css';
               </table>
             </div>
           </div>
-
         </div>
       </div>`;
   }
 
-  function formatUTC(epochSec) {
+  function formatEpoch(epochSec) {
     if (!epochSec) return '–';
-    const d = new Date(epochSec * 1000);
-    return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + 'z';
+    return new Date(epochSec * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + 'z';
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // INIT
-  // ─────────────────────────────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
     renderAirportSelector();
     loadCrosswind(false);

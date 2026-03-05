@@ -21,8 +21,8 @@ import '../styles/global.css';
       h1::after { content: " — Impression du " attr(data-print-date); font-size: 10pt; font-weight: normal; color: #666; }
       h1 + p { display: none !important; }
       #crosswind-updated { display: inline !important; color: #666 !important; font-size: 9pt !important; }
-      .bg-white.dark\\:bg-gray-900.border { border: 1.5px solid black !important; background: white !important; box-shadow: none !important; page-break-inside: avoid; margin-bottom: 5mm; }
-      .grid.grid-cols-1.lg\\:grid-cols-3 { display: none !important; }
+      .bg-white.dark\:bg-gray-900.border { border: 1.5px solid black !important; background: white !important; box-shadow: none !important; page-break-inside: avoid; margin-bottom: 5mm; }
+      .grid.grid-cols-1.lg\:grid-cols-3 { display: none !important; }
       .flex.flex-wrap.gap-3 { border-top: 1px solid #ccc !important; background: #f5f5f5 !important; padding: 2mm 3mm !important; }
       .flex.flex-wrap.gap-3 span { color: black !important; font-size: 8pt !important; }
       .inline-block.w-3.h-3 { border: 1px solid #333 !important; }
@@ -30,9 +30,9 @@ import '../styles/global.css';
       #crosswind-container > div > div:first-child { background: white !important; border-bottom: 1.5px solid #666 !important; padding: 2mm 3mm !important; }
       #crosswind-container > div > div:first-child span { color: black !important; }
       #crosswind-container > div > div:first-child span:first-child { border: 1.5px solid black !important; background: #333 !important; color: white !important; font-weight: bold; }
-      .grid.grid-cols-1.xl\\:grid-cols-2 { display: block !important; }
-      .grid.grid-cols-1.xl\\:grid-cols-2 > div { page-break-inside: avoid; border-bottom: 1px solid #ccc !important; padding-bottom: 3mm; margin-bottom: 3mm; }
-      .grid.grid-cols-1.xl\\:grid-cols-2 > div:last-child { border-bottom: none !important; }
+      .grid.grid-cols-1.xl\:grid-cols-2 { display: block !important; }
+      .grid.grid-cols-1.xl\:grid-cols-2 > div { page-break-inside: avoid; border-bottom: 1px solid #ccc !important; padding-bottom: 3mm; margin-bottom: 3mm; }
+      .grid.grid-cols-1.xl\:grid-cols-2 > div:last-child { border-bottom: none !important; }
       table { font-size: 8pt !important; }
       thead { background: #f0f0f0 !important; }
       thead th { color: black !important; border-bottom: 1px solid #666 !important; }
@@ -45,9 +45,9 @@ import '../styles/global.css';
         font-weight: bold !important;
       }
       .text-green-700, .text-yellow-700, .text-orange-700, .text-red-700 { color: black !important; }
-      .bg-blue-50\\/30, .bg-blue-100, .bg-purple-100, .bg-gray-100 { background: #f5f5f5 !important; }
+      .bg-blue-50\/30, .bg-blue-100, .bg-purple-100, .bg-gray-100 { background: #f5f5f5 !important; }
       .text-blue-700, .text-purple-700 { color: #333 !important; }
-      span[class*="rounded text-\\[9px\\]"], span[class*="rounded text-\\[10px\\]"] { 
+      span[class*="rounded text-\[9px\]"], span[class*="rounded text-\[10px\]"] { 
         border: 1px solid #666 !important;
         padding: 1px 3px !important;
       }
@@ -727,15 +727,13 @@ const AIRPORT_RUNWAYS = {
         const code = getRunwayCodeForFcst(f);
         const activeLimit = code === 4 ? 27 : (code === 5 ? 38 : 38); // Limite conservatrice pour TAF générique
         const status = getCrosswindColor(worstCw, activeLimit);
-        const codeLabel = code === 6 ? 'SÈCHE' : (code === 5 ? 'MOUILLÉE' : 'CONTAMINÉE');
         
-        // Extraire uniquement le code météo significatif (sans "MOUILLÉE " prefix)
+        // Afficher uniquement le code météo sans le label de condition
         const wxString = f.wxString ?? '';
-        const codeBadge = code === 6
-          ? `<span class="ml-1 px-1 py-0.5 rounded text-[9px] font-bold bg-gray-100 dark:bg-gray-700 text-gray-500">${codeLabel}</span>`
-          : (code === 5
-            ? `<span class="ml-1 px-1 py-0.5 rounded text-[9px] font-bold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">${codeLabel} ${wxString}</span>`
-            : `<span class="ml-1 px-1 py-0.5 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">${codeLabel} ${wxString}</span>`);
+        const codeBadge = wxString
+          ? `<span class="ml-1 px-1 py-0.5 rounded text-[9px] font-bold ${code === 6 ? 'bg-gray-100 dark:bg-gray-700 text-gray-500' : (code === 5 ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' : 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300')}">${wxString}</span>`
+          : '';
+        
         const dirStr = isVrb ? 'VRB' : String(Number(f.wdir)).padStart(3, '0');
         const windStr = `${dirStr}/${String(f.wspd).padStart(2,'0')}${f.wgst ? 'G'+f.wgst : ''}KT`;
         const qfuCell = vrb

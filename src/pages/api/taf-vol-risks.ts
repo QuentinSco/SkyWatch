@@ -96,8 +96,9 @@ export const GET: APIRoute = async ({ url }) => {
 
   try {
     // Fetch TAF bruts (tous aéroports AF) + vols en parallèle
+    // ✅ CORRECTION : passe lcOnly=false pour inclure CDG/ORY dans le parsing des menaces
     const [tafRisks, allFlights, rawBaseTafsResult] = await Promise.all([
-      fetchTafRisks(),
+      fetchTafRisks(force, false),  // ✅ lcOnly=false pour avoir CDG/ORY avec menaces parsées
       getCachedAfArrivals(force),  // ✅ Passe le paramètre force
       fetch(
         `https://aviationweather.gov/api/data/taf?ids=LFPG,LFPO&format=json&metar=false`,
@@ -111,7 +112,7 @@ export const GET: APIRoute = async ({ url }) => {
     // ✅ Récupération du timestamp du cache AF pour affichage dans l'UI
     const cacheFetchedAt = await getCacheFetchedAt();
 
-    // ── Diagnostics généraux ────────────────────────────────────────────────────
+    // ── Diagnostics généraux ────────────────────────────────────────────
     dbg(`TAF risques : ${tafRisks.length} aéroports`);
     dbg(`TAF ICAO concernés : ${tafRisks.map(t => t.icao).join(', ')}`);
     dbg(`Vols chargés total : ${allFlights.length}`);
@@ -133,7 +134,7 @@ export const GET: APIRoute = async ({ url }) => {
       dbg('⚠️ Aucun TAF avec menace détectée');
     }
 
-    // ── Filtrage vols invalides ────────────────────────────────────────────────────
+    // ── Filtrage vols invalides ────────────────────────────────────────────
     const now = Date.now();
     const cleanedFlights = allFlights.filter(f => {
       if (f.aircraftType === 'BUS') return false;
@@ -143,7 +144,7 @@ export const GET: APIRoute = async ({ url }) => {
       return true;
     });
 
-    // ── Matching ────────────────────────────────────────────────────────────────────
+    // ── Matching ────────────────────────────────────────────────────────────
     const hits: TafFlightHit[] = [];
     let totalFlightsChecked = 0;
     let rejectedNoIcaoMatch = 0;
@@ -192,7 +193,7 @@ export const GET: APIRoute = async ({ url }) => {
       }
     }
 
-    // ── Résumé matching ────────────────────────────────────────────────────────────────────
+    // ── Résumé matching ────────────────────────────────────────────────────────
     dbg(`Matching terminé :`);
     dbg(`  Vols bruts         : ${allFlights.length}`);
     dbg(`  Vols après filtre  : ${cleanedFlights.length}`);
@@ -201,14 +202,14 @@ export const GET: APIRoute = async ({ url }) => {
     dbg(`  Rejetés (fenêtre)  : ${rejectedTimeWindow}`);
     dbg(`  Hits               : ${hits.length}`);
 
-    // ── Séparation vols LC (hors base) vs base CDG/ORY ──────────────────────────────────────
+    // ── Séparation vols LC (hors base) vs base CDG/ORY ────────────────────────────
     const filteredHits = hits.filter(h => !HOME_BASES.has(h.taf.icao));
     const baseHits     = hits.filter(h =>  HOME_BASES.has(h.taf.icao));
 
     dbg(`  Vols LC (hors CDG/ORY) : ${filteredHits.length}`);
     dbg(`  Vols base CDG/ORY      : ${baseHits.length}`);
 
-    // ── Construction baseTafs (CDG + ORY toujours présents) ─────────────────────────────────
+    // ── Construction baseTafs (CDG + ORY toujours présents) ─────────────────────────
     const IATA_MAP: Record<string, string> = { LFPG: 'CDG', LFPO: 'ORY' };
     const NAME_MAP: Record<string, string> = { LFPG: 'Paris CDG', LFPO: 'Paris Orly' };
 
@@ -230,7 +231,7 @@ export const GET: APIRoute = async ({ url }) => {
       };
     });
 
-    // ── Tri ────────────────────────────────────────────────────────────────────────
+    // ── Tri ────────────────────────────────────────────────────────────────
     const sortHits = (arr: TafFlightHit[]) => arr.sort((a, b) => {
       const sev: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
       if (sev[a.threat.severity] !== sev[b.threat.severity])

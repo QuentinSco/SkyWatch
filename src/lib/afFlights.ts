@@ -23,19 +23,17 @@ export interface AfFlightArrival {
 
 export interface AfFlightsCache {
   flights: AfFlightArrival[];
-  fetchedAt: number;  // Unix timestamp (ms) du dernier fetch API
+  fetchedAt: number;  // Unix timestamp (ms) du dernier fetch
 }
 
 const KV_KEY          = 'af_flights_cache';
 const KV_LOCK_KEY     = 'af_flights_lock';
-const KV_TTL_SEC      = 2 * 60 * 60;        // 2h TTL (was 4h) — 12 refresh/day max = ~24-48 API calls (quota 100/day)
-const KV_EMPTY_TTL    = 5 * 60;             // 5min TTL cache vide (évite re-fetch inutiles)
+const KV_TTL_SEC      = 2 * 60 * 60;        // 2h TTL — 12 refresh/day max = ~24-48 API calls (quota 100/day)
+const KV_EMPTY_TTL    = 5 * 60;             // 5min TTL cache vide
 const LOCK_TTL        = 60;                 // 60s max pour un fetch
 
 /**
  * Air France long-haul aircraft types.
- * These are the only wide-body aircraft used on intercontinental routes.
- * 
  * List:
  *   332 — Airbus A330-200
  *   77W — Boeing 777-300ER
@@ -47,7 +45,6 @@ const LC_AIRCRAFT_TYPES = new Set(['332', '77W', '772', '789', '359']);
 
 /**
  * Returns true if the aircraft type is a long-haul wide-body.
- * The API's 'haul' field is unreliable (e.g., AF1116 DUB-CDG flagged as 'LONG').
  */
 function isLongHaulAircraft(typeCode: string | undefined | null): boolean {
   if (!typeCode) return false;
@@ -115,7 +112,7 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
   url.searchParams.set('startRange',           start.toISOString());
   url.searchParams.set('endRange',             end.toISOString());
   url.searchParams.set('timeType',             'U');
-  url.searchParams.set('movementType',         'A');
+  // movementType supprimé : on récupère ARR + DEP pour les chaînages
   url.searchParams.set('carrierCode',          'AF');
   url.searchParams.set('operatingAirlineCode', 'AF');
   url.searchParams.set('pageSize',             '100');
@@ -144,7 +141,7 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
 
   console.log(`[AF Flights] page 0/${totalPages} — ${ops.length} vols (avant filtre LC)`);
 
-  // ── Pagination avec délai 1.1s (respect QPS 1 req/s) ─────────────────────
+  // ── Pagination avec délai 1.1s (respect QPS 1 req/s) ────────────────
   for (let p = 1; p < totalPages; p++) {
     await new Promise(r => setTimeout(r, 1100));
     const u = new URL(url.toString());
@@ -163,13 +160,12 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
     }
   }
 
-  // ── Mapping — filtre airline AF + aircraft LC uniquement ──────────────────
+  // ── Mapping — filtre airline AF + aircraft LC uniquement ────────────────
   const arrivals: AfFlightArrival[] = [];
   let skippedAirline = 0;
   let skippedAircraft = 0;
 
   for (const op of ops) {
-    // ✅ Filtre 1 : vols opérés par Air France uniquement
     const airlineCode = op.airline?.code ?? '';
     if (airlineCode !== 'AF') {
       skippedAirline++;
@@ -177,7 +173,6 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
     }
 
     for (const leg of (op.flightLegs ?? [])) {
-      // ✅ Filtre 2 : type avion long-courrier uniquement (332, 77W, 772, 789, 359)
       const aircraftType = leg.aircraft?.typeCode ?? '';
       if (!isLongHaulAircraft(aircraftType)) {
         skippedAircraft++;
@@ -191,7 +186,7 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
 
   console.log(`[AF Flights] ${arrivals.length} legs LC retenus — ${skippedAirline} vols partenaires filtrés — ${skippedAircraft} avions non-LC filtrés`);
 
-  // ── Dé-doublonnage ────────────────────────────────────────────────────────
+  // ── Dé-doublonnage ──────────────────────────────────────────────
   const dedup = new Map<string, AfFlightArrival>();
   for (const f of arrivals) {
     dedup.set(`${f.flightId}-${f.icao}`, f);
@@ -200,19 +195,10 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
   return Array.from(dedup.values());
 }
 
-/**
- * ✅ Cache Redis partagé entre toutes les instances Vercel.
- * ✅ Distributed lock — une seule instance fait le fetch à la fois.
- * ✅ Les autres instances attendent que le cache soit rempli.
- * ✅ Stocke [] avec TTL court si aucun vol futur, bloquant les re-fetch.
- * ✅ Paramètre force pour bypass manuel du cache (via bouton UI).
- */
 export async function getCachedAfArrivals(force = false): Promise<AfFlightArrival[]> {
 
   const now = Date.now();
 
-  // ── 1. Cache KV — hit → retour immédiat, 0 requête AF ────────────────────
-  // ✅ Bypass cache si force=true (bouton Actualiser dans l'UI)
   if (!force) {
     try {
       const cached = await kv.get<AfFlightsCache>(KV_KEY);
@@ -232,11 +218,9 @@ export async function getCachedAfArrivals(force = false): Promise<AfFlightArriva
     console.log('[AF Flights] Force refresh demandé — bypass cache');
   }
 
-  // ── 2. Distributed lock — SET NX (only if not exists) ───────────────────
   const lockAcquired = await kv.set(KV_LOCK_KEY, '1', { nx: true, ex: LOCK_TTL });
 
   if (!lockAcquired) {
-    // Une autre instance est en train de fetcher — on attend le cache
     console.log('[AF Flights] Lock non acquis — attente cache...');
     for (let i = 0; i < 20; i++) {
       await new Promise(r => setTimeout(r, 2000));
@@ -256,7 +240,6 @@ export async function getCachedAfArrivals(force = false): Promise<AfFlightArriva
     return [];
   }
 
-  // ── 3. Lock acquis — on est la seule instance à fetcher ──────────────────
   try {
     const result = await callAfApi();
     const fetchedAt = Date.now();
@@ -267,11 +250,9 @@ export async function getCachedAfArrivals(force = false): Promise<AfFlightArriva
     });
 
     if (futureFlights.length > 0) {
-      // Vols futurs présents → TTL 2h
       await kv.set(KV_KEY, { flights: futureFlights, fetchedAt }, { ex: KV_TTL_SEC });
       console.log(`[AF Flights] ${futureFlights.length}/${result.length} vols futurs stockés en KV (TTL ${KV_TTL_SEC}s)`);
     } else {
-      // ✅ Fix : aucun vol futur → stocke [] avec TTL court (5 min)
       await kv.set(KV_KEY, { flights: [], fetchedAt }, { ex: KV_EMPTY_TTL });
       console.warn(`[AF Flights] Aucun vol futur — [] stocké en KV (TTL ${KV_EMPTY_TTL}s)`);
     }
@@ -279,15 +260,11 @@ export async function getCachedAfArrivals(force = false): Promise<AfFlightArriva
     return futureFlights;
 
   } finally {
-    // ✅ Toujours libérer le lock, même en cas d'erreur
     await kv.del(KV_LOCK_KEY);
     console.log('[AF Flights] Lock libéré');
   }
 }
 
-/**
- * Retourne le timestamp du dernier fetch API (pour affichage âge cache dans UI).
- */
 export async function getCacheFetchedAt(): Promise<number | null> {
   try {
     const cached = await kv.get<AfFlightsCache>(KV_KEY);

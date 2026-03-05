@@ -297,3 +297,11 @@ export async function getCacheFetchedAt(): Promise<number | null> {
     return null;
   }
 }
+
+/**
+ * @deprecated Alias de getCachedAfArrivals — conservé pour compatibilité avec chainages.ts.
+ * Retourne uniquement les vols LC (lcOnly = true par défaut).
+ */
+export async function getCachedAfFlights(force = false): Promise<AfFlightArrival[]> {
+  return getCachedAfArrivals(force, /* lcOnly = */ true);
+}

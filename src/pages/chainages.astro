@@ -25,72 +25,95 @@ import '../styles/global.css';
       opacity: 0;
       transition: opacity .12s;
     }
+    .dark #ch-tooltip { background: #0f172a; color: #e2e8f0; }
   </style>
 </head>
 
-<body class="text-gray-900 min-h-screen flex" style="background:#f8fafc">
+<body class="text-gray-900 dark:text-gray-100 min-h-screen flex bg-slate-50 dark:bg-gray-950">
 
-  <aside class="hidden lg:flex flex-col w-56 shrink-0 sticky top-0 h-screen border-r border-gray-200 bg-white px-4 py-6 overflow-y-auto">
+  <!-- ─ Sidebar ─────────────────────────────────────────── -->
+  <aside class="hidden lg:flex flex-col w-56 shrink-0 sticky top-0 h-screen
+                border-r border-gray-200 dark:border-gray-800
+                bg-white dark:bg-gray-900
+                px-4 py-6 overflow-y-auto">
     <div class="mb-6">
-      <div class="text-2xl font-bold tracking-tight text-gray-900">🛡 SkyWatch</div>
-      <div class="text-gray-400 text-xs mt-1">Superviseur dispatch</div>
+      <div class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">🛡 SkyWatch</div>
+      <div class="text-gray-400 dark:text-gray-500 text-xs mt-1">Superviseur dispatch</div>
     </div>
     <nav class="flex flex-col gap-1 text-sm">
-      <div class="text-[10px] uppercase font-semibold text-gray-400 tracking-widest mb-2">Navigation</div>
-      <a href="/" class="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition font-medium">🗺️ Tableau de bord</a>
-      <div class="mt-4 pt-4 border-t border-gray-100">
-        <div class="text-[10px] uppercase font-semibold text-gray-400 tracking-widest mb-2">Outils</div>
-        <a href="/briefing" class="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:bg-purple-50 hover:text-purple-700 transition font-medium">🗒 Trame briefing</a>
-        <a href="/chainages" class="flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 font-semibold">🔗 Chaînages</a>
+      <div class="text-[10px] uppercase font-semibold text-gray-400 dark:text-gray-600 tracking-widest mb-2">Navigation</div>
+      <a href="/" class="flex items-center gap-2 px-3 py-2 rounded-lg
+                         text-gray-600 dark:text-gray-400
+                         hover:bg-blue-50 dark:hover:bg-blue-950 hover:text-blue-700 dark:hover:text-blue-400
+                         transition font-medium">🗺️ Tableau de bord</a>
+      <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+        <div class="text-[10px] uppercase font-semibold text-gray-400 dark:text-gray-600 tracking-widest mb-2">Outils</div>
+        <a href="/briefing" class="flex items-center gap-2 px-3 py-2 rounded-lg
+                                   text-gray-600 dark:text-gray-400
+                                   hover:bg-purple-50 dark:hover:bg-purple-950 hover:text-purple-700 dark:hover:text-purple-400
+                                   transition font-medium">🗒 Trame briefing</a>
+        <a href="/chainages" class="flex items-center gap-2 px-3 py-2 rounded-lg
+                                    bg-indigo-50 dark:bg-indigo-950
+                                    text-indigo-700 dark:text-indigo-300 font-semibold">🔗 Chaînages</a>
       </div>
     </nav>
-    <div class="mt-auto pt-6 border-t border-gray-100 text-[10px] text-gray-400 leading-relaxed">
-      <strong class="text-gray-500">Horizon :</strong> 24h glissantes<br>
+    <div class="mt-auto pt-6 border-t border-gray-100 dark:border-gray-800 text-[10px] text-gray-400 dark:text-gray-600 leading-relaxed">
+      <strong class="text-gray-500 dark:text-gray-400">Horizon :</strong> 24h glissantes<br>
       Vols AF long-courrier uniquement.
     </div>
   </aside>
 
+  <!-- ─ Contenu ─────────────────────────────────────────── -->
   <div class="flex-1 min-w-0 overflow-y-auto">
     <div class="max-w-5xl mx-auto px-4 py-6 xl:px-8">
 
       <div class="flex items-center justify-between flex-wrap gap-4 mb-6">
         <div>
-          <h1 class="text-2xl font-bold tracking-tight text-gray-900">🔗 Chaînages</h1>
-          <p class="text-gray-500 text-xs mt-1">Temps de rotation des appareils AF LC — fenêtre adaptée aux données</p>
+          <h1 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">🔗 Chaînages</h1>
+          <p class="text-gray-500 dark:text-gray-400 text-xs mt-1">Temps de rotation des appareils AF LC — fenêtre adaptée aux données</p>
         </div>
         <div class="flex items-center gap-2">
-          <span id="ch-age" class="text-xs text-gray-400"></span>
-          <button id="btn-refresh" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 transition">
+          <span id="ch-age" class="text-xs text-gray-400 dark:text-gray-500"></span>
+          <button id="btn-refresh" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg
+                                          border border-gray-200 dark:border-gray-700
+                                          bg-white dark:bg-gray-800
+                                          hover:bg-gray-50 dark:hover:bg-gray-700
+                                          text-gray-600 dark:text-gray-300 transition">
             🔄 Actualiser
           </button>
         </div>
       </div>
 
-      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-6">
-        <div class="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">Aéroports à surveiller</div>
+      <!-- Saisie -->
+      <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-4 mb-6">
+        <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">Aéroports à surveiller</div>
         <div class="flex items-center gap-2 mb-3">
           <input id="airport-input" type="text" maxlength="4"
             placeholder="IATA (JFK) ou OACI (KJFK)"
-            class="w-48 border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono uppercase
-                   focus:outline-none focus:ring-2 focus:ring-indigo-300 placeholder-gray-400" />
+            class="w-48 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm font-mono uppercase
+                   bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100
+                   focus:outline-none focus:ring-2 focus:ring-indigo-300 dark:focus:ring-indigo-700
+                   placeholder-gray-400 dark:placeholder-gray-600" />
           <button id="btn-add-airport"
-            class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition">
+            class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
+                   bg-indigo-600 hover:bg-indigo-700 text-white transition">
             + Ajouter
           </button>
         </div>
         <div id="airport-tags" class="flex flex-wrap gap-2 min-h-[28px]">
-          <span class="text-xs text-gray-400 italic" id="no-airport-hint">Aucun aéroport sélectionné</span>
+          <span class="text-xs text-gray-400 dark:text-gray-600 italic" id="no-airport-hint">Aucun aéroport sélectionné</span>
         </div>
       </div>
 
-      <div id="ch-legend" class="hidden flex items-center gap-5 mb-4 text-xs text-gray-500">
+      <!-- Légende -->
+      <div id="ch-legend" class="hidden flex items-center gap-5 mb-4 text-xs text-gray-500 dark:text-gray-400">
         <span class="flex items-center gap-1.5"><span id="leg-known" class="inline-block w-3 h-3 rounded"></span> Au sol (durée connue)</span>
         <span class="flex items-center gap-1.5"><span id="leg-unk" class="inline-block w-3 h-3 rounded border border-dashed"></span> Au sol (départ inconnu)</span>
         <span class="flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-red-400"></span> Maintenant</span>
       </div>
 
       <div id="chainages-result">
-        <div class="text-gray-400 text-sm italic text-center py-12">Ajoutez un aéroport pour afficher les chaînages.</div>
+        <div class="text-gray-400 dark:text-gray-600 text-sm italic text-center py-12">Ajoutez un aéroport pour afficher les chaînages.</div>
       </div>
     </div>
   </div>
@@ -117,6 +140,21 @@ import '../styles/global.css';
       return PALETTE[airportColor.get(code)];
     }
 
+    // ── Tokens de couleur adaptés au thème ───────────────────────────────
+    function themeTokens() {
+      const dark = document.documentElement.classList.contains('dark');
+      return {
+        bg:      dark ? '#111827' : '#ffffff',
+        bgAlt:   dark ? '#0f172a' : '#f8fafc',
+        grid:    dark ? '#1e293b' : '#e2e8f0',
+        sep:     dark ? '#334155' : '#cbd5e1',
+        label:   dark ? '#64748b' : '#64748b',
+        regText: dark ? '#e2e8f0' : '#1e293b',
+        typeText:dark ? '#475569' : '#94a3b8',
+        now:     '#f87171',
+      };
+    }
+
     const ROW_H      = 44;
     const ROW_PAD    = 8;
     const BAR_H      = ROW_H - ROW_PAD * 2;
@@ -126,11 +164,6 @@ import '../styles/global.css';
     const FONT       = '11px/1 Inter, system-ui, sans-serif';
     const FONT_BOLD  = 'bold 11px/1 Inter, system-ui, sans-serif';
     const FONT_SM    = 'bold 10px/1 Inter, system-ui, sans-serif';
-    const COLOR_NOW   = '#f87171';
-    const COLOR_GRID  = '#e2e8f0';
-    const COLOR_LABEL = '#64748b';
-    const COLOR_BG_ALT = '#f8fafc';
-
     const W_FULL  = 130;
     const W_SPLIT = 72;
     const W_SHORT = 34;
@@ -139,7 +172,6 @@ import '../styles/global.css';
     let lastData   = null;
     const tooltip  = document.getElementById('ch-tooltip');
 
-    // ── Tags ────────────────────────────────────────────────────
     function renderTags() {
       const container = document.getElementById('airport-tags');
       const hint = document.getElementById('no-airport-hint');
@@ -169,7 +201,6 @@ import '../styles/global.css';
     document.getElementById('airport-input').addEventListener('keydown', e => { if (e.key === 'Enter') addAirport(); });
     document.getElementById('btn-refresh').addEventListener('click', () => fetchChainages(true));
 
-    // ── Helpers ────────────────────────────────────────────────────
     function hhmm(ms) {
       const d = new Date(ms);
       return String(d.getUTCHours()).padStart(2,'0') + ':' + String(d.getUTCMinutes()).padStart(2,'0') + 'z';
@@ -180,26 +211,20 @@ import '../styles/global.css';
     }
     function shortFlight(f) { return f ? f.replace(/^AF0*/, '') : ''; }
 
-    // ── Calcul des ticks adaptés à la fenêtre ─────────────────────────────
     function tickInterval(spanMs, availW) {
-      // On vise ~8-12 graduations visibles, espacements possibles en minutes
       const targets = [15, 30, 60, 120, 180, 240, 360];
       for (const mins of targets) {
-        const nbTicks = spanMs / (mins * 60_000);
-        const pxPerTick = availW / nbTicks;
-        if (pxPerTick >= 50) return mins * 60_000;
+        if (availW / (spanMs / (mins * 60_000)) >= 50) return mins * 60_000;
       }
-      return 360 * 60_000; // 6h par défaut
+      return 360 * 60_000;
     }
 
-    // ── Dessine UN canvas pour UN aéroport ────────────────────────────
     function drawAirportTimeline(canvas, stops, wStart, wEnd, pal) {
+      const T      = themeTokens();
       const nowMs  = Date.now();
       const span   = wEnd - wStart;
       const dpr    = window.devicePixelRatio || 1;
       const wrap   = canvas.parentElement;
-
-      // Largeur réelle du conteneur (après rendu DOM)
       const availW  = Math.max(wrap.getBoundingClientRect().width - LABEL_W - CHART_PAD, 200);
       const canvasW = LABEL_W + availW + CHART_PAD;
       const canvasH = HEADER_H + stops.length * ROW_H;
@@ -213,52 +238,42 @@ import '../styles/global.css';
       ctx.scale(dpr, dpr);
       const toX = t => LABEL_W + ((t - wStart) / span) * availW;
 
-      // Fond
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = T.bg;
       ctx.fillRect(0, 0, canvasW, canvasH);
       stops.forEach((_, i) => {
-        if (i % 2 === 1) { ctx.fillStyle = COLOR_BG_ALT; ctx.fillRect(0, HEADER_H + i * ROW_H, canvasW, ROW_H); }
+        if (i % 2 === 1) { ctx.fillStyle = T.bgAlt; ctx.fillRect(0, HEADER_H + i * ROW_H, canvasW, ROW_H); }
       });
 
-      // Grille + header heures (interval adapté)
       const tickMs = tickInterval(span, availW);
-      // Premier tick : arrondi au multiple de tickMs supérieur à wStart
       const firstTick = Math.ceil(wStart / tickMs) * tickMs;
-
-      ctx.strokeStyle = COLOR_GRID; ctx.lineWidth = 1;
-      ctx.font = FONT; ctx.fillStyle = COLOR_LABEL;
+      ctx.strokeStyle = T.grid; ctx.lineWidth = 1;
+      ctx.font = FONT; ctx.fillStyle = T.label;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-
       for (let t = firstTick; t <= wEnd; t += tickMs) {
         const x = toX(t);
         ctx.beginPath(); ctx.moveTo(x, HEADER_H); ctx.lineTo(x, canvasH); ctx.stroke();
-        // Label : affiche DD/MM si changement de jour
-        const prev = new Date(t - tickMs);
-        const curr = new Date(t);
-        const label = (curr.getUTCDate() !== prev.getUTCDate())
+        const prev = new Date(t - tickMs), curr = new Date(t);
+        const label = curr.getUTCDate() !== prev.getUTCDate()
           ? ddmm(t) + ' ' + hhmm(t).slice(0,5)
           : hhmm(t).slice(0,5);
         ctx.fillText(label, x, HEADER_H / 2);
       }
-
-      // Séparateurs
-      ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1;
+      ctx.strokeStyle = T.sep; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(LABEL_W, HEADER_H); ctx.lineTo(canvasW, HEADER_H); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(LABEL_W, 0); ctx.lineTo(LABEL_W, canvasH); ctx.stroke();
 
-      // ── Blocs ────────────────────────────────────────────────────
       const hitZones = [];
       stops.forEach((stop, i) => {
         const y0   = HEADER_H + i * ROW_H;
         const barY = y0 + ROW_PAD;
         const midY = barY + BAR_H / 2;
 
-        ctx.font = FONT_BOLD; ctx.fillStyle = '#1e293b';
+        ctx.font = FONT_BOLD; ctx.fillStyle = T.regText;
         ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
         ctx.fillText(stop.registration, 6, y0 + ROW_H / 2);
         if (stop.aircraftType) {
           const lw = ctx.measureText(stop.registration).width;
-          ctx.font = FONT; ctx.fillStyle = '#94a3b8';
+          ctx.font = FONT; ctx.fillStyle = T.typeText;
           ctx.fillText(stop.aircraftType, 6 + lw + 4, y0 + ROW_H / 2);
         }
 
@@ -280,7 +295,6 @@ import '../styles/global.css';
           ctx.restore();
         }
 
-        // Texte adaptatif
         const textColor = known ? '#fff' : pal.text;
         ctx.font = FONT_SM; ctx.textBaseline = 'middle';
         const arrLabel = '↓ ' + stop.arrFlight;
@@ -296,15 +310,12 @@ import '../styles/global.css';
             const dm = Math.round((stop.depMs - stop.arrMs) / 60000);
             const dh = Math.floor(dm / 60), mm = String(dm % 60).padStart(2,'0');
             const durLabel = dh > 0 ? `${dh}h${mm}` : `${dm}min`;
-            const midX = (xArr + xDep) / 2;
             ctx.font = FONT;
             const durW = ctx.measureText(durLabel).width;
-            const leftEdge  = xArr + 5 + arrW + 6;
-            const rightEdge = xDep - 5 - depW - 6;
-            if (rightEdge - leftEdge > durW) {
+            if ((xDep - 5 - depW - 6) - (xArr + 5 + arrW + 6) > durW) {
               ctx.fillStyle = 'rgba(255,255,255,0.8)';
               ctx.textAlign = 'center';
-              ctx.fillText(durLabel, midX, midY);
+              ctx.fillText(durLabel, (xArr + xDep) / 2, midY);
             }
           }
         } else if (barW >= W_SPLIT) {
@@ -316,31 +327,27 @@ import '../styles/global.css';
             ctx.textAlign = 'left'; ctx.fillText(arrLabel, xArr + 5, midY);
           }
         } else if (barW >= W_SHORT) {
-          const short = [shortFlight(stop.arrFlight), stop.depFlight ? shortFlight(stop.depFlight) : null]
-            .filter(Boolean).join('·');
           ctx.fillStyle = textColor; ctx.textAlign = 'center';
+          const short = [shortFlight(stop.arrFlight), stop.depFlight ? shortFlight(stop.depFlight) : null].filter(Boolean).join('·');
           ctx.fillText(short, (xArr + xDep) / 2, midY);
         }
-        // < W_SHORT : rien
 
         hitZones.push({ x1: xArr, y1: barY, x2: xDep, y2: barY + BAR_H, stop });
       });
 
-      // NOW
       const xNow = toX(nowMs);
       if (xNow >= LABEL_W && xNow <= canvasW) {
-        ctx.strokeStyle = COLOR_NOW; ctx.lineWidth = 2;
+        ctx.strokeStyle = T.now; ctx.lineWidth = 2;
         ctx.setLineDash([4, 3]);
         ctx.beginPath(); ctx.moveTo(xNow, 0); ctx.lineTo(xNow, canvasH); ctx.stroke();
         ctx.setLineDash([]);
-        ctx.fillStyle = COLOR_NOW;
+        ctx.fillStyle = T.now;
         ctx.beginPath(); ctx.arc(xNow, HEADER_H / 2, 4, 0, Math.PI * 2); ctx.fill();
         ctx.font = 'bold 9px/1 Inter, system-ui, sans-serif';
-        ctx.fillStyle = COLOR_NOW; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = T.now; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText('NOW', xNow, HEADER_H - 6);
       }
 
-      // Tooltip
       canvas.addEventListener('mousemove', e => {
         const rect = canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left, my = e.clientY - rect.top;
@@ -365,7 +372,6 @@ import '../styles/global.css';
       canvas.addEventListener('mouseleave', () => { tooltip.style.opacity = '0'; });
     }
 
-    // ── Rendu principal ────────────────────────────────────────────
     function renderChainages(data) {
       lastData = data;
       const container = document.getElementById('chainages-result');
@@ -397,12 +403,11 @@ import '../styles/global.css';
       });
 
       container.innerHTML = '';
-
-      // On insère d'abord le HTML, puis on dessine dans un rAF pour avoir les vraies dimensions
       const pendingDraws = [];
 
       byAirport.forEach((airStops, code) => {
         const pal = paletteFor(code);
+        const dark = document.documentElement.classList.contains('dark');
         const section = document.createElement('div');
         section.className = 'mb-4 rounded-xl border overflow-hidden shadow-sm';
         section.style.borderColor = pal.border;
@@ -417,7 +422,7 @@ import '../styles/global.css';
             <span class="font-semibold text-sm opacity-50" style="color:${pal.text}">Aucun vol dans la fenêtre 24h</span>`;
           section.appendChild(header);
           const empty = document.createElement('div');
-          empty.className = 'bg-white px-4 py-3 text-xs text-gray-400 italic';
+          empty.className = 'bg-white dark:bg-gray-900 px-4 py-3 text-xs text-gray-400 italic';
           empty.textContent = 'Aucun vol AF LC trouvé sur cet aéroport dans les prochaines 24h.';
           section.appendChild(empty);
         } else {
@@ -426,18 +431,18 @@ import '../styles/global.css';
             <span class="font-semibold text-sm" style="color:${pal.text}">${airStops.length} appareil${airStops.length > 1 ? 's' : ''} dans la fenêtre</span>`;
           section.appendChild(header);
           const wrap = document.createElement('div');
-          wrap.className = 'timeline-wrap bg-white';
+          wrap.className = 'timeline-wrap';
+          // Fond du canvas wrapper adapté au thème
+          wrap.style.background = dark ? '#111827' : '#ffffff';
           const canvas = document.createElement('canvas');
           canvas.className = 'timeline-canvas';
           wrap.appendChild(canvas);
           section.appendChild(wrap);
-          // Différer le dessin après le rendu DOM
           pendingDraws.push({ canvas, airStops, pal });
         }
         container.appendChild(section);
       });
 
-      // Dessiner après que le navigateur a calculé les dimensions
       requestAnimationFrame(() => {
         for (const { canvas, airStops, pal } of pendingDraws) {
           drawAirportTimeline(canvas, airStops, data.windowStart, data.windowEnd, pal);
@@ -447,10 +452,13 @@ import '../styles/global.css';
 
     window.addEventListener('resize', () => { if (lastData) renderChainages(lastData); });
 
+    // Redessine quand l'utilisateur bascule le thème
+    window.addEventListener('themechange', () => { if (lastData) renderChainages(lastData); });
+
     async function fetchChainages(force = false) {
       if (airports.size === 0) {
         document.getElementById('chainages-result').innerHTML =
-          '<div class="text-gray-400 text-sm italic text-center py-12">Ajoutez un aéroport pour afficher les chaînages.</div>';
+          '<div class="text-gray-400 dark:text-gray-600 text-sm italic text-center py-12">Ajoutez un aéroport pour afficher les chaînages.</div>';
         document.getElementById('ch-legend').classList.add('hidden');
         return;
       }

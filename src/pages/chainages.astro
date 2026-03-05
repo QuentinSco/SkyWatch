@@ -54,8 +54,7 @@ import '../styles/global.css';
       #btn-refresh,
       #btn-print,
       #ch-tooltip,
-      #airport-input-section,
-      #time-range-section {
+      #airport-input-section {
         display: none !important;
       }
 
@@ -267,51 +266,56 @@ import '../styles/global.css';
 
       <!-- Saisie -->
       <div id="airport-input-section" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-4 mb-6">
-        <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">Aéroports à surveiller</div>
-        <div class="flex items-center gap-2 mb-3">
-          <input id="airport-input" type="text" maxlength="4"
-            placeholder="IATA (JFK) ou OACI (KJFK)"
-            class="w-48 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm font-mono uppercase
-                   bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100
-                   focus:outline-none focus:ring-2 focus:ring-indigo-300 dark:focus:ring-indigo-700
-                   placeholder-gray-400 dark:placeholder-gray-600" />
-          <button id="btn-add-airport"
-            class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
-                   bg-indigo-600 hover:bg-indigo-700 text-white transition">
-            + Ajouter
-          </button>
-        </div>
-        <div id="airport-tags" class="flex flex-wrap gap-2 min-h-[28px]">
-          <span class="text-xs text-gray-400 dark:text-gray-600 italic" id="no-airport-hint">Aucun aéroport sélectionné</span>
-        </div>
-      </div>
+        <div class="flex flex-col lg:flex-row lg:items-start gap-4">
+          <!-- Colonne gauche : Aéroports -->
+          <div class="flex-1">
+            <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">Aéroports à surveiller</div>
+            <div class="flex items-center gap-2 mb-3">
+              <input id="airport-input" type="text" maxlength="4"
+                placeholder="IATA (JFK) ou OACI (KJFK)"
+                class="w-48 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm font-mono uppercase
+                       bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100
+                       focus:outline-none focus:ring-2 focus:ring-indigo-300 dark:focus:ring-indigo-700
+                       placeholder-gray-400 dark:placeholder-gray-600" />
+              <button id="btn-add-airport"
+                class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
+                       bg-indigo-600 hover:bg-indigo-700 text-white transition">
+                + Ajouter
+              </button>
+            </div>
+            <div id="airport-tags" class="flex flex-wrap gap-2 min-h-[28px]">
+              <span class="text-xs text-gray-400 dark:text-gray-600 italic" id="no-airport-hint">Aucun aéroport sélectionné</span>
+            </div>
+          </div>
 
-      <!-- Plage horaire optionnelle -->
-      <div id="time-range-section" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-4 mb-6">
-        <div class="flex items-center justify-between mb-3">
-          <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Plage horaire (optionnel)</div>
-          <label class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 cursor-pointer">
-            <input type="checkbox" id="time-range-enabled" class="rounded border-gray-300 dark:border-gray-600" />
-            <span>Personnaliser</span>
-          </label>
-        </div>
-        <div id="time-range-inputs" class="grid grid-cols-1 md:grid-cols-2 gap-3 hidden">
-          <div>
-            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Début</label>
-            <input type="datetime-local" id="time-start" 
-              class="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm
-                     bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100
-                     focus:outline-none focus:ring-2 focus:ring-indigo-300 dark:focus:ring-indigo-700" />
+          <!-- Colonne droite : Plage horaire -->
+          <div class="lg:w-80 border-l border-gray-200 dark:border-gray-700 lg:pl-4">
+            <div class="flex items-center justify-between mb-3">
+              <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Plage horaire</div>
+              <label class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 cursor-pointer">
+                <input type="checkbox" id="time-range-enabled" class="rounded border-gray-300 dark:border-gray-600" />
+                <span>Personnaliser</span>
+              </label>
+            </div>
+            <div id="time-range-inputs" class="space-y-2 hidden">
+              <div>
+                <label class="block text-[11px] text-gray-500 dark:text-gray-400 mb-1">Début</label>
+                <input type="datetime-local" id="time-start" 
+                  class="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5 text-xs
+                         bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100
+                         focus:outline-none focus:ring-2 focus:ring-indigo-300 dark:focus:ring-indigo-700" />
+              </div>
+              <div>
+                <label class="block text-[11px] text-gray-500 dark:text-gray-400 mb-1">Fin</label>
+                <input type="datetime-local" id="time-end" 
+                  class="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5 text-xs
+                         bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100
+                         focus:outline-none focus:ring-2 focus:ring-indigo-300 dark:focus:ring-indigo-700" />
+              </div>
+            </div>
+            <div id="time-range-hint" class="text-[11px] text-gray-400 dark:text-gray-600 italic mt-2">Par défaut : 24 prochaines heures</div>
           </div>
-          <div>
-            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Fin</label>
-            <input type="datetime-local" id="time-end" 
-              class="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm
-                     bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100
-                     focus:outline-none focus:ring-2 focus:ring-indigo-300 dark:focus:ring-indigo-700" />
-          </div>
         </div>
-        <div id="time-range-hint" class="text-xs text-gray-400 dark:text-gray-600 italic mt-2">Par défaut : 24 prochaines heures</div>
       </div>
 
       <!-- Légende -->
@@ -403,12 +407,14 @@ import '../styles/global.css';
     // Gestion plage horaire
     const timeRangeEnabled = document.getElementById('time-range-enabled');
     const timeRangeInputs = document.getElementById('time-range-inputs');
+    const timeRangeHint = document.getElementById('time-range-hint');
     const timeStart = document.getElementById('time-start');
     const timeEnd = document.getElementById('time-end');
 
     timeRangeEnabled.addEventListener('change', () => {
       if (timeRangeEnabled.checked) {
         timeRangeInputs.classList.remove('hidden');
+        timeRangeHint.classList.add('hidden');
         // Initialiser avec maintenant + 24h
         const now = new Date();
         const later = new Date(now.getTime() + 24 * 60 * 60 * 1000);
@@ -416,6 +422,7 @@ import '../styles/global.css';
         timeEnd.value = later.toISOString().slice(0, 16);
       } else {
         timeRangeInputs.classList.add('hidden');
+        timeRangeHint.classList.remove('hidden');
       }
       if (airports.size > 0) fetchChainages();
     });

@@ -1,0 +1,1163 @@
+---
+import '../styles/global.css';
+---
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SkyWatch – Composante Vent de Travers</title>
+  <script is:inline src="/lib/dark-mode.js"></script>
+  <style>
+    @media print {
+      @page { 
+        size: A4 portrait; 
+        margin: 12mm 8mm;
+      }
+
+      /* Forcer les couleurs exactes — sans reset global agressif */
+      * { 
+        -webkit-print-color-adjust: exact !important; 
+        print-color-adjust: exact !important;
+      }
+
+      html, body { 
+        background: white !important; 
+        color: black !important; 
+        font-size: 9pt; 
+        line-height: 1.2; 
+      }
+
+      /* ─ Masquage via IDs stables et classe .no-print ─ */
+      aside, 
+      #btn-refresh, 
+      #btn-print,
+      #config-panel,
+      .no-print { 
+        display: none !important; 
+      }
+
+      /* ─ Layout ─ */
+      body > .flex { 
+        display: block !important; 
+      }
+      .flex-1.min-w-0 { 
+        width: 100% !important; 
+        max-width: 100% !important; 
+        overflow: visible !important; 
+      }
+      .max-w-7xl { 
+        max-width: 100% !important; 
+        padding: 0 !important; 
+        margin: 0 !important; 
+      }
+
+      /* ─ En-tête ─ */
+      #page-header {
+        display: flex !important;
+        align-items: baseline !important;
+        gap: 4mm !important;
+        margin-bottom: 3mm !important;
+        border-bottom: 1.5px solid black !important;
+        padding-bottom: 1.5mm;
+      }
+      h1 { 
+        font-size: 14pt !important; 
+        font-weight: bold; 
+        color: black !important; 
+        margin: 0 !important;
+        border: none !important;
+        padding: 0 !important;
+        background: white !important;
+      }
+      /* Date seulement si l'attribut est présent */
+      h1[data-print-date]::after { 
+        content: " — Impression du " attr(data-print-date); 
+        font-size: 9pt; 
+        font-weight: normal; 
+        color: #555 !important;
+      }
+      h1 + p { display: none !important; }
+      #crosswind-updated { 
+        display: inline !important; 
+        color: #555 !important; 
+        font-size: 8pt !important; 
+      }
+
+      /* ─ Légende des seuils ─ */
+      #threshold-legend { 
+        display: flex !important;
+        flex-wrap: wrap;
+        gap: 4mm;
+        border: 1px solid #ccc !important; 
+        background: #f8f8f8 !important; 
+        padding: 2mm !important; 
+        margin-bottom: 3mm !important;
+      }
+      #threshold-legend span { 
+        color: black !important; 
+        font-size: 7pt !important; 
+      }
+
+      /* ─ Bloc aéroport ─
+         NB : on n'applique PAS break-inside:avoid sur le bloc entier —
+         les navigateurs l'ignorent dès qu'il dépasse la hauteur d'une page.
+         La stratégie est de protéger granulellement chaque sous-partie.       */
+      #crosswind-container > div { 
+        margin-bottom: 4mm;
+        border: 1px solid #333 !important;
+        background: white !important;
+        box-shadow: none !important;
+        /* Forcer un nouveau contexte de formatage pour les sauts de page */
+        display: block !important;
+      }
+
+      /* En-tête aéroport : ne jamais laisser seul en bas de page */
+      #crosswind-container > div > div:first-child { 
+        background: #eeeeee !important; 
+        border-bottom: 1px solid #333 !important; 
+        padding: 1.5mm 3mm !important;
+        break-after: avoid !important;
+        page-break-after: avoid !important;
+      }
+      #crosswind-container > div > div:first-child span { 
+        color: black !important; 
+        background: transparent !important;
+      }
+      #crosswind-container > div > div:first-child span:first-child { 
+        background: #222 !important; 
+        color: white !important; 
+        font-weight: bold;
+        padding: 1mm 2mm !important;
+        border-radius: 2px;
+      }
+
+      /* ─ Grille des tableaux :
+         En impression on passe en colonne unique pour maximiser la hauteur
+         disponible et permettre les sauts de page entre les deux moitiés.    */
+      .grid.grid-cols-1.xl\:grid-cols-2 { 
+        display: block !important;
+      }
+      .grid.grid-cols-1.xl\:grid-cols-2 > div { 
+        background: white !important;
+        border-top: 1px solid #ddd !important;
+        /* Chaque moitié (TAF / Vols) ne se coupe pas en son sein
+           seulement si elle tient sur une page, sinon les lignes
+           individuelles prennent le relais ci-dessous.              */
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+      }
+
+      /* En-tête de sous-section (📋 TAF / ✈️ Vols) : colle à son tableau */
+      .grid.grid-cols-1.xl\:grid-cols-2 > div > div:first-child {
+        background: #f5f5f5 !important;
+        border-bottom: 1px solid #bbb !important;
+        padding: 1mm 2mm !important;
+        break-after: avoid !important;
+        page-break-after: avoid !important;
+      }
+      .grid.grid-cols-1.xl\:grid-cols-2 > div > div:first-child span {
+        font-size: 7pt !important;
+        font-weight: bold;
+        color: #222 !important;
+        background: transparent !important;
+      }
+
+      /* ─ Tableaux ─ */
+      table { 
+        font-size: 7pt !important;
+        width: 100% !important;
+        border-collapse: collapse !important;
+        background: white !important;
+      }
+
+      /* L'en-tête de tableau se répète sur chaque page si le tableau s'étend */
+      thead { 
+        background: #eeeeee !important;
+        display: table-header-group !important;
+      }
+      thead th { 
+        color: black !important; 
+        background: #eeeeee !important;
+        border-bottom: 1px solid #888 !important;
+        padding: 1mm 1.5mm !important;
+        font-weight: bold;
+        text-align: left;
+      }
+
+      /* Chaque ligne de tableau est la vraie unité insécable */
+      tbody tr { 
+        border-bottom: 0.5px solid #ddd !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+        background: white !important;
+      }
+      tbody td { 
+        color: black !important;
+        background: white !important;
+        padding: 0.8mm 1.5mm !important;
+        vertical-align: top;
+      }
+
+      /* ─ Badges de seuil : différenciés visuellement, pas seulement par gris ─
+         OK      → fond blanc + bordure fine         (aucune urgence)
+         Caution → fond gris clair + bordure tiretée (vigilance)
+         Limite  → fond gris moyen + bordure épaisse (attention)
+         Dépassé → fond noir + texte blanc            (alerte maximale)          */
+      .bg-green-100, .dark\:bg-green-900\/30 { 
+        background: white !important; 
+        border: 1px solid #555 !important;
+        color: black !important;
+      }
+      .bg-yellow-100, .dark\:bg-yellow-900\/30 { 
+        background: #e0e0e0 !important; 
+        border: 1.5px dashed #333 !important;
+        color: black !important;
+      }
+      .bg-orange-100, .dark\:bg-orange-900\/30 { 
+        background: #aaaaaa !important; 
+        border: 2px solid #000 !important;
+        color: black !important;
+        font-weight: bold !important;
+      }
+      .bg-red-100, .dark\:bg-red-900\/30 { 
+        background: #111 !important; 
+        border: 2px solid #000 !important;
+        color: white !important;
+        font-weight: bold !important;
+      }
+
+      /* Couleurs texte des badges → noirs sauf rouge inversé */
+      .text-green-700, .dark\:text-green-400,
+      .text-yellow-700, .dark\:text-yellow-400,
+      .text-orange-700, .dark\:text-orange-400 { 
+        color: black !important; 
+      }
+      .text-red-700, .dark\:text-red-400 {
+        color: white !important;
+      }
+
+      /* ─ Badges conditions météo ─ */
+      .bg-blue-100, .dark\:bg-blue-900\/40 { 
+        background: #d8d8d8 !important;
+        color: #111 !important;
+        border: 1px solid #777 !important;
+      }
+      .bg-purple-100, .dark\:bg-purple-900\/40 { 
+        background: #c0c0c0 !important;
+        color: #111 !important;
+        border: 1px solid #555 !important;
+      }
+      .bg-gray-100, .dark\:bg-gray-700 { 
+        background: #eeeeee !important;
+        color: black !important;
+      }
+      .text-blue-700, .dark\:text-blue-300,
+      .text-purple-700, .dark\:text-purple-300,
+      .text-gray-500, .text-gray-600 { 
+        color: #333 !important; 
+      }
+
+      /* ─ Largeurs colonnes ─ */
+      thead th:nth-child(1) { width: 16%; }
+      thead th:nth-child(2) { width: 10%; }
+      thead th:nth-child(3) { width: 22%; }
+      thead th:nth-child(4) { width: 8%; }
+      thead th:nth-child(5) { width: 26%; }
+      thead th:nth-child(6) { width: 18%; }
+
+      /* ─ Section TAF brut masquée via classe sémantique ─ */
+      .taf-raw-section { 
+        display: none !important; 
+      }
+
+      /* ─ Footer impression ─ */
+      .print-info { 
+        display: block !important; 
+        font-size: 7pt; 
+        color: #555 !important;
+        text-align: center; 
+        margin-top: 4mm; 
+        border-top: 0.5px solid #ccc !important;
+        padding-top: 2mm;
+        background: white !important;
+      }
+    }
+    
+    @media screen { 
+      .print-info { 
+        display: none; 
+      } 
+    }
+  </style>
+</head>
+
+<body class="text-gray-900 dark:text-gray-100 min-h-screen flex bg-slate-50 dark:bg-gray-950">
+
+  <!-- ─ Sidebar ─────────────────────────────────────────────────────────────── -->
+  <aside class="hidden lg:flex flex-col w-56 shrink-0 sticky top-0 h-screen
+                border-r border-gray-200 dark:border-gray-800
+                bg-white dark:bg-gray-900
+                px-4 py-6 overflow-y-auto">
+    <div class="mb-6">
+      <div class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">🛡 SkyWatch</div>
+      <div class="text-gray-400 dark:text-gray-500 text-xs mt-1">Superviseur dispatch</div>
+    </div>
+    <nav class="flex flex-col gap-1 text-sm">
+      <div class="text-[10px] uppercase font-semibold text-gray-400 dark:text-gray-600 tracking-widest mb-2">Navigation</div>
+      <a href="/" class="flex items-center gap-2 px-3 py-2 rounded-lg
+                         text-gray-600 dark:text-gray-400
+                         hover:bg-blue-50 dark:hover:bg-blue-950 hover:text-blue-700 dark:hover:text-blue-400
+                         transition font-medium">🗺️ Tableau de bord</a>
+      <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+        <div class="text-[10px] uppercase font-semibold text-gray-400 dark:text-gray-600 tracking-widest mb-2">Outils</div>
+        <a href="/briefing" class="flex items-center gap-2 px-3 py-2 rounded-lg
+                                   text-gray-600 dark:text-gray-400
+                                   hover:bg-purple-50 dark:hover:bg-purple-950 hover:text-purple-700 dark:hover:text-purple-400
+                                   transition font-medium">🗒 Trame briefing</a>
+        <a href="/chainages" class="flex items-center gap-2 px-3 py-2 rounded-lg
+                                    text-gray-600 dark:text-gray-400
+                                    hover:bg-indigo-50 dark:hover:bg-indigo-950 hover:text-indigo-700 dark:hover:text-indigo-400
+                                    transition font-medium">🔗 Chaînages</a>
+        <a href="/crosswind" class="flex items-center gap-2 px-3 py-2 rounded-lg
+                                    bg-blue-50 dark:bg-blue-950
+                                    text-blue-700 dark:text-blue-300 font-semibold">💨 Vent de travers</a>
+      </div>
+    </nav>
+    <div class="mt-auto pt-6 border-t border-gray-100 dark:border-gray-800 text-[10px] text-gray-400 dark:text-gray-600 leading-relaxed">
+      <strong class="text-gray-500 dark:text-gray-400">Horizon :</strong> 24h glissantes<br>
+      Vols AF long-courrier uniquement.
+    </div>
+  </aside>
+
+  <!-- ─ Contenu ─────────────────────────────────────────────────────────────── -->
+  <div class="flex-1 min-w-0 overflow-y-auto">
+    <div class="max-w-7xl mx-auto px-4 py-6 xl:px-8">
+
+      <!-- En-tête -->
+      <div id="page-header" class="flex items-center justify-between flex-wrap gap-4 mb-6">
+        <div>
+          <h1 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">💨 Vent de Travers</h1>
+          <p class="text-gray-500 dark:text-gray-400 text-xs mt-1">Composante crosswind par aéroport — TAF + vols AF</p>
+        </div>
+        <div class="flex items-center gap-3 no-print">
+          <span id="crosswind-updated" class="text-xs text-gray-400 dark:text-gray-500"></span>
+          <button
+            id="btn-print"
+            class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg
+                   border border-gray-200 dark:border-gray-700
+                   bg-white dark:bg-gray-800
+                   hover:bg-gray-50 dark:hover:bg-gray-700
+                   text-gray-600 dark:text-gray-300 transition"
+            title="Imprimer au format A4"
+          >🖨️ Imprimer</button>
+          <button
+            id="btn-refresh"
+            class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg
+                   border border-gray-200 dark:border-gray-700
+                   bg-white dark:bg-gray-800
+                   hover:bg-gray-50 dark:hover:bg-gray-700
+                   text-gray-600 dark:text-gray-300 transition"
+            onclick="loadCrosswind(true)"
+          >🔄 Actualiser</button>
+        </div>
+      </div>
+
+      <!-- Config panel -->
+      <div id="config-panel" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-5 mb-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <!-- Colonne gauche : ajout escale -->
+          <div class="lg:col-span-2">
+            <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">Ajouter une escale (IATA ou OACI)</label>
+            <div class="flex items-center gap-2 mb-4">
+              <input id="airport-input" type="text" maxlength="4" placeholder="Ex : JFK ou KJFK"
+                class="flex-1 max-w-xs border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm font-mono uppercase
+                       bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100
+                       focus:outline-none focus:ring-2 focus:ring-blue-300 dark:focus:ring-blue-700" />
+              <button id="btn-add-airport" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition">
+                + Ajouter
+              </button>
+            </div>
+            <div id="airport-selector" class="flex flex-wrap gap-2 min-h-[32px]"></div>
+          </div>
+          
+          <!-- Colonne droite : récapitulatif limites -->
+          <div class="border-l border-gray-200 dark:border-gray-700 pl-5">
+            <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Limites vent de travers</div>
+            <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] text-gray-600 dark:text-gray-400">
+              <div>
+                <div class="font-semibold text-gray-700 dark:text-gray-300 mb-0.5">777 / 787</div>
+                <div class="space-y-0.5">
+                  <div>• Sèche: <span class="font-mono font-bold">45kt</span></div>
+                  <div>• Mouillée: <span class="font-mono font-bold">40kt</span></div>
+                  <div>• Contaminée: <span class="font-mono font-bold">35kt</span></div>
+                </div>
+              </div>
+              <div>
+                <div class="font-semibold text-gray-700 dark:text-gray-300 mb-0.5">A350 / A330</div>
+                <div class="space-y-0.5">
+                  <div>• Sèche: <span class="font-mono font-bold">40kt</span></div>
+                  <div>• Mouillée: <span class="font-mono font-bold">40kt</span></div>
+                  <div>• Contaminée: <span class="font-mono font-bold">27kt</span></div>
+                </div>
+              </div>
+              <div>
+                <div class="font-semibold text-gray-700 dark:text-gray-300 mb-0.5">A318-321</div>
+                <div class="space-y-0.5">
+                  <div>• Sèche: <span class="font-mono font-bold">38kt</span></div>
+                  <div>• Mouillée: <span class="font-mono font-bold">38kt</span></div>
+                  <div>• Contaminée: <span class="font-mono font-bold">29kt</span></div>
+                </div>
+              </div>
+              <div>
+                <div class="font-semibold text-gray-700 dark:text-gray-300 mb-0.5">A220</div>
+                <div class="space-y-0.5">
+                  <div>• Sèche: <span class="font-mono font-bold">29kt</span></div>
+                  <div>• Mouillée: <span class="font-mono font-bold">29kt</span></div>
+                  <div>• Contaminée: <span class="font-mono font-bold">27kt</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div id="threshold-legend" class="flex flex-wrap gap-3 items-center text-xs font-semibold border-t border-gray-100 dark:border-gray-800 pt-4 mt-4">
+          <span class="text-gray-400 uppercase tracking-wide mr-1">Seuils :</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-green-400"></span> OK</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-yellow-400"></span> Attention</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-orange-400"></span> Limite</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-red-500"></span> Dépassé</span>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div id="crosswind-container">
+        <div class="flex items-center justify-center py-20 text-gray-400">
+          <div class="text-center"><div class="text-4xl mb-3">💨</div><p class="text-sm">Chargement…</p></div>
+        </div>
+      </div>
+
+      <div class="print-info">
+        Document généré par SkyWatch — Ne pas diffuser en dehors du service
+      </div>
+
+    </div>
+  </div>
+
+  <script is:inline>
+  // ─── CONFIG : pistes & QFU par aéroport ───────────────────────────────────
+const AIRPORT_RUNWAYS = {
+  CYOW: { iata: 'YOW', name: 'Ottawa', qfu: [7, 25, 14, 32] },
+  CYUL: { iata: 'YUL', name: 'Montreal', qfu: [6, 24] },
+  CYVR: { iata: 'YVR', name: 'Vancouver', qfu: [8, 26, 13, 31] },
+  CYYZ: { iata: 'YYZ', name: 'Toronto', qfu: [5, 23, 6, 24, 15, 33] },
+  DAAG: { iata: 'ALG', name: 'Alger', qfu: [5, 23, 9, 27] },
+  DAOO: { iata: 'ORN', name: 'Oran', qfu: [7, 25] },
+  DBBB: { iata: 'COO', name: 'Cotonou', qfu: [6, 24] },
+  DIAP: { iata: 'ABJ', name: 'Abidjan', qfu: [3, 21] },
+  DNAA: { iata: 'ABV', name: 'Abuja', qfu: [4, 22] },
+  DNMM: { iata: 'LOS', name: 'Lagos', qfu: [18, 36] },
+  DTTA: { iata: 'TUN', name: 'Tunis', qfu: [1, 19, 11, 29] },
+  DXXX: { iata: 'LFW', name: 'Lome', qfu: [4, 22] },
+  EDDB: { iata: 'BER', name: 'Berlin', qfu: [6, 24] },
+  EDDF: { iata: 'FRA', name: 'Francfort', qfu: [7, 25, 18, 36] },
+  EDDH: { iata: 'HAM', name: 'Hambourg', qfu: [5, 23, 15, 33] },
+  EDDL: { iata: 'DUS', name: 'Dusseldorf', qfu: [5, 23] },
+  EDDM: { iata: 'MUC', name: 'Munich', qfu: [8, 26] },
+  EDDN: { iata: 'NUE', name: 'Nuremberg', qfu: [10, 28] },
+  EDDS: { iata: 'STR', name: 'Stuttgart', qfu: [7, 25] },
+  EDDV: { iata: 'HAJ', name: 'Hanovre', qfu: [9, 27] },
+  EFHK: { iata: 'HEL', name: 'Helsinki', qfu: [4, 22, 15, 33] },
+  EFKT: { iata: 'KTT', name: 'Kittila', qfu: [16, 34] },
+  EFRO: { iata: 'RVN', name: 'Rovaniemi', qfu: [3, 21] },
+  EGBB: { iata: 'BHX', name: 'Birmingham', qfu: [15, 33] },
+  EGCC: { iata: 'MAN', name: 'Manchester', qfu: [5, 23] },
+  EGKK: { iata: 'LGW', name: 'Londres Gatwick', qfu: [8, 26] },
+  EGLL: { iata: 'LHR', name: 'Londres Heathrow', qfu: [9, 27] },
+  EGNT: { iata: 'NCL', name: 'Newcastle', qfu: [7, 25] },
+  EGPH: { iata: 'EDI', name: 'Edimbourg', qfu: [6, 24] },
+  EGPK: { iata: 'PIK', name: 'Glasgow Prestwick', qfu: [2, 20, 12, 30] },
+  EHAM: { iata: 'AMS', name: 'Amsterdam', qfu: [4, 22, 6, 24, 9, 27, 18, 36] },
+  EICK: { iata: 'ORK', name: 'Cork', qfu: [16, 34] },
+  EIDW: { iata: 'DUB', name: 'Dublin', qfu: [10, 28, 16, 34] },
+  EKBI: { iata: 'BLL', name: 'Billund', qfu: [9, 27] },
+  EKCH: { iata: 'CPH', name: 'Copenhague', qfu: [4, 22, 12, 30] },
+  ENBR: { iata: 'BGO', name: 'Bergen', qfu: [17, 35] },
+  ENGM: { iata: 'OSL', name: 'Oslo', qfu: [1, 19] },
+  ENTC: { iata: 'TOS', name: 'Tromso', qfu: [18, 36] },
+  EPKK: { iata: 'KRK', name: 'Cracovie', qfu: [7, 25] },
+  EPWA: { iata: 'WAW', name: 'Varsovie', qfu: [11, 29, 15, 33] },
+  ESGG: { iata: 'GOT', name: 'Goteborg', qfu: [3, 21] },
+  ESSA: { iata: 'ARN', name: 'Stockholm', qfu: [1, 19, 8, 26] },
+  FACT: { iata: 'CPT', name: 'Le Cap', qfu: [1, 19, 16, 34] },
+  FAOR: { iata: 'JNB', name: 'Johannesburg', qfu: [3, 21] },
+  FCBB: { iata: 'BZV', name: 'Brazzaville', qfu: [5, 23] },
+  FCPP: { iata: 'PNR', name: 'Pointe-Noire', qfu: [17, 35] },
+  FGBT: { iata: 'SSG', name: 'Malabo', qfu: [3, 21] },
+  FIMP: { iata: 'MRU', name: 'Maurice', qfu: [14, 32] },
+  FKKD: { iata: 'DLA', name: 'Douala', qfu: [12, 30] },
+  FKYS: { iata: 'NSI', name: 'Yaounde', qfu: [1, 19] },
+  FMEE: { iata: 'RUN', name: 'La Reunion', qfu: [12, 30, 14, 32] },
+  FMMI: { iata: 'TNR', name: 'Antananarivo', qfu: [11, 29] },
+  FNBJ: { iata: 'NBJ', name: 'Luanda', qfu: [6, 24] },
+  FOOL: { iata: 'LBV', name: 'Libreville', qfu: [16, 34] },
+  FTTJ: { iata: 'NDJ', name: 'NDjamena', qfu: [5, 23] },
+  FZAA: { iata: 'FIH', name: 'Kinshasa', qfu: [6, 24] },
+  GMME: { iata: 'RBA', name: 'Rabat', qfu: [3, 21] },
+  GMMN: { iata: 'CMN', name: 'Casablanca', qfu: [17, 35] },
+  GMMX: { iata: 'RAK', name: 'Marrakech', qfu: [10, 28] },
+  GOBD: { iata: 'DSS', name: 'Dakar', qfu: [1, 19] },
+  GUCY: { iata: 'CKY', name: 'Conakry', qfu: [6, 24] },
+  HDAM: { iata: 'JIB', name: 'Djibouti', qfu: [9, 27] },
+  HECA: { iata: 'CAI', name: 'Le Caire', qfu: [5, 23] },
+  HKJK: { iata: 'NBO', name: 'Nairobi', qfu: [6, 24] },
+  HTKJ: { iata: 'JRO', name: 'Kilimandjaro', qfu: [9, 27] },
+  HTZA: { iata: 'ZNZ', name: 'Zanzibar', qfu: [18, 36] },
+  KATL: { iata: 'ATL', name: 'Atlanta', qfu: [8, 26, 9, 27, 10, 28] },
+  KBOS: { iata: 'BOS', name: 'Boston', qfu: [4, 22, 9, 27, 15, 33] },
+  KDEN: { iata: 'DEN', name: 'Denver', qfu: [7, 25, 8, 26, 16, 34, 17, 35] },
+  KDFW: { iata: 'DFW', name: 'Dallas/FW', qfu: [13, 31, 17, 35, 18, 36] },
+  KDTW: { iata: 'DTW', name: 'Detroit', qfu: [3, 21, 4, 22, 9, 27] },
+  KEWR: { iata: 'EWR', name: 'Newark', qfu: [4, 22, 11, 29] },
+  KIAD: { iata: 'IAD', name: 'Washington IAD', qfu: [1, 19, 12, 30] },
+  KIAH: { iata: 'IAH', name: 'Houston', qfu: [8, 26, 9, 27, 15, 33] },
+  KJFK: { iata: 'JFK', name: 'New York JFK', qfu: [4, 22, 13, 31] },
+  KLAS: { iata: 'LAS', name: 'Las Vegas', qfu: [1, 19, 8, 26] },
+  KLAX: { iata: 'LAX', name: 'Los Angeles', qfu: [6, 24, 7, 25] },
+  KMCO: { iata: 'MCO', name: 'Orlando', qfu: [17, 35, 18, 36] },
+  KMIA: { iata: 'MIA', name: 'Miami', qfu: [8, 26, 9, 27, 12, 30] },
+  KMSP: { iata: 'MSP', name: 'Minneapolis', qfu: [4, 22, 12, 30, 17, 35] },
+  KORD: { iata: 'ORD', name: 'Chicago', qfu: [4, 22, 9, 27, 10, 28] },
+  KPHX: { iata: 'PHX', name: 'Phoenix', qfu: [7, 25, 8, 26] },
+  KRDU: { iata: 'RDU', name: 'Raleigh-Durham', qfu: [5, 23] },
+  KSAN: { iata: 'SAN', name: 'San Diego', qfu: [9, 27] },
+  KSEA: { iata: 'SEA', name: 'Seattle', qfu: [16, 34] },
+  KSFO: { iata: 'SFO', name: 'San Francisco', qfu: [1, 19, 10, 28] },
+  LDDU: { iata: 'DBV', name: 'Dubrovnik', qfu: [11, 29] },
+  LDZA: { iata: 'ZAG', name: 'Zagreb', qfu: [4, 22] },
+  LEBB: { iata: 'BIO', name: 'Bilbao', qfu: [10, 28, 12, 30] },
+  LEBL: { iata: 'BCN', name: 'Barcelone', qfu: [2, 20, 6, 24] },
+  LEIB: { iata: 'IBZ', name: 'Ibiza', qfu: [6, 24] },
+  LEMD: { iata: 'MAD', name: 'Madrid', qfu: [14, 32, 18, 36] },
+  LEMG: { iata: 'AGP', name: 'Malaga', qfu: [12, 30, 13, 31] },
+  LEPA: { iata: 'PMI', name: 'Palma', qfu: [6, 24] },
+  LEVC: { iata: 'VLC', name: 'Valence', qfu: [12, 30] },
+  LEZL: { iata: 'SVQ', name: 'Seville', qfu: [9, 27] },
+  LFBD: { iata: 'BOD', name: 'Bordeaux', qfu: [5, 23, 11, 29] },
+  LFBO: { iata: 'TLS', name: 'Toulouse', qfu: [14, 32] },
+  LFBP: { iata: 'PUF', name: 'Pau', qfu: [13, 31] },
+  LFBT: { iata: 'LDE', name: 'Lourdes-Tarbes', qfu: [2, 20] },
+  LFBZ: { iata: 'BIQ', name: 'Biarritz', qfu: [9, 27] },
+  LFKB: { iata: 'BIA', name: 'Bastia', qfu: [16, 34] },
+  LFKC: { iata: 'CLY', name: 'Calvi', qfu: [18, 36] },
+  LFKJ: { iata: 'AJA', name: 'Ajaccio', qfu: [2, 20] },
+  LFKS: { iata: 'FSC', name: 'Figari', qfu: [18, 36] },
+  LFLC: { iata: 'CFE', name: 'Clermont-Ferrand', qfu: [8, 26] },
+  LFLL: { iata: 'LYS', name: 'Lyon', qfu: [17, 35] },
+  LFML: { iata: 'MRS', name: 'Marseille', qfu: [13, 31] },
+  LFMN: { iata: 'NCE', name: 'Nice', qfu: [4, 22] },
+  LFMT: { iata: 'MPL', name: 'Montpellier', qfu: [12, 30] },
+  LFPG: { iata: 'CDG', name: 'Paris CDG', qfu: [8, 26, 9, 27] },
+  LFPO: { iata: 'ORY', name: 'Paris ORY', qfu: [2, 20, 6, 24, 7, 25] },
+  LFQQ: { iata: 'LIL', name: 'Lille', qfu: [1, 19, 8, 26] },
+  LFRB: { iata: 'BES', name: 'Brest', qfu: [7, 25] },
+  LFRD: { iata: 'DNR', name: 'Dinard', qfu: [17, 35] },
+  LFRK: { iata: 'CFR', name: 'Caen', qfu: [13, 31] },
+  LFRN: { iata: 'RNS', name: 'Rennes', qfu: [10, 28] },
+  LFRS: { iata: 'NTE', name: 'Nantes', qfu: [3, 21] },
+  LFSB: { iata: 'BSL', name: 'Bale-Mulhouse', qfu: [7, 25, 15, 33] },
+  LGAV: { iata: 'ATH', name: 'Athenes', qfu: [3, 21] },
+  LGIR: { iata: 'HER', name: 'Heraklion', qfu: [9, 27] },
+  LGMK: { iata: 'JMK', name: 'Mykonos', qfu: [16, 34] },
+  LHBP: { iata: 'BUD', name: 'Budapest', qfu: [13, 31] },
+  LIBD: { iata: 'BRI', name: 'Bari', qfu: [7, 25] },
+  LICC: { iata: 'CTA', name: 'Catane', qfu: [8, 26] },
+  LICJ: { iata: 'PMO', name: 'Palerme', qfu: [2, 20, 7, 25] },
+  LIEO: { iata: 'OLB', name: 'Olbia', qfu: [5, 23] },
+  LIMC: { iata: 'MXP', name: 'Milan Malpensa', qfu: [17, 35] },
+  LIMF: { iata: 'TRN', name: 'Turin', qfu: [18, 36] },
+  LIML: { iata: 'LIN', name: 'Milan Linate', qfu: [17, 35] },
+  LIPE: { iata: 'BLQ', name: 'Bologne', qfu: [12, 30] },
+  LIPX: { iata: 'VRN', name: 'Verone', qfu: [4, 22] },
+  LIPZ: { iata: 'VCE', name: 'Venise', qfu: [4, 22] },
+  LIRF: { iata: 'FCO', name: 'Rome FCO', qfu: [7, 25, 16, 34] },
+  LIRN: { iata: 'NAP', name: 'Naples', qfu: [6, 24] },
+  LIRQ: { iata: 'FLR', name: 'Florence', qfu: [5, 23] },
+  LJLJ: { iata: 'LJU', name: 'Ljubljana', qfu: [12, 30] },
+  LKPR: { iata: 'PRG', name: 'Prague', qfu: [6, 24, 12, 30] },
+  LLBG: { iata: 'TLV', name: 'Tel Aviv', qfu: [3, 21, 8, 26, 12, 30] },
+  LMML: { iata: 'MLA', name: 'Malte', qfu: [5, 23, 13, 31] },
+  LOWW: { iata: 'VIE', name: 'Vienne', qfu: [11, 29, 16, 34] },
+  LPPR: { iata: 'OPO', name: 'Porto', qfu: [17, 35] },
+  LPPT: { iata: 'LIS', name: 'Lisbonne', qfu: [2, 20] },
+  LROP: { iata: 'OTP', name: 'Bucarest', qfu: [8, 26] },
+  LSGG: { iata: 'GVA', name: 'Geneve', qfu: [4, 22] },
+  LSZH: { iata: 'ZRH', name: 'Zurich', qfu: [10, 28, 14, 32, 16, 34] },
+  LTFM: { iata: 'IST', name: 'Istanbul', qfu: [16, 34, 17, 35, 18, 36] },
+  MDPC: { iata: 'PUJ', name: 'Punta Cana', qfu: [8, 26, 9, 27] },
+  MMGL: { iata: 'GDL', name: 'Guadalajara', qfu: [11, 29] },
+  MMMX: { iata: 'MEX', name: 'Mexico City', qfu: [5, 23] },
+  MMSM: { iata: 'NLU', name: 'Mexico NLU', qfu: [4, 22] },
+  MMUN: { iata: 'CUN', name: 'Cancun', qfu: [12, 30] },
+  MPTO: { iata: 'PTY', name: 'Panama City', qfu: [3, 21] },
+  MROC: { iata: 'SJO', name: 'San Jose CR', qfu: [7, 25] },
+  MUHA: { iata: 'HAV', name: 'La Havane', qfu: [6, 24] },
+  MYNN: { iata: 'NAS', name: 'Nassau', qfu: [10, 28, 14, 32] },
+  NTAA: { iata: 'PPT', name: 'Papeete', qfu: [4, 22] },
+  OERK: { iata: 'RUH', name: 'Riyad', qfu: [15, 33] },
+  OLBA: { iata: 'BEY', name: 'Beyrouth', qfu: [3, 21, 16, 34, 17, 35] },
+  OMAA: { iata: 'AUH', name: 'Abu Dhabi', qfu: [13, 31] },
+  OMDB: { iata: 'DXB', name: 'Dubai', qfu: [12, 30] },
+  RJBB: { iata: 'KIX', name: 'Osaka KIX', qfu: [6, 24] },
+  RJTT: { iata: 'HND', name: 'Tokyo Haneda', qfu: [4, 22, 5, 23, 16, 34] },
+  RKSI: { iata: 'ICN', name: 'Seoul ICN', qfu: [15, 33, 16, 34] },
+  RPLL: { iata: 'MNL', name: 'Manille', qfu: [6, 24, 13, 31] },
+  SAEZ: { iata: 'EZE', name: 'Buenos Aires', qfu: [11, 29, 17, 35] },
+  SBFZ: { iata: 'FOR', name: 'Fortaleza', qfu: [13, 31] },
+  SBGL: { iata: 'GIG', name: 'Rio de Janeiro', qfu: [10, 28, 15, 33] },
+  SBGR: { iata: 'GRU', name: 'Sao Paulo', qfu: [10, 28] },
+  SBSV: { iata: 'SSA', name: 'Salvador de Bahia', qfu: [10, 28] },
+  SCEL: { iata: 'SCL', name: 'Santiago', qfu: [17, 35] },
+  SKBO: { iata: 'BOG', name: 'Bogota', qfu: [14, 32] },
+  SOCA: { iata: 'CAY', name: 'Cayenne', qfu: [8, 26] },
+  SPIM: { iata: 'LIM', name: 'Lima', qfu: [16, 34] },
+  TFFF: { iata: 'FDF', name: 'Fort-de-France', qfu: [10, 28] },
+  TFFR: { iata: 'PTP', name: 'Pointe-a-Pitre', qfu: [12, 30] },
+  TNCM: { iata: 'SXM', name: 'Sint Maarten', qfu: [10, 28] },
+  UDYZ: { iata: 'EVN', name: 'Erevan', qfu: [8, 26] },
+  UGTB: { iata: 'TBS', name: 'Tbilissi', qfu: [13, 31] },
+  VABB: { iata: 'BOM', name: 'Mumbai', qfu: [9, 27, 14, 32] },
+  VHHH: { iata: 'HKG', name: 'Hong Kong', qfu: [7, 25] },
+  VIDP: { iata: 'DEL', name: 'Delhi', qfu: [9, 27, 10, 28, 11, 29] },
+  VOBL: { iata: 'BLR', name: 'Bengaluru', qfu: [9, 27] },
+  VTBS: { iata: 'BKK', name: 'Bangkok', qfu: [1, 19, 2, 20] },
+  VTSP: { iata: 'HKT', name: 'Phuket', qfu: [9, 27] },
+  VVTS: { iata: 'SGN', name: 'Ho Chi Minh', qfu: [7, 25] },
+  WMKK: { iata: 'KUL', name: 'Kuala Lumpur', qfu: [14, 32, 15, 33] },
+  WSSS: { iata: 'SIN', name: 'Singapour', qfu: [2, 20] },
+  ZBAA: { iata: 'PEK', name: 'Pekin', qfu: [1, 19, 18, 36] },
+  ZSPD: { iata: 'PVG', name: 'Shanghai', qfu: [15, 33, 16, 34, 17, 35] },
+};
+
+
+  // ─── Mapping complet IATA → ICAO (191 escales AF) ─────────────────────────
+  const AF_IATA_TO_ICAO = {
+    // Afrique
+    ABJ: 'DIAP', ABV: 'DNAA', BZV: 'FCBB', CKY: 'GUCY', CMN: 'GMMN', COO: 'DBBB',
+    CPT: 'FACT', DLA: 'FKKD', DSS: 'GOBD', FIH: 'FZAA', JIB: 'HDAM', JNB: 'FAOR',
+    JRO: 'HTKJ', LBV: 'FOOL', LFW: 'DXXX', LOS: 'DNMM', MRU: 'FIMP', NBJ: 'FNBJ',
+    NBO: 'HKJK', NDJ: 'FTTJ', NKC: 'GQNN', NSI: 'FKYS', PNR: 'FCPP', RAK: 'GMMX',
+    RBA: 'GMME', RUN: 'FMEE', SSG: 'FGBT', TNG: 'GMTN', TNR: 'FMMI', TUN: 'DTTA',
+    ZNZ: 'HTZA', ORN: 'DAOO',
+    // Amériques
+    ATL: 'KATL', BEL: 'SBBE', BOG: 'SKBO', BOS: 'KBOS', CAY: 'SOCA', CUN: 'MMUN',
+    DEN: 'KDEN', DFW: 'KDFW', DTW: 'KDTW', EWR: 'KEWR', EZE: 'SAEZ', FDF: 'TFFF',
+    FOR: 'SBFZ', GDL: 'MMGL', GIG: 'SBGL', GRU: 'SBGR', HAV: 'MUHA', IAD: 'KIAD',
+    IAH: 'KIAH', JFK: 'KJFK', LAS: 'KLAS', LAX: 'KLAX', LIM: 'SPIM', MCO: 'KMCO',
+    MEX: 'MMMX', MIA: 'KMIA', MSP: 'KMSP', NAS: 'MYNN', NLU: 'MMSM', ORD: 'KORD',
+    PHX: 'KPHX', PPT: 'NTAA', PTP: 'TFFR', PTY: 'MPTO', PUJ: 'MDPC', RDU: 'KRDU',
+    RUH: 'OERK', SAN: 'KSAN', SCL: 'SCEL', SEA: 'KSEA', SFO: 'KSFO', SJO: 'MROC',
+    SSA: 'SBSV', SXM: 'TNCM', YOW: 'CYOW', YUL: 'CYUL', YVR: 'CYVR', YYZ: 'CYYZ',
+    // Asie / Pacifique
+    BKK: 'VTBS', BLR: 'VOBL', BOM: 'VABB', DEL: 'VIDP', HKG: 'VHHH', HKT: 'VTSP',
+    HND: 'RJTT', ICN: 'RKSI', KIX: 'RJBB', KUL: 'WMKK', MNL: 'RPLL', PEK: 'ZBAA',
+    PVG: 'ZSPD', SGN: 'VVTS', SIN: 'WSSS',
+    // Moyen-Orient
+    AUH: 'OMAA', BEY: 'OLBA', DXB: 'OMDB', EVN: 'UDYZ', IST: 'LTFM', TBS: 'UGTB',
+    TLV: 'LLBG',
+    // Europe
+    AGP: 'LEMG', AJA: 'LFKJ', ALG: 'DAAG', AMS: 'EHAM', ARN: 'ESSA', ATH: 'LGAV',
+    BCN: 'LEBL', BER: 'EDDB', BES: 'LFRB', BGO: 'ENBR', BHX: 'EGBB', BIA: 'LFKB',
+    BIO: 'LEBB', BIQ: 'LFBZ', BLL: 'EKBI', BLQ: 'LIPE', BOD: 'LFBD', BRI: 'LIBD',
+    BSL: 'LFSB', BUD: 'LHBP', CAI: 'HECA', CDG: 'LFPG', CFE: 'LFLC', CFR: 'LFRK',
+    CLY: 'LFKC', CPH: 'EKCH', CTA: 'LICC', DBV: 'LDDU', DNR: 'LFRD', DUB: 'EIDW',
+    DUS: 'EDDL', EDI: 'EGPH', FCO: 'LIRF', FLR: 'LIRQ', FRA: 'EDDF', FSC: 'LFKS',
+    GOT: 'ESGG', GVA: 'LSGG', HAJ: 'EDDV', HAM: 'EDDH', HEL: 'EFHK', HER: 'LGIR',
+    IBZ: 'LEIB', JMK: 'LGMK', KRK: 'EPKK', KTT: 'EFKT', LGW: 'EGKK', LHR: 'EGLL',
+    LIL: 'LFQQ', LIN: 'LIML', LIS: 'LPPT', LJU: 'LJLJ', LYS: 'LFLL', MAD: 'LEMD',
+    MAN: 'EGCC', MLA: 'LMML', MPL: 'LFMT', MRS: 'LFML', MUC: 'EDDM', MXP: 'LIMC',
+    NAP: 'LIRN', NCE: 'LFMN', NCL: 'EGNT', NTE: 'LFRS', NUE: 'EDDN', OLB: 'LIEO',
+    OPO: 'LPPR', ORK: 'EICK', ORY: 'LFPO', OSL: 'ENGM', OTP: 'LROP', PIK: 'EGPK',
+    PMI: 'LEPA', PMO: 'LICJ', PRG: 'LKPR', PUF: 'LFBP', RNS: 'LFRN', RVN: 'EFRO',
+    STR: 'EDDS', SVQ: 'LEZL', TLS: 'LFBO', TOS: 'ENTC', TRN: 'LIMF', VCE: 'LIPZ',
+    VIE: 'LOWW', VLC: 'LEVC', VRN: 'LIPX', WAW: 'EPWA', ZAG: 'LDZA', ZRH: 'LSZH',
+    LDE: 'LFBT',
+  };
+
+  // ─── Limites vent de travers par type d'avion et code piste ─────────────────────
+  const AIRCRAFT_LIMITS = {
+    // 777 et 787
+    '77W': { label: '777-300ER', code6: 45, code5: 40, code4: 35 },
+    '772': { label: '777-200ER', code6: 45, code5: 40, code4: 35 },
+    '789': { label: '787-9',     code6: 45, code5: 40, code4: 35 },
+    // A350 et A330
+    '359': { label: 'A350-900',  code6: 40, code5: 40, code4: 27 },
+    '332': { label: 'A330-200',  code6: 40, code5: 40, code4: 27 },
+    '333': { label: 'A330-300',  code6: 40, code5: 40, code4: 27 },
+    // A320 family
+    '320': { label: 'A320',      code6: 38, code5: 38, code4: 29 },
+    '321': { label: 'A321',      code6: 38, code5: 38, code4: 29 },
+    '319': { label: 'A319',      code6: 38, code5: 38, code4: 29 },
+    '318': { label: 'A318',      code6: 38, code5: 38, code4: 29 },
+    // A220
+    '223': { label: 'A220-300',  code6: 29, code5: 29, code4: 27 },
+    '220': { label: 'A220-100',  code6: 29, code5: 29, code4: 27 },
+    // E190 (conservatif)
+    'E90': { label: 'E190',      code6: 29, code5: 29, code4: 27 },
+  };
+  const DEFAULT_LIMIT = { label: 'Inconnu', code6: 29, code5: 29, code4: 27 };
+
+  // Code 6 : piste sèche (pas de précipitations)
+  // Code 5 : piste mouillée (RA, TSRA)
+  // Code 4 : piste contaminée (SN)
+  const WET_WX_TOKENS = /\b(RA|TSRA|SHRA|DZ|DZRA)\b/;       // Mouillée = code 5
+  const CONTAMINATED_WX_TOKENS = /\b(SN|FZRA|RASN|SNRA|GR|GS|PL)\b/;  // Contaminée = code 4
+
+  function getRunwayCode(fcsts, targetEpochSec) {
+    if (!fcsts || targetEpochSec == null) return 6; // Sèche par défaut
+    const matching = fcsts.filter(f =>
+      f.timeFrom != null && f.timeTo != null &&
+      targetEpochSec >= f.timeFrom && targetEpochSec < f.timeTo
+    );
+    for (const f of matching) {
+      const wx = f.wxString ?? '';
+      if (CONTAMINATED_WX_TOKENS.test(wx)) return 4;
+      if (WET_WX_TOKENS.test(wx)) return 5;
+    }
+    return 6;
+  }
+
+  function getRunwayCodeForFcst(fcst) {
+    const wx = fcst.wxString ?? '';
+    if (CONTAMINATED_WX_TOKENS.test(wx)) return 4;
+    if (WET_WX_TOKENS.test(wx)) return 5;
+    return 6;
+  }
+
+  function normalizeQfu(raw) {
+    const trimmed = String(raw ?? '').trim();
+    if (!trimmed) return null;
+    const n = parseInt(trimmed, 10);
+    if (isNaN(n) || n < 0 || n > 36) return null;
+    return n;
+  }
+
+  function computeCrosswind(windDir, windSpd, qfu) {
+    if (!windSpd || windSpd === 0 || windDir == null || qfu == null) {
+      return { crosswind: 0, headwind: 0, vrb: false };
+    }
+    if (String(windDir).toUpperCase() === 'VRB' || windDir === 'VRB') {
+      return { crosswind: Math.round(windSpd), headwind: 0, vrb: true };
+    }
+    const dir = Number(windDir);
+    if (isNaN(dir)) {
+      return { crosswind: Math.round(windSpd), headwind: 0, vrb: true };
+    }
+    const diff = Math.abs(dir - qfu * 10);
+    const angle = Math.min(diff, 360 - diff);
+    const cw = Math.abs(windSpd * Math.sin((angle * Math.PI) / 180));
+    const hw = windSpd * Math.cos((angle * Math.PI) / 180);
+    return { crosswind: Math.round(cw), headwind: Math.round(hw), vrb: false };
+  }
+
+  function getWindAtTime(fcsts, targetEpochSec) {
+    if (!fcsts || fcsts.length === 0) return { base: null, tempos: [] };
+    const baseGroups = fcsts.filter(f => {
+      const ci = f.changeIndicator ?? '';
+      return !ci.includes('TEMPO') && !ci.includes('PROB')
+          && f.timeFrom != null && f.timeTo != null
+          && targetEpochSec >= f.timeFrom && targetEpochSec < f.timeTo
+          && f.wdir != null && f.wspd != null;
+    });
+    const base = baseGroups.length ? baseGroups.reduce((a,b) => a.timeFrom > b.timeFrom ? a : b) : null;
+    const tempos = fcsts.filter(f => {
+      const ci = f.changeIndicator ?? '';
+      return (ci.includes('TEMPO') || ci.includes('PROB'))
+          && f.timeFrom != null && f.timeTo != null
+          && targetEpochSec >= f.timeFrom && targetEpochSec < f.timeTo
+          && f.wdir != null && f.wspd != null;
+    });
+    return { base, tempos };
+  }
+
+  function getCrosswindColor(cw, limit) {
+    const r = cw / limit;
+    if (r < 0.6) return { bg: 'bg-green-100 dark:bg-green-900/30',   text: 'text-green-700 dark:text-green-400',   label: 'OK' };
+    if (r < 0.8) return { bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-700 dark:text-yellow-400', label: 'Attention' };
+    if (r < 1.0) return { bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-700 dark:text-orange-400', label: 'Limite' };
+    return         { bg: 'bg-red-100 dark:bg-red-900/30',            text: 'text-red-700 dark:text-red-400',       label: '⚠ Dépassé' };
+  }
+
+  const ALL_AF_IATA = Object.keys(AF_IATA_TO_ICAO).sort();
+  let selectedIcaos = new Set([]);
+  let customQfuByIcao = new Map();
+  let cachedData = { tafs: {}, flights: {} };
+
+  function renderAirportSelector() {
+    const container = document.getElementById('airport-selector');
+    if (!container) return;
+    const icaoList = [...selectedIcaos].sort();
+    if (icaoList.length === 0) {
+      container.innerHTML = '<span class="text-xs text-gray-400 dark:text-gray-600 italic">Aucune escale sélectionnée</span>';
+      return;
+    }
+    container.innerHTML = icaoList.map(icao => {
+      const iataKey = Object.keys(AF_IATA_TO_ICAO).find(k => AF_IATA_TO_ICAO[k] === icao) ?? icao;
+      return `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-semibold bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700">
+        ${iataKey}
+        <button onclick="removeAirport('${icao}')" class="font-bold leading-none opacity-60 hover:opacity-100">✕</button>
+      </span>`;
+    }).join('');
+  }
+
+  function removeAirport(icao) {
+    selectedIcaos.delete(icao);
+    customQfuByIcao.delete(icao);
+    renderAirportSelector();
+    renderResults(cachedData.tafs, cachedData.flights);
+  }
+
+  function addAirport() {
+    const input = document.getElementById('airport-input');
+    const val = input.value.trim().toUpperCase();
+    if (!val || val.length < 3) return;
+    let icao = null;
+    if (val.length === 4 && /^[A-Z]{4}$/.test(val)) icao = val;
+    else if (AF_IATA_TO_ICAO[val]) icao = AF_IATA_TO_ICAO[val];
+    if (!icao) { alert(`Code inconnu : ${val}`); return; }
+    selectedIcaos.add(icao);
+    input.value = '';
+    renderAirportSelector();
+    loadCrosswind(false);
+  }
+
+  function changeQfu(icao, newQfu) {
+    customQfuByIcao.set(icao, normalizeQfu(newQfu));
+    renderResults(cachedData.tafs, cachedData.flights);
+  }
+
+  function setCustomQfuForAirport(icao) {
+    const qfuValue = prompt(`Saisir le QFU pour ${icao} (ex: 27, 09, 18)`);
+    if (!qfuValue) return;
+    const normalized = normalizeQfu(qfuValue);
+    if (normalized === null) {
+      alert('QFU invalide. Veuillez entrer un nombre entre 0 et 36.');
+      return;
+    }
+    customQfuByIcao.set(icao, normalized);
+    renderResults(cachedData.tafs, cachedData.flights);
+  }
+
+  document.getElementById('btn-add-airport')?.addEventListener('click', addAirport);
+  document.getElementById('airport-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') addAirport(); });
+
+  document.getElementById('btn-print')?.addEventListener('click', () => {
+    setH1PrintDate();
+    window.print();
+  });
+
+  function setH1PrintDate() {
+    const h1 = document.querySelector('h1');
+    if (!h1) return;
+    if (!h1.hasAttribute('data-print-date')) {
+      const now = new Date();
+      const dateStr = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      h1.setAttribute('data-print-date', dateStr);
+    }
+  }
+
+  function cleanupPrintDate() {
+    const h1 = document.querySelector('h1');
+    if (h1) h1.removeAttribute('data-print-date');
+  }
+
+  window.addEventListener('beforeprint', setH1PrintDate);
+  window.addEventListener('afterprint', cleanupPrintDate);
+
+  async function loadCrosswind(force = false) {
+    const container = document.getElementById('crosswind-container');
+
+    if (selectedIcaos.size === 0) {
+      container.innerHTML = `
+        <div class="flex items-center justify-center py-20 text-gray-400">
+          <div class="text-center">
+            <div class="text-4xl mb-3">✈️</div>
+            <p class="text-sm">Ajoutez une escale ci-dessus pour commencer.</p>
+          </div>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="flex items-center justify-center py-20 text-gray-400">
+        <div class="text-center"><div class="text-2xl mb-3 animate-spin">↻</div><p class="text-sm">Récupération TAF + vols…</p></div>
+      </div>`;
+
+    const qs = `icaos=${[...selectedIcaos].join(',')}${force ? '&force=1' : ''}`;
+
+    try {
+      const res = await fetch(`/api/crosswind.json?${qs}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status} — /api/crosswind.json`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      cachedData = { tafs: data.tafs ?? {}, flights: data.flights ?? {} };
+      renderResults(cachedData.tafs, cachedData.flights);
+      const el = document.getElementById('crosswind-updated');
+      if (el) el.textContent = 'Mis à jour ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + 'z';
+    } catch (err) {
+      container.innerHTML = `
+        <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-5 text-red-700 dark:text-red-400 text-sm">
+          ⚠️ Erreur lors du chargement : ${err.message ?? err}
+        </div>`;
+    }
+  }
+
+  function renderResults(tafByIcao, flightsByIcao) {
+    const html = [...selectedIcaos]
+      .map(icao => renderAirportBlock(icao, tafByIcao[icao] ?? null, flightsByIcao[icao] ?? []))
+      .join('');
+    document.getElementById('crosswind-container').innerHTML =
+      html || '<p class="text-gray-400 text-sm text-center py-10">Aucune donnée disponible.</p>';
+  }
+
+  function renderAirportBlock(icao, tafData, flights) {
+    const iataKey = Object.keys(AF_IATA_TO_ICAO).find(k => AF_IATA_TO_ICAO[k] === icao) ?? icao;
+    const apName = AIRPORT_RUNWAYS[icao]?.name ?? icao;
+    const defaultQfuList = AIRPORT_RUNWAYS[icao]?.qfu ?? [];
+    const hasDefaultQfu = defaultQfuList.length > 0;
+    const activeQfu = customQfuByIcao.get(icao) ?? (hasDefaultQfu ? defaultQfuList[0] : null);
+
+    const fcsts = tafData?.fcsts ?? [];
+    const periodsWithWind = fcsts.filter(f => f.wdir != null && f.wspd != null);
+
+    // QFU selector
+    let qfuSelector = '';
+    if (hasDefaultQfu) {
+      const qfuOptions = defaultQfuList.map(q => `<option value="${q}" ${q === activeQfu ? 'selected' : ''}>QFU ${String(q).padStart(2,'0')}</option>`).join('');
+      qfuSelector = `
+        <div class="flex items-center gap-2">
+          <label class="text-xs text-gray-500">Piste :</label>
+          <select onchange="changeQfu('${icao}', this.value)" class="text-xs font-mono font-semibold px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+            ${qfuOptions}
+          </select>
+        </div>`;
+    } else {
+      qfuSelector = `
+        <div class="flex items-center gap-2">
+          ${activeQfu !== null 
+            ? `<span class="text-xs font-mono font-semibold px-2 py-1 rounded bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700">QFU ${String(activeQfu).padStart(2,'0')}</span>`
+            : '<span class="text-xs text-orange-500 font-semibold">⚠️ QFU non défini</span>'
+          }
+          <button onclick="setCustomQfuForAirport('${icao}')" class="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition">
+            ${activeQfu !== null ? '✏️ Modifier' : '+ Définir QFU'}
+          </button>
+        </div>`;
+    }
+
+    let tafRows = '';
+    if (!tafData) {
+      tafRows = `<tr><td colspan="6" class="px-4 py-3 text-xs text-gray-400 italic">TAF non disponible pour ${icao}</td></tr>`;
+    } else if (periodsWithWind.length === 0) {
+      tafRows = `<tr><td colspan="6" class="px-4 py-3 text-xs text-gray-400 italic">Aucun vent dans le TAF</td></tr>`;
+    } else if (activeQfu === null) {
+      tafRows = `<tr><td colspan="6" class="px-4 py-3 text-xs text-orange-500 italic">⚠️ Définir un QFU pour calculer les composantes</td></tr>`;
+    } else {
+      for (const f of periodsWithWind) {
+        const ci = f.changeIndicator
+          ? `<span class="text-[10px] font-semibold px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500">${f.changeIndicator}</span>`
+          : '<span class="text-[10px] text-gray-400">BASE</span>';
+        const isVrb = String(f.wdir ?? '').toUpperCase() === 'VRB';
+        const { crosswind: cwBase, vrb } = computeCrosswind(f.wdir, f.wspd, activeQfu);
+        const cwGust = f.wgst ? computeCrosswind(f.wdir, f.wgst, activeQfu).crosswind : null;
+        const worstCw = cwGust ?? cwBase;
+        const code = getRunwayCodeForFcst(f);
+        const activeLimit = code === 4 ? 27 : (code === 5 ? 38 : 38); // Limite conservatrice pour TAF générique
+        const status = getCrosswindColor(worstCw, activeLimit);
+        
+        // Afficher uniquement le code météo sans le label de condition
+        const wxString = f.wxString ?? '';
+        const codeBadge = wxString
+          ? `<span class="ml-1 px-1 py-0.5 rounded text-[9px] font-bold ${code === 6 ? 'bg-gray-100 dark:bg-gray-700 text-gray-500' : (code === 5 ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' : 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300')}">${wxString}</span>`
+          : '';
+        
+        const dirStr = isVrb ? 'VRB' : String(Number(f.wdir)).padStart(3, '0');
+        const windStr = `${dirStr}/${String(f.wspd).padStart(2,'0')}${f.wgst ? 'G'+f.wgst : ''}KT`;
+        const qfuCell = vrb
+          ? '<span class="text-gray-400 italic text-[10px]">VRB</span>'
+          : String(activeQfu).padStart(2,'0');
+        const cwNote = vrb
+          ? ' <span class="text-gray-400 text-[10px]">(pire cas)</span>'
+          : (cwGust != null ? ` <span class="text-gray-400 text-[10px]">(G ${cwGust})</span>` : '');
+        const cwStr = `${cwBase} kt${cwNote}`;
+        tafRows += `
+          <tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition ${code !== 6 ? 'bg-blue-50/30 dark:bg-blue-900/10' : ''}">
+            <td class="px-4 py-2 text-xs font-mono text-gray-500 whitespace-nowrap">${formatEpoch(f.timeFrom)}→${formatEpoch(f.timeTo)}</td>
+            <td class="px-4 py-2 text-xs">${ci}</td>
+            <td class="px-4 py-2 text-xs font-mono font-semibold text-gray-800 dark:text-gray-200">${windStr}${codeBadge}</td>
+            <td class="px-4 py-2 text-xs font-mono text-gray-500">${qfuCell}</td>
+            <td class="px-4 py-2 text-xs font-bold font-mono ${status.text}">${cwStr}</td>
+            <td class="px-4 py-2 text-xs"><span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${status.bg} ${status.text}">${status.label}</span></td>
+          </tr>`;
+      }
+    }
+
+    const sortedFlights = [...flights].sort((a,b) =>
+      new Date(a.estimatedTouchDownTime ?? a.scheduledArrival).getTime() -
+      new Date(b.estimatedTouchDownTime ?? b.scheduledArrival).getTime()
+    );
+
+    let flightRows = '';
+    if (sortedFlights.length === 0) {
+      flightRows = `<tr><td colspan="5" class="px-3 py-3 text-xs text-gray-400 italic">Aucun vol AF prévu</td></tr>`;
+    } else if (activeQfu === null) {
+      flightRows = `<tr><td colspan="5" class="px-3 py-3 text-xs text-orange-500 italic">⚠️ Définir un QFU pour calculer les composantes</td></tr>`;
+    } else {
+      for (const flight of sortedFlights) {
+        const eta = flight.estimatedTouchDownTime || flight.scheduledArrival;
+        const etaEpochSec = eta ? Math.floor(new Date(eta).getTime() / 1000) : null;
+        const etaStr = eta
+          ? new Date(eta).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + 'z'
+          : '–';
+        const { base: baseWind, tempos: tempoWinds } = etaEpochSec ? getWindAtTime(fcsts, etaEpochSec) : { base: null, tempos: [] };
+        const acInfo = AIRCRAFT_LIMITS[flight.aircraftType ?? ''] ?? DEFAULT_LIMIT;
+        let windCell = `<td class="px-3 py-2 text-xs text-gray-400 font-mono">–</td>`;
+        let riskCell = `<td class="px-3 py-2 text-xs text-gray-400">–</td>`;
+        if (baseWind) {
+          const spd = baseWind.wgst ?? baseWind.wspd;
+          const { crosswind, vrb } = computeCrosswind(baseWind.wdir, spd, activeQfu);
+          const code = getRunwayCode(fcsts, etaEpochSec);
+          const activeLimit = code === 6 ? acInfo.code6 : (code === 5 ? acInfo.code5 : acInfo.code4);
+          const status = getCrosswindColor(crosswind, activeLimit);
+          const isVrbBase = String(baseWind.wdir ?? '').toUpperCase() === 'VRB';
+          const dirStr = isVrbBase ? 'VRB' : String(Number(baseWind.wdir)).padStart(3,'0');
+          const windStr = `${dirStr}/${String(baseWind.wspd).padStart(2,'0')}${baseWind.wgst ? 'G'+baseWind.wgst : ''}KT`;
+          const qfuStr = vrb ? '<span class="text-gray-400 italic">VRB</span>' : `QFU ${String(activeQfu).padStart(2,'0')}`;
+          const codeLabel = code === 6 ? 'SÈCHE' : (code === 5 ? 'MOUILLÉE' : 'CONTAMINÉE');
+          const condBadge = code === 6
+            ? `<span class="px-1 py-0.5 rounded text-[9px] font-bold bg-gray-100 dark:bg-gray-700 text-gray-500">${codeLabel}</span>`
+            : (code === 5
+              ? `<span class="px-1 py-0.5 rounded text-[9px] font-bold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">${codeLabel}</span>`
+              : `<span class="px-1 py-0.5 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">${codeLabel}</span>`);
+          let tempoStr = '';
+          if (tempoWinds.length > 0) {
+            let worstCw = 0, worstTempo = null;
+            for (const t of tempoWinds) {
+              const { crosswind: cwt } = computeCrosswind(t.wdir, t.wgst ?? t.wspd, activeQfu);
+              if (cwt > worstCw) { worstCw = cwt; worstTempo = t; }
+            }
+            if (worstTempo) {
+              const tempoCode = getRunwayCodeForFcst(worstTempo);
+              const tempoLimit = tempoCode === 6 ? acInfo.code6 : (tempoCode === 5 ? acInfo.code5 : acInfo.code4);
+              const { text: tt, label: tl } = getCrosswindColor(worstCw, tempoLimit);
+              tempoStr = `<div class="text-[10px] ${tt} mt-0.5">${worstTempo.changeIndicator ?? 'TEMPO'} : ${worstCw} kt (${tl})</div>`;
+            }
+          }
+          windCell = `<td class="px-3 py-2 text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap">${windStr} <span class="text-gray-400">${qfuStr}</span></td>`;
+          riskCell = `<td class="px-3 py-2 text-xs">
+            <div class="flex flex-wrap items-center gap-1">
+              <span class="font-bold font-mono ${status.text}">${crosswind} kt</span>
+              ${condBadge}
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${status.bg} ${status.text}">${status.label}</span>
+            </div>
+            <div class="text-[10px] text-gray-400 mt-0.5">${acInfo.label} · max ${activeLimit} kt (code ${code})</div>
+            ${tempoStr}
+          </td>`;
+        }
+        flightRows += `
+          <tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition">
+            <td class="px-3 py-2 text-xs font-bold font-mono text-gray-800 dark:text-gray-200">${flight.flightId ?? '–'}</td>
+            <td class="px-3 py-2 text-xs font-mono text-blue-600 dark:text-blue-400 font-semibold">${etaStr}</td>
+            <td class="px-3 py-2 text-xs font-mono text-gray-500">${flight.aircraftType ?? '–'}</td>
+            ${windCell}${riskCell}
+          </tr>`;
+      }
+    }
+
+    return `
+      <div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm mb-5 overflow-hidden">
+        <div class="flex items-center gap-3 px-5 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+          <span class="text-lg font-black font-mono text-gray-800 dark:text-gray-100">${iataKey}</span>
+          <span class="text-sm text-gray-500">${apName}</span>
+          <div class="ml-auto">${qfuSelector}</div>
+        </div>
+        <div class="grid grid-cols-1 xl:grid-cols-2 divide-y xl:divide-y-0 xl:divide-x divide-gray-100 dark:divide-gray-700">
+          <div>
+            <div class="px-5 py-2 border-b border-gray-100 dark:border-gray-700">
+              <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">📋 TAF — Travers par période</span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm text-left">
+                <thead class="text-[10px] uppercase text-gray-400 border-b border-gray-100 dark:border-gray-700">
+                  <tr>
+                    <th class="px-4 py-2">Période (UTC)</th><th class="px-4 py-2">Type</th>
+                    <th class="px-4 py-2">Vent TAF</th><th class="px-4 py-2">QFU</th>
+                    <th class="px-4 py-2">Composante travers</th><th class="px-4 py-2">État</th>
+                  </tr>
+                </thead>
+                <tbody>${tafRows}</tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <div class="px-5 py-2 border-b border-gray-100 dark:border-gray-700">
+              <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">✈️ Vols AF — Travers à l'ETA</span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm text-left">
+                <thead class="text-[10px] uppercase text-gray-400 border-b border-gray-100 dark:border-gray-700">
+                  <tr>
+                    <th class="px-3 py-2">Vol</th><th class="px-3 py-2">ETA</th>
+                    <th class="px-3 py-2">Avion</th><th class="px-3 py-2">Vent prévu</th>
+                    <th class="px-3 py-2">Travers / Risque</th>
+                  </tr>
+                </thead>
+                <tbody>${flightRows}</tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="taf-raw-section border-t border-gray-100 dark:border-gray-700">
+          <button
+            class="w-full flex items-center justify-between px-5 py-2.5 text-xs text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition font-medium"
+            onclick="(function(btn){
+              const block = btn.nextElementSibling;
+              const isHidden = block.classList.contains('hidden');
+              block.classList.toggle('hidden');
+              btn.querySelector('.taf-toggle-icon').textContent = isHidden ? '▼' : '▶';
+            })(this)"
+          >
+            <span>📄 TAF brut — ${icao}</span>
+            <span class="taf-toggle-icon text-gray-400">▶</span>
+          </button>
+          <div class="hidden px-5 pb-4">
+            <pre class="font-mono text-[11px] text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 whitespace-pre-wrap break-words leading-relaxed">${
+              tafData?.rawTaf
+                ? formatTafForDisplay(tafData.rawTaf.trim())
+                : 'TAF non disponible'
+            }</pre>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function formatTafForDisplay(rawTaf) {
+    // Ne pas ajouter de saut de ligne si PROB30 ou PROB40 est suivi de TEMPO
+    return rawTaf
+      .replace(/\s+(TEMPO|BECMG)\s+/g, '\n$1 ')
+      .replace(/\s+(PROB\d{2})\s+(?!TEMPO)/g, '\n$1 ')
+      .trim();
+  }
+
+  function formatEpoch(epochSec) {
+    if (!epochSec) return '–';
+    return new Date(epochSec * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + 'z';
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    renderAirportSelector();
+    loadCrosswind(false);
+  });
+  </script>
+
+</body>
+</html>

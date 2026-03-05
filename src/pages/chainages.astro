@@ -416,7 +416,24 @@ import '../styles/global.css';
     document.getElementById('btn-add-airport').addEventListener('click', addAirport);
     document.getElementById('airport-input').addEventListener('keydown', e => { if (e.key === 'Enter') addAirport(); });
     document.getElementById('btn-refresh').addEventListener('click', () => fetchChainages(true));
-    document.getElementById('btn-print').addEventListener('click', () => window.print());
+    
+    // Bouton imprimer : redessiner PUIS ouvrir la boîte de dialogue
+    document.getElementById('btn-print').addEventListener('click', () => {
+      isPrintMode = true;
+      const h1 = document.querySelector('h1');
+      if (h1) {
+        const now = new Date();
+        const dateStr = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        h1.setAttribute('data-print-date', dateStr);
+      }
+      if (lastData) {
+        renderChainages(lastData);
+        // Attendre que le rendu soit terminé avant d'ouvrir la fenêtre d'impression
+        setTimeout(() => window.print(), 100);
+      } else {
+        window.print();
+      }
+    });
 
     function hhmm(ms) {
       const d = new Date(ms);
@@ -673,11 +690,11 @@ import '../styles/global.css';
     window.addEventListener('resize', () => { if (lastData) renderChainages(lastData); });
     window.addEventListener('themechange', () => { if (lastData) renderChainages(lastData); });
 
-    // Gestion impression : passer en mode N&B puis redessiner
+    // Gestion impression via Ctrl+P
     window.addEventListener('beforeprint', () => {
       isPrintMode = true;
       const h1 = document.querySelector('h1');
-      if (h1) {
+      if (h1 && !h1.hasAttribute('data-print-date')) {
         const now = new Date();
         const dateStr = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
         h1.setAttribute('data-print-date', dateStr);
@@ -687,6 +704,8 @@ import '../styles/global.css';
 
     window.addEventListener('afterprint', () => {
       isPrintMode = false;
+      const h1 = document.querySelector('h1');
+      if (h1) h1.removeAttribute('data-print-date');
       if (lastData) renderChainages(lastData);
     });
 

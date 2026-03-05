@@ -1,7 +1,7 @@
 import type { Alert } from './geoUtils';
 import { getAirportsNearCoords, regionFromCoords } from './geoUtils';
 
-const LAUNCH_WINDOW_HOURS = 72;
+const LAUNCH_WINDOW_HOURS = 12;
 
 const SEVERITY_BY_HOURS: { maxH: number; severity: 'red' | 'orange' | 'yellow' }[] = [
   { maxH: 12,  severity: 'red' },
@@ -76,19 +76,11 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
       const providerName: string    = launch.launch_service_provider?.name ?? provider;
       const nrUrl = nextrocketUrl(launch);
 
-      // Dernier update = le plus récent (updates est ordonné du plus ancien au plus récent)
       const updates = Array.isArray(launch.updates) ? launch.updates : [];
       const lastUpdate = updates.length > 0 ? updates[updates.length - 1] : null;
       const lastUpdateUrl: string     = lastUpdate?.info_url ?? '';
       const lastUpdateComment: string = lastUpdate?.comment  ?? '';
 
-      /**
-       * Ordre de priorité des liens :
-       * 1. updates[last].info_url  → lien spécifique à la mission (communiqué, tweet, page lancement)
-       * 2. NextRocket.space        → fiche lisible agrégateur si slug disponible
-       * 3. provider.info_url       → site générique du provider (fallback)
-       * On n'expose jamais l'URL LL2 brute.
-       */
       const sourceLinks: { label: string; url: string }[] = [];
       if (lastUpdateUrl)   sourceLinks.push({
         label: lastUpdateComment ? lastUpdateComment.slice(0, 45) : 'Page lancement',
@@ -124,7 +116,7 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
       } as any);
     }
 
-    console.log(`[LaunchLib] ${alerts.length} lancement(s) impactant(s) dans les 72h`);
+    console.log(`[LaunchLib] ${alerts.length} lancement(s) impactant(s) dans les 12h`);
   } catch (e) {
     console.error('[LaunchLib]', e);
   }

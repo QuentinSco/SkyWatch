@@ -70,8 +70,9 @@ export const GET: APIRoute = async () => {
     });
   }
 
-  const now   = Date.now();
-  const now6h = now + 6 * 60 * 60 * 1000;
+  const now    = Date.now();
+  const now10h = now + 10 * 60 * 60 * 1000;
+  const now12h = now + 12 * 60 * 60 * 1000;
 
   try {
     const [tafRisks, allFlights, cyclones, vaacAlerts, tailwind, launches] = await Promise.all([
@@ -95,10 +96,13 @@ export const GET: APIRoute = async () => {
         const eta = f.estimatedTouchDownTime ?? f.scheduledArrival;
         if (!eta) return false;
         const ms = new Date(eta).getTime();
-        return ms >= now && ms <= now6h;
+        return ms >= now && ms <= now10h;
       });
 
       for (const threat of taf.threats) {
+        // Alertes rouges uniquement
+        if (threat.severity !== 'red') continue;
+
         for (const flight of flights) {
           const etaIso = flight.estimatedTouchDownTime ?? flight.scheduledArrival!;
           const etaMs  = new Date(etaIso).getTime();
@@ -132,10 +136,6 @@ export const GET: APIRoute = async () => {
       a.etaZ.localeCompare(b.etaZ)
     );
 
-    // Déduplication par vol + destination :
-    // Plusieurs phénomènes peuvent toucher le même vol (Orages + CB/TCU + Vis réduite).
-    // On garde uniquement le plus sévère. Comme le tableau est déjà trié rouge en premier,
-    // la première occurrence de chaque clé vol+dest est forcément la plus impactante.
     const dedupKeys = new Set<string>();
     const meteoHorsEurope = meteoLines.filter(line => {
       const k = `${line.flight}-${line.iata}`;
@@ -157,15 +157,14 @@ export const GET: APIRoute = async () => {
       vaac:        a.region     ?? '',
     }));
 
-    // ── Tirs de fusée ───────────────────────────────────────────────────────────────────────────────────────
+    // ── Tirs de fusée — horizon 12h ───────────────────────────────────────────────────────────────────────────
     const tirsFusee = launches
       .filter(l => {
         const start = new Date(l.validFrom).getTime();
-        return start >= now && start <= now6h;
+        return start >= now && start <= now12h;
       })
       .map(l => {
-        // Extrait site du headline : "🚀 Provider — Rocket | SiteName | ..."
-        const parts = l.headline.split('|').map(p => p.trim());
+        const parts = l.headline.split('|').map((p: string) => p.trim());
         const site  = parts[1] ?? 'Site inconnu';
         const rocket = parts[0]?.split('—')[1]?.trim() ?? 'Lanceur';
         const provider = parts[0]?.split('—')[0]?.replace(/🚀/g, '').trim() ?? '?';

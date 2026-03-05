@@ -140,7 +140,7 @@ import '../styles/global.css';
       return PALETTE[airportColor.get(code)];
     }
 
-    // ── Tokens de couleur adaptés au thème ───────────────────────────────
+    // ── Tokens de couleur adaptés au thème ──────────────────────────────────────
     function themeTokens() {
       const dark = document.documentElement.classList.contains('dark');
       return {
@@ -297,8 +297,8 @@ import '../styles/global.css';
 
         const textColor = known ? '#fff' : pal.text;
         ctx.font = FONT_SM; ctx.textBaseline = 'middle';
-        const arrLabel = '↓ ' + stop.arrFlight;
-        const depLabel = stop.depFlight ? '↑ ' + stop.depFlight : null;
+        const arrLabel = '↓ ' + stop.arrFlight;
+        const depLabel = stop.depFlight ? '↑ ' + stop.depFlight : null;
         const arrW = ctx.measureText(arrLabel).width;
         const depW = depLabel ? ctx.measureText(depLabel).width : 0;
 
@@ -472,7 +472,7 @@ import '../styles/global.css';
         renderChainages(await r.json());
       } catch (e) {
         document.getElementById('chainages-result').innerHTML =
-          `<div class="text-red-500 text-sm text-center py-8">⚠️ Erreur : ${e.message}</div>`;
+          `<div class="text-red-500 text-sm text-center py-8">⚠️ Erreur : ${e.message}</div>`;
       }
     }
 

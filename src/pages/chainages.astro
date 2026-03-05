@@ -344,19 +344,6 @@ import '../styles/global.css';
     // ── Tokens de couleur adaptés au thème ──────────────────────────────────────
     function themeTokens() {
       const dark = document.documentElement.classList.contains('dark');
-      // En impression, forcer noir et blanc
-      if (window.matchMedia && window.matchMedia('print').matches) {
-        return {
-          bg:      '#ffffff',
-          bgAlt:   '#f9f9f9',
-          grid:    '#cccccc',
-          sep:     '#666666',
-          label:   '#333333',
-          regText: '#000000',
-          typeText:'#666666',
-          now:     '#000000',
-        };
-      }
       return {
         bg:      dark ? '#111827' : '#ffffff',
         bgAlt:   dark ? '#0f172a' : '#f8fafc',
@@ -366,6 +353,20 @@ import '../styles/global.css';
         regText: dark ? '#e2e8f0' : '#1e293b',
         typeText:dark ? '#475569' : '#94a3b8',
         now:     '#f87171',
+      };
+    }
+
+    // Pour l'impression : palette noir et blanc
+    function printTokens() {
+      return {
+        bg:      '#ffffff',
+        bgAlt:   '#f9f9f9',
+        grid:    '#cccccc',
+        sep:     '#666666',
+        label:   '#333333',
+        regText: '#000000',
+        typeText:'#666666',
+        now:     '#000000',
       };
     }
 
@@ -385,6 +386,7 @@ import '../styles/global.css';
     const airports = new Set();
     let lastData   = null;
     const tooltip  = document.getElementById('ch-tooltip');
+    let isPrintMode = false;
 
     function renderTags() {
       const container = document.getElementById('airport-tags');
@@ -435,7 +437,7 @@ import '../styles/global.css';
     }
 
     function drawAirportTimeline(canvas, stops, wStart, wEnd, pal) {
-      const T      = themeTokens();
+      const T      = isPrintMode ? printTokens() : themeTokens();
       const nowMs  = Date.now();
       const span   = wEnd - wStart;
       const dpr    = window.devicePixelRatio || 1;
@@ -497,15 +499,16 @@ import '../styles/global.css';
         const xDep  = known ? Math.min(toX(stop.depMs), canvasW - CHART_PAD) : canvasW - CHART_PAD;
         const barW  = Math.max(xDep - xArr, 4);
 
-        // En impression : utiliser niveaux de gris au lieu des couleurs
-        const isPrint = window.matchMedia && window.matchMedia('print').matches;
-        ctx.fillStyle = isPrint ? (known ? '#cccccc' : '#eeeeee') : (known ? pal.bar : pal.barU);
+        // Couleurs adaptées au mode
+        ctx.fillStyle = isPrintMode 
+          ? (known ? '#cccccc' : '#eeeeee') 
+          : (known ? pal.bar : pal.barU);
         ctx.beginPath(); ctx.roundRect(xArr, barY, barW, BAR_H, 4); ctx.fill();
 
         if (!known) {
           ctx.save();
           ctx.beginPath(); ctx.roundRect(xArr, barY, barW, BAR_H, 4); ctx.clip();
-          ctx.strokeStyle = isPrint ? '#999999' : pal.hatch;
+          ctx.strokeStyle = isPrintMode ? '#999999' : pal.hatch;
           ctx.lineWidth = 1.5;
           for (let xi = xArr + barW * 0.55; xi < xDep + BAR_H; xi += 6) {
             ctx.beginPath(); ctx.moveTo(xi, barY); ctx.lineTo(xi - BAR_H, barY + BAR_H); ctx.stroke();
@@ -513,7 +516,7 @@ import '../styles/global.css';
           ctx.restore();
         }
 
-        const textColor = isPrint ? '#000000' : (known ? '#fff' : pal.text);
+        const textColor = isPrintMode ? '#000000' : (known ? '#fff' : pal.text);
         ctx.font = FONT_SM; ctx.textBaseline = 'middle';
         const arrLabel = '↓ ' + stop.arrFlight;
         const depLabel = stop.depFlight ? '↑ ' + stop.depFlight : null;
@@ -531,7 +534,7 @@ import '../styles/global.css';
             ctx.font = FONT;
             const durW = ctx.measureText(durLabel).width;
             if ((xDep - 5 - depW - 6) - (xArr + 5 + arrW + 6) > durW) {
-              ctx.fillStyle = isPrint ? '#666666' : 'rgba(255,255,255,0.8)';
+              ctx.fillStyle = isPrintMode ? '#666666' : 'rgba(255,255,255,0.8)';
               ctx.textAlign = 'center';
               ctx.fillText(durLabel, (xArr + xDep) / 2, midY);
             }
@@ -650,7 +653,6 @@ import '../styles/global.css';
           section.appendChild(header);
           const wrap = document.createElement('div');
           wrap.className = 'timeline-wrap';
-          // Fond du canvas wrapper adapté au thème
           wrap.style.background = dark ? '#111827' : '#ffffff';
           const canvas = document.createElement('canvas');
           canvas.className = 'timeline-canvas';
@@ -669,21 +671,23 @@ import '../styles/global.css';
     }
 
     window.addEventListener('resize', () => { if (lastData) renderChainages(lastData); });
-
-    // Redessine quand l'utilisateur bascule le thème
     window.addEventListener('themechange', () => { if (lastData) renderChainages(lastData); });
 
-    // Redessine avant l'impression pour appliquer les styles noir et blanc
-    window.addEventListener('beforeprint', () => { if (lastData) renderChainages(lastData); });
-
-    // Ajouter la date d'impression au titre
+    // Gestion impression : passer en mode N&B puis redessiner
     window.addEventListener('beforeprint', () => {
+      isPrintMode = true;
       const h1 = document.querySelector('h1');
       if (h1) {
         const now = new Date();
         const dateStr = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
         h1.setAttribute('data-print-date', dateStr);
       }
+      if (lastData) renderChainages(lastData);
+    });
+
+    window.addEventListener('afterprint', () => {
+      isPrintMode = false;
+      if (lastData) renderChainages(lastData);
     });
 
     async function fetchChainages(force = false) {

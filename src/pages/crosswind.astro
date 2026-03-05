@@ -12,7 +12,7 @@ import '../styles/global.css';
 
 <body class="text-gray-900 dark:text-gray-100 min-h-screen flex bg-slate-50 dark:bg-gray-950">
 
-  <!-- ─ Sidebar ───────────────────────────────────────────── -->
+  <!-- ─ Sidebar ─────────────────────────────────────────── -->
   <aside class="hidden lg:flex flex-col w-56 shrink-0 sticky top-0 h-screen
                 border-r border-gray-200 dark:border-gray-800
                 bg-white dark:bg-gray-900
@@ -48,7 +48,7 @@ import '../styles/global.css';
     </div>
   </aside>
 
-  <!-- ─ Contenu ───────────────────────────────────────────── -->
+  <!-- ─ Contenu ─────────────────────────────────────────── -->
   <div class="flex-1 min-w-0 overflow-y-auto">
     <div class="max-w-7xl mx-auto px-4 py-6 xl:px-8">
 
@@ -74,18 +74,42 @@ import '../styles/global.css';
 
       <!-- Config panel -->
       <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-5 mb-6">
-        <div class="flex flex-wrap items-end gap-4">
-          <div class="flex-1 min-w-[200px]">
-            <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">Escales à analyser</label>
-            <div id="airport-selector" class="flex flex-wrap gap-2"></div>
+        <div class="flex flex-wrap items-start gap-4 mb-5">
+          <div class="flex-1 min-w-[280px]">
+            <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">Ajouter une escale (IATA ou OACI)</label>
+            <div class="flex items-center gap-2">
+              <input id="airport-input" type="text" maxlength="4" placeholder="Ex : JFK ou KJFK"
+                class="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm font-mono uppercase
+                       bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100
+                       focus:outline-none focus:ring-2 focus:ring-blue-300 dark:focus:ring-blue-700" />
+              <button id="btn-add-airport" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition">
+                + Ajouter
+              </button>
+            </div>
           </div>
-          <div class="flex flex-wrap gap-3 items-center text-xs font-semibold">
-            <span class="text-gray-400 uppercase tracking-wide mr-1">Seuils :</span>
-            <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-green-400"></span> OK</span>
-            <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-yellow-400"></span> Attention</span>
-            <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-orange-400"></span> Limite</span>
-            <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-red-500"></span> Dépassé</span>
+          <div class="flex-1 min-w-[280px]">
+            <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">QFU personnalisé (optionnel)</label>
+            <div class="flex items-center gap-2">
+              <input id="qfu-input" type="text" maxlength="3" placeholder="Ex : 27 ou 090"
+                class="w-24 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm font-mono text-center
+                       bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100
+                       focus:outline-none focus:ring-2 focus:ring-blue-300 dark:focus:ring-blue-700" />
+              <button id="btn-set-qfu" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition">
+                Définir QFU
+              </button>
+              <button id="btn-reset-qfu" class="px-2 py-1.5 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition">
+                ✖ Réinitialiser
+              </button>
+            </div>
           </div>
+        </div>
+        <div id="airport-selector" class="flex flex-wrap gap-2 min-h-[32px] mb-4"></div>
+        <div class="flex flex-wrap gap-3 items-center text-xs font-semibold border-t border-gray-100 dark:border-gray-800 pt-4">
+          <span class="text-gray-400 uppercase tracking-wide mr-1">Seuils :</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-green-400"></span> OK</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-yellow-400"></span> Attention</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-orange-400"></span> Limite</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-red-500"></span> Dépassé</span>
         </div>
       </div>
 
@@ -100,37 +124,81 @@ import '../styles/global.css';
   </div>
 
   <script is:inline>
-  // ─── CONFIG : pistes & QFU par aéroport ───────────────────────────────────
+  // ─── CONFIG : pistes & QFU par aéroport ───────────────────────────
   const AIRPORT_RUNWAYS = {
     LFPG: { iata: 'CDG', name: 'Paris CDG',          qfu: [80, 260, 90, 270, 82, 262, 92, 272] },
-    LFPO: { iata: 'ORY', name: 'Paris ORY',           qfu: [80, 260, 60, 240] },
-    EGLL: { iata: 'LHR', name: 'Londres LHR',         qfu: [90, 270] },
-    EHAM: { iata: 'AMS', name: 'Amsterdam AMS',       qfu: [180, 360, 60, 240, 40, 220, 90, 270, 120, 300] },
-    EDDF: { iata: 'FRA', name: 'Francfort FRA',       qfu: [70, 250, 80, 260] },
-    LEMD: { iata: 'MAD', name: 'Madrid MAD',           qfu: [180, 360, 140, 320] },
-    LIRF: { iata: 'FCO', name: 'Rome FCO',             qfu: [70, 250, 160, 340] },
-    LFMN: { iata: 'NCE', name: 'Nice NCE',             qfu: [40, 220] },
-    KJFK: { iata: 'JFK', name: 'New York JFK',         qfu: [40, 220, 130, 310] },
-    KLAX: { iata: 'LAX', name: 'Los Angeles LAX',      qfu: [60, 240, 70, 250] },
-    KORD: { iata: 'ORD', name: 'Chicago ORD',          qfu: [100, 280, 90, 270, 140, 320] },
-    KMIA: { iata: 'MIA', name: 'Miami MIA',             qfu: [90, 270, 120, 300] },
-    KBOS: { iata: 'BOS', name: 'Boston BOS',           qfu: [40, 220, 150, 330] },
-    OMDB: { iata: 'DXB', name: 'Dubaï DXB',            qfu: [120, 300] },
-    VHHH: { iata: 'HKG', name: 'Hong Kong HKG',        qfu: [70, 250] },
-    RJTT: { iata: 'HND', name: 'Tokyo HND',             qfu: [160, 340, 40, 220] },
-    RJAA: { iata: 'NRT', name: 'Tokyo NRT',             qfu: [160, 340] },
-    WSSS: { iata: 'SIN', name: 'Singapour SIN',        qfu: [20, 200] },
-    YSSY: { iata: 'SYD', name: 'Sydney SYD',            qfu: [70, 250, 160, 340] },
-    FAOR: { iata: 'JNB', name: 'Johannesburg JNB',     qfu: [30, 210] },
-    FACT: { iata: 'CPT', name: 'Le Cap CPT',            qfu: [10, 190, 70, 250] },
-    HECA: { iata: 'CAI', name: 'Le Caire CAI',          qfu: [50, 230] },
-    CYYZ: { iata: 'YYZ', name: 'Toronto YYZ',           qfu: [60, 240, 150, 330] },
-    CYUL: { iata: 'YUL', name: 'Montréal YUL',          qfu: [60, 240, 100, 280] },
-    SBGR: { iata: 'GRU', name: 'São Paulo GRU',         qfu: [100, 280, 90, 270] },
-    SCEL: { iata: 'SCL', name: 'Santiago SCL',          qfu: [170, 350] },
-    VIDP: { iata: 'DEL', name: 'Delhi DEL',             qfu: [110, 290, 270, 90] },
-    ZBAA: { iata: 'PEK', name: 'Pékin PEK',             qfu: [180, 360, 10, 190] },
-    ZSPD: { iata: 'PVG', name: 'Shanghai PVG',          qfu: [170, 350] },
+    LFPO: { iata: 'ORY', name: 'Paris ORY',          qfu: [80, 260, 60, 240] },
+    EGLL: { iata: 'LHR', name: 'Londres LHR',        qfu: [90, 270] },
+    EHAM: { iata: 'AMS', name: 'Amsterdam AMS',      qfu: [180, 360, 60, 240, 40, 220, 90, 270, 120, 300] },
+    EDDF: { iata: 'FRA', name: 'Francfort FRA',      qfu: [70, 250, 80, 260] },
+    LEMD: { iata: 'MAD', name: 'Madrid MAD',         qfu: [180, 360, 140, 320] },
+    LIRF: { iata: 'FCO', name: 'Rome FCO',           qfu: [70, 250, 160, 340] },
+    LFMN: { iata: 'NCE', name: 'Nice NCE',           qfu: [40, 220] },
+    KJFK: { iata: 'JFK', name: 'New York JFK',       qfu: [40, 220, 130, 310] },
+    KLAX: { iata: 'LAX', name: 'Los Angeles LAX',    qfu: [60, 240, 70, 250] },
+    KORD: { iata: 'ORD', name: 'Chicago ORD',        qfu: [100, 280, 90, 270, 140, 320] },
+    KMIA: { iata: 'MIA', name: 'Miami MIA',          qfu: [90, 270, 120, 300] },
+    KBOS: { iata: 'BOS', name: 'Boston BOS',         qfu: [40, 220, 150, 330] },
+    OMDB: { iata: 'DXB', name: 'Dubaï DXB',          qfu: [120, 300] },
+    VHHH: { iata: 'HKG', name: 'Hong Kong HKG',      qfu: [70, 250] },
+    RJTT: { iata: 'HND', name: 'Tokyo HND',          qfu: [160, 340, 40, 220] },
+    RJAA: { iata: 'NRT', name: 'Tokyo NRT',          qfu: [160, 340] },
+    WSSS: { iata: 'SIN', name: 'Singapour SIN',      qfu: [20, 200] },
+    YSSY: { iata: 'SYD', name: 'Sydney SYD',         qfu: [70, 250, 160, 340] },
+    FAOR: { iata: 'JNB', name: 'Johannesburg JNB',   qfu: [30, 210] },
+    FACT: { iata: 'CPT', name: 'Le Cap CPT',         qfu: [10, 190, 70, 250] },
+    HECA: { iata: 'CAI', name: 'Le Caire CAI',       qfu: [50, 230] },
+    CYYZ: { iata: 'YYZ', name: 'Toronto YYZ',        qfu: [60, 240, 150, 330] },
+    CYUL: { iata: 'YUL', name: 'Montréal YUL',       qfu: [60, 240, 100, 280] },
+    SBGR: { iata: 'GRU', name: 'São Paulo GRU',      qfu: [100, 280, 90, 270] },
+    SCEL: { iata: 'SCL', name: 'Santiago SCL',       qfu: [170, 350] },
+    VIDP: { iata: 'DEL', name: 'Delhi DEL',          qfu: [110, 290, 270, 90] },
+    ZBAA: { iata: 'PEK', name: 'Pékin PEK',          qfu: [180, 360, 10, 190] },
+    ZSPD: { iata: 'PVG', name: 'Shanghai PVG',       qfu: [170, 350] },
+  };
+
+  // ─── Mapping complet IATA → ICAO (191 escales AF) ────────────────
+  const AF_IATA_TO_ICAO = {
+    // Afrique
+    ABJ: 'DIAP', ABV: 'DNAA', BZV: 'FCBB', CKY: 'GUCY', CMN: 'GMMN', COO: 'DBBB',
+    CPT: 'FACT', DLA: 'FKKD', DSS: 'GOBD', FIH: 'FZAA', JIB: 'HDAM', JNB: 'FAOR',
+    JRO: 'HTKJ', LBV: 'FOOL', LFW: 'DXXX', LOS: 'DNMM', MRU: 'FIMP', NBJ: 'FNBJ',
+    NBO: 'HKJK', NDJ: 'FTTJ', NKC: 'GQNN', NSI: 'FKYS', PNR: 'FCPP', RAK: 'GMMX',
+    RBA: 'GMME', RUN: 'FMEE', SSG: 'FGBT', TNG: 'GMTN', TNR: 'FMMI', TUN: 'DTTA',
+    ZNZ: 'HTZA', ORN: 'DAOO',
+    // Amériques
+    ATL: 'KATL', BEL: 'SBBE', BOG: 'SKBO', BOS: 'KBOS', CAY: 'SOCA', CUN: 'MMUN',
+    DEN: 'KDEN', DFW: 'KDFW', DTW: 'KDTW', EWR: 'KEWR', EZE: 'SAEZ', FDF: 'TFFF',
+    FOR: 'SBFZ', GDL: 'MMGL', GIG: 'SBGL', GRU: 'SBGR', HAV: 'MUHA', IAD: 'KIAD',
+    IAH: 'KIAH', JFK: 'KJFK', LAS: 'KLAS', LAX: 'KLAX', LIM: 'SPIM', MCO: 'KMCO',
+    MEX: 'MMMX', MIA: 'KMIA', MSP: 'KMSP', NAS: 'MYNN', NLU: 'MMSM', ORD: 'KORD',
+    PHX: 'KPHX', PPT: 'NTAA', PTP: 'TFFR', PTY: 'MPTO', PUJ: 'MDPC', RDU: 'KRDU',
+    RUH: 'OERK', SAN: 'KSAN', SCL: 'SCEL', SEA: 'KSEA', SFO: 'KSFO', SJO: 'MROC',
+    SSA: 'SBSV', SXM: 'TNCM', YOW: 'CYOW', YUL: 'CYUL', YVR: 'CYVR', YYZ: 'CYYZ',
+    // Asie / Pacifique
+    BKK: 'VTBS', BLR: 'VOBL', BOM: 'VABB', DEL: 'VIDP', HKG: 'VHHH', HKT: 'VTSP',
+    HND: 'RJTT', ICN: 'RKSI', KIX: 'RJBB', KUL: 'WMKK', MNL: 'RPLL', PEK: 'ZBAA',
+    PVG: 'ZSPD', SGN: 'VVTS', SIN: 'WSSS',
+    // Moyen-Orient
+    AUH: 'OMAA', BEY: 'OLBA', DXB: 'OMDB', EVN: 'UDYZ', IST: 'LTFM', TBS: 'UGTB',
+    TLV: 'LLBG',
+    // Europe
+    AGP: 'LEMG', AJA: 'LFKJ', ALG: 'DAAG', AMS: 'EHAM', ARN: 'ESSA', ATH: 'LGAV',
+    BCN: 'LEBL', BER: 'EDDB', BES: 'LFRB', BGO: 'ENBR', BHX: 'EGBB', BIA: 'LFKB',
+    BIO: 'LEBB', BIQ: 'LFBZ', BLL: 'EKBI', BLQ: 'LIPE', BOD: 'LFBD', BRI: 'LIBD',
+    BSL: 'LFSB', BUD: 'LHBP', CAI: 'HECA', CDG: 'LFPG', CFE: 'LFLC', CFR: 'LFRK',
+    CLY: 'LFKC', CPH: 'EKCH', CTA: 'LICC', DBV: 'LDDU', DNR: 'LFRD', DUB: 'EIDW',
+    DUS: 'EDDL', EDI: 'EGPH', FCO: 'LIRF', FLR: 'LIRQ', FRA: 'EDDF', FSC: 'LFKS',
+    GOT: 'ESGG', GVA: 'LSGG', HAJ: 'EDDV', HAM: 'EDDH', HEL: 'EFHK', HER: 'LGIR',
+    IBZ: 'LEIB', JMK: 'LGMK', KRK: 'EPKK', KTT: 'EFKT', LGW: 'EGKK', LHR: 'EGLL',
+    LIL: 'LFQQ', LIN: 'LIML', LIS: 'LPPT', LJU: 'LJLJ', LYS: 'LFLL', MAD: 'LEMD',
+    MAN: 'EGCC', MLA: 'LMML', MPL: 'LFMT', MRS: 'LFML', MUC: 'EDDM', MXP: 'LIMC',
+    NAP: 'LIRN', NCE: 'LFMN', NCL: 'EGNT', NTE: 'LFRS', NUE: 'EDDN', OLB: 'LIEO',
+    OPO: 'LPPR', ORK: 'EICK', ORY: 'LFPO', OSL: 'ENGM', OTP: 'LROP', PIK: 'EGPK',
+    PMI: 'LEPA', PMO: 'LICJ', PRG: 'LKPR', PUF: 'LFBP', RNS: 'LFRN', RVN: 'EFRO',
+    STR: 'EDDS', SVQ: 'LEZL', TLS: 'LFBO', TOS: 'ENTC', TRN: 'LIMF', VCE: 'LIPZ',
+    VIE: 'LOWW', VLC: 'LEVC', VRN: 'LIPX', WAW: 'EPWA', ZAG: 'LDZA', ZRH: 'LSZH',
+    LDE: 'LFBT',
   };
 
   const AIRCRAFT_LIMITS = {
@@ -166,6 +234,15 @@ import '../styles/global.css';
     return WET_WX_TOKENS.test(fcst.wxString ?? '');
   }
 
+  function normalizeQfu(raw) {
+    const trimmed = String(raw ?? '').trim();
+    if (!trimmed) return null;
+    const n = parseInt(trimmed, 10);
+    if (isNaN(n) || n < 0 || n > 360) return null;
+    const normalized = n % 360;
+    return Math.round(normalized / 10);
+  }
+
   function computeCrosswind(windDir, windSpd, qfuList) {
     if (!windSpd || windSpd === 0 || windDir == null) {
       return { crosswind: 0, bestQfu: qfuList[0] ?? null, headwind: 0, vrb: false };
@@ -179,7 +256,7 @@ import '../styles/global.css';
     }
     let minCrosswind = Infinity, bestQfu = null, bestHeadwind = 0;
     for (const qfu of qfuList) {
-      const diff = Math.abs(dir - qfu);
+      const diff = Math.abs(dir - qfu * 10);
       const angle = Math.min(diff, 360 - diff);
       const cw = Math.abs(windSpd * Math.sin((angle * Math.PI) / 180));
       if (cw < minCrosswind) {
@@ -219,28 +296,74 @@ import '../styles/global.css';
     return         { bg: 'bg-red-100 dark:bg-red-900/30',            text: 'text-red-700 dark:text-red-400',       label: '⚠ Dépassé' };
   }
 
-  const ALL_ICAOS = Object.keys(AIRPORT_RUNWAYS);
+  const ALL_AF_IATA = Object.keys(AF_IATA_TO_ICAO).sort();
   let selectedIcaos = new Set([]);
+  let customQfuByIcao = new Map();
 
   function renderAirportSelector() {
-    document.getElementById('airport-selector').innerHTML = ALL_ICAOS.map(icao => {
-      const ap = AIRPORT_RUNWAYS[icao];
-      const sel = selectedIcaos.has(icao);
-      return `<button data-icao="${icao}" onclick="toggleAirport('${icao}')"
-        class="px-2.5 py-1 rounded-lg text-xs font-bold border transition ${
-          sel
-            ? 'bg-blue-600 text-white border-blue-600'
-            : 'bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-blue-400'
-        }">${ap.iata}</button>`;
+    const container = document.getElementById('airport-selector');
+    if (!container) return;
+    const icaoList = [...selectedIcaos].sort();
+    if (icaoList.length === 0) {
+      container.innerHTML = '<span class="text-xs text-gray-400 dark:text-gray-600 italic">Aucune escale sélectionnée</span>';
+      return;
+    }
+    container.innerHTML = icaoList.map(icao => {
+      const iataKey = Object.keys(AF_IATA_TO_ICAO).find(k => AF_IATA_TO_ICAO[k] === icao) ?? icao;
+      const qfuStr = customQfuByIcao.has(icao)
+        ? `QFU ${String(customQfuByIcao.get(icao)).padStart(2,'0')}`
+        : (AIRPORT_RUNWAYS[icao] ? 'QFU défaut' : 'QFU inconnu');
+      return `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-semibold bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700">
+        ${iataKey} <span class="text-[10px] opacity-60">(${qfuStr})</span>
+        <button onclick="removeAirport('${icao}')" class="font-bold leading-none opacity-60 hover:opacity-100">✕</button>
+      </span>`;
     }).join('');
   }
 
-  function toggleAirport(icao) {
-    if (selectedIcaos.has(icao)) selectedIcaos.delete(icao);
-    else selectedIcaos.add(icao);
+  function removeAirport(icao) {
+    selectedIcaos.delete(icao);
+    customQfuByIcao.delete(icao);
     renderAirportSelector();
     loadCrosswind(false);
   }
+
+  function addAirport() {
+    const input = document.getElementById('airport-input');
+    const val = input.value.trim().toUpperCase();
+    if (!val || val.length < 3) return;
+    let icao = null;
+    if (val.length === 4 && /^[A-Z]{4}$/.test(val)) icao = val;
+    else if (AF_IATA_TO_ICAO[val]) icao = AF_IATA_TO_ICAO[val];
+    if (!icao) { alert(`Code inconnu : ${val}`); return; }
+    selectedIcaos.add(icao);
+    input.value = '';
+    renderAirportSelector();
+    loadCrosswind(false);
+  }
+
+  function setCustomQfu() {
+    if (selectedIcaos.size === 0) { alert('Ajoutez d\'abord une escale.'); return; }
+    const input = document.getElementById('qfu-input');
+    const val = input.value.trim();
+    const normalized = normalizeQfu(val);
+    if (normalized === null) { alert('QFU invalide. Utilisez un nombre entre 0 et 36 (ex : 27 ou 090).'); return; }
+    for (const icao of selectedIcaos) customQfuByIcao.set(icao, normalized);
+    input.value = '';
+    renderAirportSelector();
+    loadCrosswind(false);
+  }
+
+  function resetQfu() {
+    customQfuByIcao.clear();
+    renderAirportSelector();
+    loadCrosswind(false);
+  }
+
+  document.getElementById('btn-add-airport')?.addEventListener('click', addAirport);
+  document.getElementById('airport-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') addAirport(); });
+  document.getElementById('btn-set-qfu')?.addEventListener('click', setCustomQfu);
+  document.getElementById('qfu-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') setCustomQfu(); });
+  document.getElementById('btn-reset-qfu')?.addEventListener('click', resetQfu);
 
   async function loadCrosswind(force = false) {
     const container = document.getElementById('crosswind-container');
@@ -250,7 +373,7 @@ import '../styles/global.css';
         <div class="flex items-center justify-center py-20 text-gray-400">
           <div class="text-center">
             <div class="text-4xl mb-3">✈️</div>
-            <p class="text-sm">Sélectionnez une ou plusieurs escales ci-dessus.</p>
+            <p class="text-sm">Ajoutez une escale ci-dessus pour commencer.</p>
           </div>
         </div>`;
       return;
@@ -288,8 +411,12 @@ import '../styles/global.css';
   }
 
   function renderAirportBlock(icao, tafData, flights) {
-    const ap = AIRPORT_RUNWAYS[icao];
-    if (!ap) return '';
+    const iataKey = Object.keys(AF_IATA_TO_ICAO).find(k => AF_IATA_TO_ICAO[k] === icao) ?? icao;
+    const apName = AIRPORT_RUNWAYS[icao]?.name ?? icao;
+    const activeQfuList = customQfuByIcao.has(icao)
+      ? [customQfuByIcao.get(icao)]
+      : (AIRPORT_RUNWAYS[icao] ? AIRPORT_RUNWAYS[icao].qfu.map(q => Math.round(q / 10)) : [null]);
+
     const fcsts = tafData?.fcsts ?? [];
     const periodsWithWind = fcsts.filter(f => f.wdir != null && f.wspd != null);
 
@@ -304,8 +431,8 @@ import '../styles/global.css';
           ? `<span class="text-[10px] font-semibold px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500">${f.changeIndicator}</span>`
           : '<span class="text-[10px] text-gray-400">BASE</span>';
         const isVrb = String(f.wdir ?? '').toUpperCase() === 'VRB';
-        const { crosswind: cwBase, bestQfu, vrb } = computeCrosswind(f.wdir, f.wspd, ap.qfu);
-        const cwGust = f.wgst ? computeCrosswind(f.wdir, f.wgst, ap.qfu).crosswind : null;
+        const { crosswind: cwBase, bestQfu, vrb } = computeCrosswind(f.wdir, f.wspd, activeQfuList);
+        const cwGust = f.wgst ? computeCrosswind(f.wdir, f.wgst, activeQfuList).crosswind : null;
         const worstCw = cwGust ?? cwBase;
         const wet = isFcstWet(f);
         const activeLimit = wet ? CONSERVATIVE_LIMIT_WET : CONSERVATIVE_LIMIT_DRY;
@@ -317,7 +444,7 @@ import '../styles/global.css';
         const windStr = `${dirStr}/${String(f.wspd).padStart(2,'0')}${f.wgst ? 'G'+f.wgst : ''}KT`;
         const qfuCell = vrb
           ? '<span class="text-gray-400 italic text-[10px]">VRB</span>'
-          : (bestQfu != null ? String(bestQfu).padStart(3,'0') + '°' : '–');
+          : (bestQfu != null ? String(bestQfu).padStart(2,'0') : '–');
         const cwNote = vrb
           ? ' <span class="text-gray-400 text-[10px]">(pire cas)</span>'
           : (cwGust != null ? ` <span class="text-gray-400 text-[10px]">(G ${cwGust})</span>` : '');
@@ -343,26 +470,26 @@ import '../styles/global.css';
     if (sortedFlights.length === 0) {
       flightRows = `<tr><td colspan="5" class="px-3 py-3 text-xs text-gray-400 italic">Aucun vol AF prévu</td></tr>`;
     } else {
-      for (const f of sortedFlights) {
-        const eta = f.estimatedTouchDownTime || f.scheduledArrival;
+      for (const flight of sortedFlights) {
+        const eta = flight.estimatedTouchDownTime || flight.scheduledArrival;
         const etaEpochSec = eta ? Math.floor(new Date(eta).getTime() / 1000) : null;
         const etaStr = eta
           ? new Date(eta).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + 'z'
           : '–';
         const { base: baseWind, tempos: tempoWinds } = etaEpochSec ? getWindAtTime(fcsts, etaEpochSec) : { base: null, tempos: [] };
-        const acInfo = AIRCRAFT_LIMITS[f.aircraftType ?? ''] ?? DEFAULT_LIMIT;
+        const acInfo = AIRCRAFT_LIMITS[flight.aircraftType ?? ''] ?? DEFAULT_LIMIT;
         let windCell = `<td class="px-3 py-2 text-xs text-gray-400 font-mono">–</td>`;
         let riskCell = `<td class="px-3 py-2 text-xs text-gray-400">–</td>`;
         if (baseWind) {
           const spd = baseWind.wgst ?? baseWind.wspd;
-          const { crosswind, bestQfu, vrb } = computeCrosswind(baseWind.wdir, spd, ap.qfu);
+          const { crosswind, bestQfu, vrb } = computeCrosswind(baseWind.wdir, spd, activeQfuList);
           const wet = isWetAtTime(fcsts, etaEpochSec);
           const activeLimit = wet ? acInfo.wet : acInfo.dry;
           const status = getCrosswindColor(crosswind, activeLimit);
           const isVrbBase = String(baseWind.wdir ?? '').toUpperCase() === 'VRB';
           const dirStr = isVrbBase ? 'VRB' : String(Number(baseWind.wdir)).padStart(3,'0');
           const windStr = `${dirStr}/${String(baseWind.wspd).padStart(2,'0')}${baseWind.wgst ? 'G'+baseWind.wgst : ''}KT`;
-          const qfuStr = vrb ? '<span class="text-gray-400 italic">VRB</span>' : `QFU ${String(bestQfu).padStart(3,'0')}`;
+          const qfuStr = vrb ? '<span class="text-gray-400 italic">VRB</span>' : `QFU ${String(bestQfu).padStart(2,'0')}`;
           const condBadge = wet
             ? `<span class="px-1 py-0.5 rounded text-[9px] font-bold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">WET</span>`
             : `<span class="px-1 py-0.5 rounded text-[9px] font-bold bg-gray-100 dark:bg-gray-700 text-gray-500">DRY</span>`;
@@ -370,7 +497,7 @@ import '../styles/global.css';
           if (tempoWinds.length > 0) {
             let worstCw = 0, worstTempo = null;
             for (const t of tempoWinds) {
-              const { crosswind: cwt } = computeCrosswind(t.wdir, t.wgst ?? t.wspd, ap.qfu);
+              const { crosswind: cwt } = computeCrosswind(t.wdir, t.wgst ?? t.wspd, activeQfuList);
               if (cwt > worstCw) { worstCw = cwt; worstTempo = t; }
             }
             if (worstTempo) {
@@ -393,21 +520,21 @@ import '../styles/global.css';
         }
         flightRows += `
           <tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition">
-            <td class="px-3 py-2 text-xs font-bold font-mono text-gray-800 dark:text-gray-200">${f.flightId ?? '–'}</td>
+            <td class="px-3 py-2 text-xs font-bold font-mono text-gray-800 dark:text-gray-200">${flight.flightId ?? '–'}</td>
             <td class="px-3 py-2 text-xs font-mono text-blue-600 dark:text-blue-400 font-semibold">${etaStr}</td>
-            <td class="px-3 py-2 text-xs font-mono text-gray-500">${f.aircraftType ?? '–'}</td>
+            <td class="px-3 py-2 text-xs font-mono text-gray-500">${flight.aircraftType ?? '–'}</td>
             ${windCell}${riskCell}
           </tr>`;
       }
     }
 
-    const qfuDisplay = [...new Set(ap.qfu)].sort((a,b)=>a-b).map(q=>String(q).padStart(3,'0')).join(' / ');
+    const qfuDisplay = activeQfuList.filter(q => q != null).map(q => String(q).padStart(2,'0')).join(' / ') || 'Aucun';
 
     return `
       <div class="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm mb-5 overflow-hidden">
         <div class="flex items-center gap-3 px-5 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-          <span class="text-lg font-black font-mono text-gray-800 dark:text-gray-100">${ap.iata}</span>
-          <span class="text-sm text-gray-500">${ap.name}</span>
+          <span class="text-lg font-black font-mono text-gray-800 dark:text-gray-100">${iataKey}</span>
+          <span class="text-sm text-gray-500">${apName}</span>
           <span class="ml-auto text-[10px] text-gray-400 font-mono">QFU : ${qfuDisplay}</span>
         </div>
         <div class="grid grid-cols-1 xl:grid-cols-2 divide-y xl:divide-y-0 xl:divide-x divide-gray-100 dark:divide-gray-700">

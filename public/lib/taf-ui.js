@@ -356,9 +356,6 @@
     return best;
   }
 
-  // Ne construit le snippet vent que si le groupe TAF contient explicitement un token vent.
-  // Cela évite d'afficher un vent hérité injecté par l'API NOAA dans les groupes
-  // PROB/TEMPO qui n'ont pas de vent dans le raw TAF.
   function buildFcstSnippet(fcst) {
     const parts = [];
     const raw = fcst.rawFcst ?? fcst.fcstStr ?? '';
@@ -542,7 +539,9 @@
   }
 
   // ── Section CDG/ORY ───────────────────────────────────────────────────────────────────────────────────────────────────────
-  function renderBaseSection(baseHits, baseTafs) {
+  // hideHeader=true quand le contenu est injecté dans #base-status-body (widescreen)
+  // pour éviter de dupliquer l'entête déjà présente dans la barre du slot.
+  function renderBaseSection(baseHits, baseTafs, hideHeader) {
     const tafsToRender = (baseTafs && baseTafs.length > 0)
       ? baseTafs
       : (baseHits && baseHits.length > 0)
@@ -557,7 +556,11 @@
         : [];
 
     if (tafsToRender.length === 0) {
-      return `
+      return hideHeader ? `
+        <div class="text-center py-8 text-gray-400">
+          <div class="text-3xl mb-2">⏳</div>
+          <div class="text-sm">TAF en cours de chargement…</div>
+        </div>` : `
         <section class="mt-8 pt-6 border-t border-gray-200">
           <h2 class="text-xl font-bold text-gray-900 mb-1">🏠 État base CDG / ORY</h2>
           <p class="text-gray-500 text-sm mb-4">TAF actifs sur CDG/ORY.</p>
@@ -611,6 +614,24 @@
     const redCount    = allThreats.filter(t => t.severity === 'red').length;
     const orangeCount = allThreats.filter(t => t.severity === 'orange').length;
 
+    const badgesHtml = `
+      <div class="flex gap-2 text-xs mb-3">
+        ${redCount    ? `<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full font-semibold">🔴 ${redCount} menace${redCount > 1 ? 's' : ''}</span>` : ''}
+        ${orangeCount ? `<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full font-semibold">🟠 ${orangeCount} menace${orangeCount > 1 ? 's' : ''}</span>` : ''}
+        ${allThreats.length === 0 ? '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full font-semibold">✅ Aucune menace</span>' : ''}
+      </div>`;
+
+    // En mode widescreen (hideHeader=true) : on supprime la section/h2,
+    // l'entête est déjà affichée dans la barre du slot CDG/ORY.
+    if (hideHeader) {
+      return `
+        <div class="px-4 py-3">
+          ${badgesHtml}
+          <p class="text-gray-500 text-xs mb-3">TAF actifs sur notre base — frise 24h. Hors croisement vols LC.</p>
+          <div class="grid grid-cols-1 gap-4">${cards}</div>
+        </div>`;
+    }
+
     return `
       <section class="mt-8 pt-6 border-t border-gray-200">
         <div class="flex items-center justify-between mb-3 flex-wrap gap-4">
@@ -618,11 +639,7 @@
             <h2 class="text-xl font-bold text-gray-900">🏠 État base CDG / ORY</h2>
             <p class="text-gray-500 text-sm mt-0.5">TAF actifs sur notre base — frise 24h. Hors croisement vols LC.</p>
           </div>
-          <div class="flex gap-2 text-xs">
-            ${redCount    ? `<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full font-semibold">🔴 ${redCount} menace${redCount > 1 ? 's' : ''}</span>` : ''}
-            ${orangeCount ? `<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full font-semibold">🟠 ${orangeCount} menace${orangeCount > 1 ? 's' : ''}</span>` : ''}
-            ${allThreats.length === 0 ? '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full font-semibold">✅ Aucune menace</span>' : ''}
-          </div>
+          ${badgesHtml}
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">${cards}</div>
       </section>`;
@@ -634,10 +651,9 @@
     
     for (const hit of hits) {
       const etaIso = hit.flight.estimatedTouchDownTime || hit.flight.scheduledArrival;
-      const dateKey = formatDate(etaIso); // Date au format jj/mm/aaaa
+      const dateKey = formatDate(etaIso);
       const key = `${hit.flight.flightNumber}-${dateKey}`;
       
-      // Si le vol n'existe pas encore ou si la nouvelle menace est plus sévère
       if (!flightMap[key] || 
           SEVERITY_ORDER[hit.threat.severity] < SEVERITY_ORDER[flightMap[key].threat.severity]) {
         flightMap[key] = hit;
@@ -672,7 +688,6 @@
 
       const { hits, baseHits, baseTafs } = await res.json();
 
-      // ✅ Dédoublonner les vols par date + numéro de vol, en gardant la menace la plus sévère
       const uniqueHits = deduplicateFlights(hits);
 
       const red    = uniqueHits.filter(h => h.threat.severity === 'red').length;
@@ -711,15 +726,16 @@
           </div>`;
       }
 
-      const baseSectionHtml = renderBaseSection(baseHits, baseTafs);
       const isWide = window.matchMedia('(min-width: 1280px)').matches;
       const baseBodyEl = document.getElementById('base-status-body');
 
       if (isWide && baseBodyEl) {
+        // Widescreen : injecte le contenu sans entête dans le slot dédié
         container.innerHTML = mainHtml + lastUpdateBar();
-        baseBodyEl.innerHTML = baseSectionHtml;
+        baseBodyEl.innerHTML = renderBaseSection(baseHits, baseTafs, true);
       } else {
-        container.innerHTML = mainHtml + baseSectionHtml + lastUpdateBar();
+        // Mobile/tablette : affiche tout dans la colonne principale avec entête
+        container.innerHTML = mainHtml + renderBaseSection(baseHits, baseTafs, false) + lastUpdateBar();
       }
       bindRefreshBtn();
 

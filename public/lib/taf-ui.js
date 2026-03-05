@@ -734,6 +734,8 @@
         // Widescreen : injecte le contenu sans entête dans le slot dédié
         container.innerHTML = mainHtml + lastUpdateBar();
         baseBodyEl.innerHTML = renderBaseSection(baseHits, baseTafs, true);
+        // Retire la classe italic du conteneur pour éviter la propagation
+        baseBodyEl.classList.remove('italic', 'text-gray-400');
       } else {
         // Mobile/tablette : affiche tout dans la colonne principale avec entête
         container.innerHTML = mainHtml + renderBaseSection(baseHits, baseTafs, false) + lastUpdateBar();

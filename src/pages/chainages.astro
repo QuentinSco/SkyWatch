@@ -9,31 +9,28 @@ import '../styles/global.css';
   <title>SkyWatch – Chaînages</title>
   <script is:inline src="/lib/dark-mode.js"></script>
   <style>
-    /* Frise */
     .timeline-wrap { overflow-x: auto; }
     .timeline-canvas { display: block; }
-
-    /* Tooltip */
     #ch-tooltip {
       position: fixed;
       pointer-events: none;
       background: #1e293b;
       color: #f1f5f9;
       font-size: 11px;
-      line-height: 1.5;
-      padding: 6px 10px;
+      line-height: 1.6;
+      padding: 7px 11px;
       border-radius: 8px;
       white-space: pre;
       z-index: 9999;
       opacity: 0;
-      transition: opacity .15s;
+      transition: opacity .12s;
     }
   </style>
 </head>
 
 <body class="text-gray-900 min-h-screen flex" style="background:#f8fafc">
 
-  <!-- ─── Sidebar -->
+  <!-- ─ Sidebar ─────────────────────────────────────────── -->
   <aside class="hidden lg:flex flex-col w-56 shrink-0 sticky top-0 h-screen border-r border-gray-200 bg-white px-4 py-6 overflow-y-auto">
     <div class="mb-6">
       <div class="text-2xl font-bold tracking-tight text-gray-900">🛡 SkyWatch</div>
@@ -54,15 +51,15 @@ import '../styles/global.css';
     </div>
   </aside>
 
-  <!-- ─── Contenu principal -->
+  <!-- ─ Contenu ─────────────────────────────────────────── -->
   <div class="flex-1 min-w-0 overflow-y-auto">
     <div class="max-w-5xl mx-auto px-4 py-6 xl:px-8">
 
-      <!-- Header -->
+      <!-- Header page -->
       <div class="flex items-center justify-between flex-wrap gap-4 mb-6">
         <div>
           <h1 class="text-2xl font-bold tracking-tight text-gray-900">🔗 Chaînages</h1>
-          <p class="text-gray-500 text-xs mt-1">Temps de rotation des appareils AF LC sur une escale — Fenêtre <strong>maintenant → +24h</strong></p>
+          <p class="text-gray-500 text-xs mt-1">Temps de rotation des appareils AF LC — Fenêtre <strong>maintenant → +24h</strong></p>
         </div>
         <div class="flex items-center gap-2">
           <span id="ch-age" class="text-xs text-gray-400"></span>
@@ -72,7 +69,7 @@ import '../styles/global.css';
         </div>
       </div>
 
-      <!-- Saisie aéroports -->
+      <!-- Saisie -->
       <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-6">
         <div class="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">Aéroports à surveiller</div>
         <div class="flex items-center gap-2 mb-3">
@@ -90,52 +87,72 @@ import '../styles/global.css';
         </div>
       </div>
 
-      <!-- Légende -->
-      <div id="ch-legend" class="hidden flex items-center gap-4 mb-3 text-xs text-gray-500">
-        <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded bg-indigo-400"></span> Au sol (durée connue)</span>
-        <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded bg-indigo-200 border border-dashed border-indigo-400"></span> Au sol (départ inconnu)</span>
+      <!-- Légende globale -->
+      <div id="ch-legend" class="hidden flex items-center gap-5 mb-4 text-xs text-gray-500">
+        <span class="flex items-center gap-1.5"><span id="leg-known" class="inline-block w-3 h-3 rounded"></span> Au sol (durée connue)</span>
+        <span class="flex items-center gap-1.5"><span id="leg-unk" class="inline-block w-3 h-3 rounded border border-dashed"></span> Au sol (départ inconnu)</span>
         <span class="flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-red-400"></span> Maintenant</span>
       </div>
 
-      <!-- Frise -->
+      <!-- Résultats : blocs par aéroport injectés ici -->
       <div id="chainages-result">
         <div class="text-gray-400 text-sm italic text-center py-12">Ajoutez un aéroport pour afficher les chaînages.</div>
       </div>
 
-      <div id="ch-tooltip"></div>
     </div>
   </div>
+
+  <div id="ch-tooltip"></div>
 
   <script is:inline>
   (function () {
 
-    // ──────────────────────────────────────────────
-    // Constantes de dessin
-    const ROW_H      = 44;   // hauteur ligne
-    const ROW_PAD    = 8;    // padding vertical intérieur
-    const BAR_H      = ROW_H - ROW_PAD * 2;  // hauteur du bloc
-    const LABEL_W    = 90;   // largeur colonne matricule
-    const CHART_PAD  = 12;   // padding droit
-    const HEADER_H   = 28;   // hauteur header heures
-    const TICK_EVERY = 2;    // graduation toutes les X heures
-    const FONT       = '11px/1 Inter, system-ui, sans-serif';
-    const FONT_BOLD  = 'bold 11px/1 Inter, system-ui, sans-serif';
+    // ── Palette couleurs par aéroport ─────────────────────────────────
+    // Chaque entrée : [barSolid, barHatch, hatchStroke, bgHeader, textHeader]
+    const PALETTE = [
+      { bar: '#818cf8', barU: '#c7d2fe', hatch: '#a5b4fc', bg: '#eef2ff', text: '#3730a3', border: '#a5b4fc' }, // indigo
+      { bar: '#34d399', barU: '#a7f3d0', hatch: '#6ee7b7', bg: '#ecfdf5', text: '#065f46', border: '#6ee7b7' }, // emerald
+      { bar: '#fb923c', barU: '#fed7aa', hatch: '#fdba74', bg: '#fff7ed', text: '#9a3412', border: '#fdba74' }, // orange
+      { bar: '#f472b6', barU: '#fbcfe8', hatch: '#f9a8d4', bg: '#fdf2f8', text: '#9d174d', border: '#f9a8d4' }, // pink
+      { bar: '#38bdf8', barU: '#bae6fd', hatch: '#7dd3fc', bg: '#f0f9ff', text: '#0c4a6e', border: '#7dd3fc' }, // sky
+      { bar: '#a78bfa', barU: '#ddd6fe', hatch: '#c4b5fd', bg: '#f5f3ff', text: '#4c1d95', border: '#c4b5fd' }, // violet
+      { bar: '#4ade80', barU: '#bbf7d0', hatch: '#86efac', bg: '#f0fdf4', text: '#14532d', border: '#86efac' }, // green
+      { bar: '#fbbf24', barU: '#fde68a', hatch: '#fcd34d', bg: '#fffbeb', text: '#78350f', border: '#fcd34d' }, // amber
+    ];
 
-    const COLOR_BAR     = '#818cf8'; // indigo-400
-    const COLOR_BAR_UNK = '#c7d2fe'; // indigo-200
-    const COLOR_NOW     = '#f87171'; // red-400
-    const COLOR_GRID    = '#e2e8f0'; // gray-200
-    const COLOR_LABEL   = '#64748b'; // slate-500
-    const COLOR_FLIGHT  = '#1e40af'; // blue-800
-    const COLOR_TIME    = '#374151'; // gray-700
-    const COLOR_BG_ROW_ALT = '#f8fafc';
+    // Map airport code → palette index (attribué à l'ajout)
+    const airportColor = new Map();
+    let colorCursor = 0;
 
-    const airports  = new Set();
-    let   lastData  = null;
-    const tooltip   = document.getElementById('ch-tooltip');
-    let   hitZones  = [];   // [{x1,y1,x2,y2, stop}] pour le hover
+    function paletteFor(code) {
+      if (!airportColor.has(code)) {
+        airportColor.set(code, colorCursor % PALETTE.length);
+        colorCursor++;
+      }
+      return PALETTE[airportColor.get(code)];
+    }
 
-    // ── Tags ────────────────────────────────────────────────────
+    // ── Constantes dessin ────────────────────────────────────────
+    const ROW_H     = 44;
+    const ROW_PAD   = 8;
+    const BAR_H     = ROW_H - ROW_PAD * 2;
+    const LABEL_W   = 92;
+    const CHART_PAD = 12;
+    const HEADER_H  = 28;
+    const TICK_EVERY = 2;
+    const FONT      = '11px/1 Inter, system-ui, sans-serif';
+    const FONT_BOLD = 'bold 11px/1 Inter, system-ui, sans-serif';
+    const COLOR_NOW  = '#f87171';
+    const COLOR_GRID = '#e2e8f0';
+    const COLOR_LABEL = '#64748b';
+    const COLOR_BG_ALT = '#f8fafc';
+
+    const airports = new Set();
+    let lastData   = null;
+    const tooltip  = document.getElementById('ch-tooltip');
+    let allHitZones = []; // [{canvas, x1,y1,x2,y2,stop}]
+
+    // ── Tags ──────────────────────────────────────────────────
     function renderTags() {
       const container = document.getElementById('airport-tags');
       const hint = document.getElementById('no-airport-hint');
@@ -143,9 +160,11 @@ import '../styles/global.css';
       if (airports.size === 0) { hint.style.display = ''; return; }
       hint.style.display = 'none';
       airports.forEach(code => {
+        const pal = paletteFor(code);
         const tag = document.createElement('span');
-        tag.className = 'ap-tag inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-800 text-xs font-mono font-semibold';
-        tag.innerHTML = `${code} <button data-code="${code}" class="ap-remove text-indigo-400 hover:text-red-500 font-bold leading-none">✕</button>`;
+        tag.className = 'ap-tag inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-semibold';
+        tag.style.cssText = `background:${pal.bg};color:${pal.text};border:1px solid ${pal.border}`;
+        tag.innerHTML = `${code} <button data-code="${code}" class="ap-remove font-bold leading-none opacity-60 hover:opacity-100">✕</button>`;
         container.appendChild(tag);
       });
       container.querySelectorAll('.ap-remove').forEach(btn => {
@@ -157,6 +176,7 @@ import '../styles/global.css';
       const input = document.getElementById('airport-input');
       const val = input.value.trim().toUpperCase();
       if (!val || val.length < 3) return;
+      paletteFor(val); // attribution couleur stable
       airports.add(val); input.value = '';
       renderTags(); fetchChainages();
     }
@@ -164,7 +184,7 @@ import '../styles/global.css';
     document.getElementById('airport-input').addEventListener('keydown', e => { if (e.key === 'Enter') addAirport(); });
     document.getElementById('btn-refresh').addEventListener('click', () => fetchChainages(true));
 
-    // ── Dessin frise ──────────────────────────────────────────────
+    // ── Helpers ────────────────────────────────────────────────
     function hhmm(ms) {
       const d = new Date(ms);
       return String(d.getUTCHours()).padStart(2,'0') + ':' + String(d.getUTCMinutes()).padStart(2,'0') + 'z';
@@ -174,11 +194,162 @@ import '../styles/global.css';
       return String(d.getUTCDate()).padStart(2,'0') + '/' + String(d.getUTCMonth()+1).padStart(2,'0');
     }
 
-    function drawTimeline(data) {
+    // ── Dessine UN canvas pour UN aéroport ────────────────────────────
+    function drawAirportTimeline(canvas, stops, wStart, wEnd, pal) {
+      const nowMs  = Date.now();
+      const span   = wEnd - wStart;
+      const dpr    = window.devicePixelRatio || 1;
+      const wrap   = canvas.parentElement;
+      const availW = Math.max(wrap.clientWidth - LABEL_W - CHART_PAD, 200);
+      const canvasW = LABEL_W + availW + CHART_PAD;
+      const canvasH = HEADER_H + stops.length * ROW_H;
+
+      canvas.width  = canvasW * dpr;
+      canvas.height = canvasH * dpr;
+      canvas.style.width  = canvasW + 'px';
+      canvas.style.height = canvasH + 'px';
+
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      const toX = t => LABEL_W + ((t - wStart) / span) * availW;
+
+      // Fond
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvasW, canvasH);
+      stops.forEach((_, i) => {
+        if (i % 2 === 1) { ctx.fillStyle = COLOR_BG_ALT; ctx.fillRect(0, HEADER_H + i * ROW_H, canvasW, ROW_H); }
+      });
+
+      // Grille + header heures
+      ctx.strokeStyle = COLOR_GRID; ctx.lineWidth = 1;
+      ctx.font = FONT; ctx.fillStyle = COLOR_LABEL;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (let h = 0; h <= 24; h += TICK_EVERY) {
+        const t = wStart + h * 3600000;
+        const x = toX(t);
+        ctx.beginPath(); ctx.moveTo(x, HEADER_H); ctx.lineTo(x, canvasH); ctx.stroke();
+        ctx.fillText(hhmm(t).slice(0,5), x, HEADER_H / 2);
+      }
+      // Séparateurs
+      ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(LABEL_W, HEADER_H); ctx.lineTo(canvasW, HEADER_H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(LABEL_W, 0); ctx.lineTo(LABEL_W, canvasH); ctx.stroke();
+
+      // Blocs
+      const hitZones = [];
+      stops.forEach((stop, i) => {
+        const y0   = HEADER_H + i * ROW_H;
+        const barY = y0 + ROW_PAD;
+        const midY = barY + BAR_H / 2;
+
+        // Matricule
+        ctx.font = FONT_BOLD; ctx.fillStyle = '#1e293b';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(stop.registration, 6, y0 + ROW_H / 2);
+        if (stop.aircraftType) {
+          const lw = ctx.measureText(stop.registration).width;
+          ctx.font = FONT; ctx.fillStyle = '#94a3b8';
+          ctx.fillText(stop.aircraftType, 6 + lw + 4, y0 + ROW_H / 2);
+        }
+
+        // Bloc
+        const xArr  = toX(stop.arrMs);
+        const known = stop.depMs !== null;
+        const xDep  = known ? toX(stop.depMs) : canvasW - CHART_PAD;
+        const barW  = Math.max(xDep - xArr, 4);
+        const r     = 4;
+
+        ctx.fillStyle = known ? pal.bar : pal.barU;
+        ctx.beginPath(); ctx.roundRect(xArr, barY, barW, BAR_H, r); ctx.fill();
+
+        // Hachures si départ inconnu
+        if (!known) {
+          ctx.save();
+          ctx.beginPath(); ctx.roundRect(xArr, barY, barW, BAR_H, r); ctx.clip();
+          ctx.strokeStyle = pal.hatch; ctx.lineWidth = 1.5;
+          for (let xi = xArr + barW * 0.55; xi < xDep + BAR_H; xi += 6) {
+            ctx.beginPath(); ctx.moveTo(xi, barY); ctx.lineTo(xi - BAR_H, barY + BAR_H); ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        // Texte dans le bloc
+        const textColor = known ? '#fff' : pal.text;
+        ctx.font = 'bold 10px/1 Inter, system-ui, sans-serif';
+        ctx.fillStyle = textColor; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText('↓ ' + stop.arrFlight, xArr + 5, midY);
+        if (stop.depFlight) {
+          const dl = '↑ ' + stop.depFlight;
+          ctx.fillText(dl, xDep - ctx.measureText(dl).width - 5, midY);
+        }
+        if (known && barW > 52) {
+          const dm = Math.round((stop.depMs - stop.arrMs) / 60000);
+          const dh = Math.floor(dm / 60);
+          const mm = String(dm % 60).padStart(2, '0');
+          ctx.font = FONT; ctx.fillStyle = known ? 'rgba(255,255,255,0.85)' : pal.text;
+          ctx.textAlign = 'center';
+          ctx.fillText(dh > 0 ? `${dh}h${mm}` : `${dm}min`, (xArr + xDep) / 2, midY);
+        }
+
+        hitZones.push({ x1: xArr, y1: barY, x2: xDep, y2: barY + BAR_H, stop });
+      });
+
+      // NOW
+      const xNow = toX(nowMs);
+      if (xNow >= LABEL_W && xNow <= canvasW) {
+        ctx.strokeStyle = COLOR_NOW; ctx.lineWidth = 2;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath(); ctx.moveTo(xNow, 0); ctx.lineTo(xNow, canvasH); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = COLOR_NOW;
+        ctx.beginPath(); ctx.arc(xNow, HEADER_H / 2, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.font = 'bold 9px/1 Inter, system-ui, sans-serif';
+        ctx.fillStyle = COLOR_NOW; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('NOW', xNow, HEADER_H - 6);
+      }
+
+      // Tooltip hover
+      canvas.addEventListener('mousemove', e => {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        const hit = hitZones.find(z => mx >= z.x1 && mx <= z.x2 && my >= z.y1 && my <= z.y2);
+        if (hit) {
+          const s = hit.stop;
+          const arrL = `↓ ARR  ${s.arrFlight}  ${ddmm(s.arrMs)} ${hhmm(s.arrMs)}`;
+          const depL = s.depFlight
+            ? (s.depMs ? `↑ DEP  ${s.depFlight}  ${ddmm(s.depMs)} ${hhmm(s.depMs)}` : `↑ DEP  ${s.depFlight}  heure non disponible`)
+            : '↑ DEP  non disponible';
+          let durL = '';
+          if (s.depMs) {
+            const dm = Math.round((s.depMs - s.arrMs) / 60000);
+            durL = `⏱  ${Math.floor(dm/60)}h${String(dm%60).padStart(2,'0')} au sol`;
+          }
+          tooltip.textContent = [arrL, depL, durL].filter(Boolean).join('\n');
+          tooltip.style.opacity = '1';
+          tooltip.style.left = (e.clientX + 14) + 'px';
+          tooltip.style.top  = (e.clientY - 10) + 'px';
+        } else {
+          tooltip.style.opacity = '0';
+        }
+      });
+      canvas.addEventListener('mouseleave', () => { tooltip.style.opacity = '0'; });
+
+      return hitZones;
+    }
+
+    // ── Rendu principal ────────────────────────────────────────────
+    function renderChainages(data) {
+      lastData = data;
       const container = document.getElementById('chainages-result');
       const legend    = document.getElementById('ch-legend');
-      const stops     = data.stops || [];
+      const age       = document.getElementById('ch-age');
 
+      if (age && data.generatedAt) {
+        const d = new Date(data.generatedAt);
+        age.textContent = `Données à ${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}z`;
+      }
+
+      const stops = data.stops || [];
       if (stops.length === 0) {
         container.innerHTML = '<div class="text-gray-400 text-sm italic text-center py-12">Aucun chaînage trouvé pour cette fenêtre 24h.</div>';
         legend.classList.add('hidden');
@@ -186,232 +357,77 @@ import '../styles/global.css';
       }
 
       legend.classList.remove('hidden');
+      // Met à jour les bulles de la légende avec la couleur du 1er aéroport
+      const firstPal = paletteFor(Array.from(airports)[0]);
+      document.getElementById('leg-known').style.background = firstPal.bar;
+      document.getElementById('leg-unk').style.cssText = `background:${firstPal.barU};border-color:${firstPal.hatch};display:inline-block;width:12px;height:12px;border-radius:2px;border:1px dashed`;
 
-      const wStart = data.windowStart;
-      const wEnd   = data.windowEnd;
-      const span   = wEnd - wStart;   // 24h en ms
+      // Grouper par aéroport (ordre d'ajout)
+      const byAirport = new Map();
+      airports.forEach(code => byAirport.set(code, []));
+      stops.forEach(s => {
+        if (byAirport.has(s.iata)) byAirport.get(s.iata).push(s);
+        else {
+          // aéroport inconnu (OACI saisi) — on le range quand même
+          if (!byAirport.has(s.iata)) byAirport.set(s.iata, []);
+          byAirport.get(s.iata).push(s);
+        }
+      });
 
-      // ─ Dimensions dynamiques ─────────────────────────────────────
-      const availW    = Math.max(container.clientWidth - LABEL_W - CHART_PAD, 200);
-      const canvasW   = LABEL_W + availW + CHART_PAD;
-      const canvasH   = HEADER_H + stops.length * ROW_H;
-
-      // ─ Helpers coordonnées ─────────────────────────────────────
-      const toX = msVal => LABEL_W + ((msVal - wStart) / span) * availW;
-
-      // ─ Canvas ──────────────────────────────────────────────
       container.innerHTML = '';
-      const wrap = document.createElement('div');
-      wrap.className = 'timeline-wrap bg-white border border-gray-200 rounded-xl shadow-sm';
+      allHitZones = [];
 
-      const canvas = document.createElement('canvas');
-      canvas.className = 'timeline-canvas';
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width  = canvasW * dpr;
-      canvas.height = canvasH * dpr;
-      canvas.style.width  = canvasW + 'px';
-      canvas.style.height = canvasH + 'px';
-      wrap.appendChild(canvas);
-      container.appendChild(wrap);
-
-      const ctx = canvas.getContext('2d');
-      ctx.scale(dpr, dpr);
-
-      // ─ Fond ───────────────────────────────────────────────
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(0, 0, canvasW, canvasH);
-
-      // Lignes alternées
-      stops.forEach((_, i) => {
-        if (i % 2 === 1) {
-          ctx.fillStyle = COLOR_BG_ROW_ALT;
-          ctx.fillRect(0, HEADER_H + i * ROW_H, canvasW, ROW_H);
+      byAirport.forEach((airStops, code) => {
+        if (airStops.length === 0) {
+          // Section vide
+          const empty = document.createElement('div');
+          empty.className = 'mb-4 rounded-xl border overflow-hidden shadow-sm';
+          const pal = paletteFor(code);
+          empty.style.borderColor = pal.border;
+          empty.innerHTML = `
+            <div class="flex items-center gap-2 px-4 py-2.5" style="background:${pal.bg};border-bottom:1px solid ${pal.border}">
+              <span class="font-bold font-mono text-sm" style="color:${pal.text}">${code}</span>
+              <span class="text-xs font-medium opacity-60" style="color:${pal.text}">0 appareil dans la fenêtre</span>
+            </div>
+            <div class="bg-white px-4 py-3 text-xs text-gray-400 italic">Aucun vol AF LC trouvé sur cet aéroport dans les prochaines 24h.</div>`;
+          container.appendChild(empty);
+          return;
         }
+
+        const pal = paletteFor(code);
+
+        // Wrapper section
+        const section = document.createElement('div');
+        section.className = 'mb-4 rounded-xl border overflow-hidden shadow-sm';
+        section.style.borderColor = pal.border;
+
+        // Header aéroport
+        const header = document.createElement('div');
+        header.className = 'flex items-center gap-3 px-4 py-2.5';
+        header.style.cssText = `background:${pal.bg};border-bottom:1px solid ${pal.border}`;
+        header.innerHTML = `
+          <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg font-bold font-mono text-xs" style="background:${pal.bar};color:#fff">${code}</span>
+          <span class="font-semibold text-sm" style="color:${pal.text}">${airStops.length} appareil${airStops.length > 1 ? 's' : ''} dans la fenêtre</span>`;
+        section.appendChild(header);
+
+        // Canvas wrapper
+        const wrap = document.createElement('div');
+        wrap.className = 'timeline-wrap bg-white';
+        const canvas = document.createElement('canvas');
+        canvas.className = 'timeline-canvas';
+        wrap.appendChild(canvas);
+        section.appendChild(wrap);
+        container.appendChild(section);
+
+        // Dessin
+        drawAirportTimeline(canvas, airStops, data.windowStart, data.windowEnd, pal);
       });
-
-      // ─ Grille verticale + header heures ─────────────────────────
-      ctx.strokeStyle = COLOR_GRID;
-      ctx.lineWidth   = 1;
-      ctx.font        = FONT;
-      ctx.fillStyle   = COLOR_LABEL;
-      ctx.textAlign   = 'center';
-      ctx.textBaseline = 'middle';
-
-      for (let h = 0; h <= 24; h += TICK_EVERY) {
-        const t = wStart + h * 3600000;
-        const x = toX(t);
-        // grille
-        ctx.beginPath(); ctx.moveTo(x, HEADER_H); ctx.lineTo(x, canvasH); ctx.stroke();
-        // label heure
-        const label = hhmm(t).slice(0, 5); // HH:MM
-        ctx.fillText(label, x, HEADER_H / 2);
-      }
-
-      // Séparateur header
-      ctx.strokeStyle = '#cbd5e1';
-      ctx.lineWidth   = 1;
-      ctx.beginPath(); ctx.moveTo(LABEL_W, HEADER_H); ctx.lineTo(canvasW, HEADER_H); ctx.stroke();
-      // Séparateur colonne labels
-      ctx.beginPath(); ctx.moveTo(LABEL_W, 0); ctx.lineTo(LABEL_W, canvasH); ctx.stroke();
-
-      // ─ Lignes : blocs + labels ────────────────────────────────
-      hitZones = [];
-      const nowMs = Date.now();
-
-      stops.forEach((stop, i) => {
-        const y0   = HEADER_H + i * ROW_H;
-        const barY = y0 + ROW_PAD;
-
-        // ─ Label matricule ─
-        ctx.font      = FONT_BOLD;
-        ctx.fillStyle = '#1e293b';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(stop.registration.replace('F-', 'F-'), 6, y0 + ROW_H / 2);
-
-        // type avion en gris
-        if (stop.aircraftType) {
-          ctx.font      = FONT;
-          ctx.fillStyle = '#94a3b8';
-          // mesure le texte du matricule pour positionner après
-          ctx.font = FONT_BOLD;
-          const labelW = ctx.measureText(stop.registration).width;
-          ctx.font      = FONT;
-          ctx.fillStyle = '#94a3b8';
-          ctx.fillText(stop.aircraftType, 6 + labelW + 4, y0 + ROW_H / 2);
-        }
-
-        // ─ Bloc au sol ─
-        const xArr = toX(stop.arrMs);
-        const known = stop.depMs !== null;
-        // Si départ inconnu : on dessine jusqu'à la fin de la fenêtre avec motif hachuré
-        const xDep  = known ? toX(stop.depMs) : canvasW - CHART_PAD;
-
-        const barW  = Math.max(xDep - xArr, 4);
-        const radius = 4;
-
-        // Fond du bloc
-        ctx.fillStyle = known ? COLOR_BAR : COLOR_BAR_UNK;
-        ctx.beginPath();
-        ctx.roundRect(xArr, barY, barW, BAR_H, radius);
-        ctx.fill();
-
-        // Si inconnu : hachures sur la partie droite (les 40% finaux)
-        if (!known) {
-          ctx.save();
-          ctx.beginPath();
-          ctx.roundRect(xArr, barY, barW, BAR_H, radius);
-          ctx.clip();
-          ctx.strokeStyle = '#a5b4fc'; // indigo-300
-          ctx.lineWidth   = 1.5;
-          for (let xi = xArr + barW * 0.6; xi < xDep + BAR_H; xi += 6) {
-            ctx.beginPath();
-            ctx.moveTo(xi, barY);
-            ctx.lineTo(xi - BAR_H, barY + BAR_H);
-            ctx.stroke();
-          }
-          ctx.restore();
-        }
-
-        // ─ Texte dans le bloc ─
-        ctx.font        = 'bold 10px/1 Inter, system-ui, sans-serif';
-        ctx.fillStyle   = known ? '#fff' : COLOR_FLIGHT;
-        ctx.textAlign   = 'left';
-        ctx.textBaseline = 'middle';
-        const midY = barY + BAR_H / 2;
-
-        // ARR flight
-        const arrLabel = '↓ ' + stop.arrFlight;
-        ctx.fillText(arrLabel, xArr + 5, midY);
-
-        // DEP flight (si connu)
-        if (stop.depFlight) {
-          const depLabel = '↑ ' + stop.depFlight;
-          const depLabelW = ctx.measureText(depLabel).width;
-          ctx.fillText(depLabel, xDep - depLabelW - 5, midY);
-        }
-
-        // Durée au sol (si les deux bornes sont connues)
-        if (known && stop.depMs !== null) {
-          const durMin = Math.round((stop.depMs - stop.arrMs) / 60000);
-          const durH   = Math.floor(durMin / 60);
-          const durM   = durMin % 60;
-          const durLabel = durH > 0 ? `${durH}h${String(durM).padStart(2,'0')}` : `${durM}min`;
-          ctx.font      = FONT;
-          ctx.fillStyle = 'rgba(255,255,255,0.85)';
-          ctx.textAlign = 'center';
-          const midX = (xArr + xDep) / 2;
-          // Afficher seulement si la largeur le permet
-          if (barW > 50) ctx.fillText(durLabel, midX, midY);
-        }
-
-        // Zone de hit
-        hitZones.push({ x1: xArr, y1: barY, x2: xDep, y2: barY + BAR_H, stop });
-      });
-
-      // ─ Curseur "maintenant" ─────────────────────────────────────
-      const xNow = toX(nowMs);
-      if (xNow >= LABEL_W && xNow <= canvasW) {
-        ctx.strokeStyle = COLOR_NOW;
-        ctx.lineWidth   = 2;
-        ctx.setLineDash([4, 3]);
-        ctx.beginPath(); ctx.moveTo(xNow, 0); ctx.lineTo(xNow, canvasH); ctx.stroke();
-        ctx.setLineDash([]);
-
-        // Bullet en haut
-        ctx.fillStyle = COLOR_NOW;
-        ctx.beginPath(); ctx.arc(xNow, HEADER_H / 2, 4, 0, Math.PI * 2); ctx.fill();
-
-        // Label "NOW"
-        ctx.font        = 'bold 9px/1 Inter, system-ui, sans-serif';
-        ctx.fillStyle   = COLOR_NOW;
-        ctx.textAlign   = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('NOW', xNow, HEADER_H - 6);
-      }
-
-      // ─ Hover tooltip ─────────────────────────────────────────
-      canvas.addEventListener('mousemove', e => {
-        const rect = canvas.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
-
-        const hit = hitZones.find(z => mx >= z.x1 && mx <= z.x2 && my >= z.y1 && my <= z.y2);
-        if (hit) {
-          const s = hit.stop;
-          const arrLine  = `↓ ARR  ${s.arrFlight}  ${ddmm(s.arrMs)} ${hhmm(s.arrMs)}`;
-          const depLine  = s.depFlight
-            ? (s.depMs ? `↑ DEP  ${s.depFlight}  ${ddmm(s.depMs)} ${hhmm(s.depMs)}` : `↑ DEP  ${s.depFlight}  heure non disponible`)
-            : '↑ DEP  non disponible';
-          let durLine = '';
-          if (s.depMs) {
-            const dm = Math.round((s.depMs - s.arrMs) / 60000);
-            durLine = `⏱ Rotation  ${Math.floor(dm/60)}h${String(dm%60).padStart(2,'0')}`;
-          }
-          tooltip.textContent = [arrLine, depLine, durLine].filter(Boolean).join('\n');
-          tooltip.style.opacity = '1';
-          tooltip.style.left = (e.clientX + 14) + 'px';
-          tooltip.style.top  = (e.clientY - 10) + 'px';
-          canvas.style.cursor = 'default';
-        } else {
-          tooltip.style.opacity = '0';
-          canvas.style.cursor = 'default';
-        }
-      });
-      canvas.addEventListener('mouseleave', () => { tooltip.style.opacity = '0'; });
     }
 
-    // ─ Fetch ────────────────────────────────────────────────────────────
-    function renderChainages(data) {
-      lastData = data;
-      const age = document.getElementById('ch-age');
-      if (age && data.generatedAt) {
-        const d = new Date(data.generatedAt);
-        age.textContent = `Données à ${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}z`;
-      }
-      drawTimeline(data);
-    }
+    // Redessiner sur resize
+    window.addEventListener('resize', () => { if (lastData) renderChainages(lastData); });
 
+    // ── Fetch ──────────────────────────────────────────────────
     async function fetchChainages(force = false) {
       if (airports.size === 0) {
         document.getElementById('chainages-result').innerHTML =
@@ -421,7 +437,6 @@ import '../styles/global.css';
       }
       document.getElementById('chainages-result').innerHTML =
         '<div class="text-gray-400 text-sm italic text-center py-8">Chargement…</div>';
-
       const codes = Array.from(airports).join(',');
       const url = `/api/chainages?airports=${encodeURIComponent(codes)}${force ? '&force=1' : ''}`;
       try {
@@ -430,12 +445,9 @@ import '../styles/global.css';
         renderChainages(await r.json());
       } catch (e) {
         document.getElementById('chainages-result').innerHTML =
-          `<div class="text-red-500 text-sm text-center py-8">⚠️ Erreur : ${e.message}</div>`;
+          `<div class="text-red-500 text-sm text-center py-8">⚠️ Erreur : ${e.message}</div>`;
       }
     }
-
-    // Redessiner si la fenêtre est redimensionnée
-    window.addEventListener('resize', () => { if (lastData) drawTimeline(lastData); });
 
   })();
   </script>

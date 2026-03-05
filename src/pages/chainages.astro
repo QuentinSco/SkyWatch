@@ -401,6 +401,7 @@ import '../styles/global.css';
 
     const airports = new Set();
     let lastData   = null;
+    let lastDraws  = []; // { canvas, airStops, pal, wStart, wEnd }
     const tooltip  = document.getElementById('ch-tooltip');
     let isPrintMode = false;
 
@@ -460,7 +461,7 @@ import '../styles/global.css';
     document.getElementById('btn-refresh').addEventListener('click', () => fetchChainages(true));
     
     // Fonction commune pour préparer l'impression
-    async function preparePrint() {
+    function preparePrint() {
       isPrintMode = true;
       const h1 = document.querySelector('h1');
       if (h1 && !h1.hasAttribute('data-print-date')) {
@@ -468,20 +469,28 @@ import '../styles/global.css';
         const dateStr = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
         h1.setAttribute('data-print-date', dateStr);
       }
-      if (lastData) await renderChainages(lastData);
+      // Redessiner les canvas existants en N&B (sans reconstruire le DOM)
+      for (const { canvas, airStops, pal, wStart, wEnd } of lastDraws) {
+        drawAirportTimeline(canvas, airStops, wStart, wEnd, pal);
+      }
     }
 
     function cleanupPrint() {
       isPrintMode = false;
       const h1 = document.querySelector('h1');
       if (h1) h1.removeAttribute('data-print-date');
-      if (lastData) renderChainages(lastData);
+      // Restaurer les canvas en couleur
+      for (const { canvas, airStops, pal, wStart, wEnd } of lastDraws) {
+        drawAirportTimeline(canvas, airStops, wStart, wEnd, pal);
+      }
     }
 
-    // Bouton imprimer - attendre que les canvas soient redessinés avant d'ouvrir le dialogue
-    document.getElementById('btn-print').addEventListener('click', async () => {
-      await preparePrint();
-      window.print();
+    // Bouton imprimer - redessiner les canvas existants puis ouvrir le dialogue
+    document.getElementById('btn-print').addEventListener('click', () => {
+      preparePrint();
+      requestAnimationFrame(() => {
+        window.print();
+      });
     });
 
     function hhmm(ms) {
@@ -730,6 +739,8 @@ import '../styles/global.css';
         }
         container.appendChild(section);
       });
+
+      lastDraws = pendingDraws.map(d => ({ ...d, wStart: data.windowStart, wEnd: data.windowEnd }));
 
       return new Promise(resolve => {
         requestAnimationFrame(() => {

@@ -294,14 +294,17 @@ import '../styles/global.css';
         const nav = document.getElementById(navId);
         if (!src || !nav) return;
         const observer = new MutationObserver(() => {
-          const spans = src.querySelectorAll('span');
+          const countSpans = src.querySelectorAll('span[data-count]');
           let count = 0;
-          spans.forEach(s => { const n = parseInt(s.textContent.replace(/\D/g,'')); if (!isNaN(n)) count += n; });
+          countSpans.forEach(s => {
+            const n = parseInt(s.getAttribute('data-count'));
+            if (!isNaN(n)) count += n;
+          });
           nav.innerHTML = count > 0
             ? `<span class="${bgClass} ${textClass} text-[10px] font-bold px-1.5 py-0.5 rounded-full">${count}</span>`
             : '';
         });
-        observer.observe(src, { childList: true, subtree: true });
+        observer.observe(src, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-count'] });
       }
       document.addEventListener('DOMContentLoaded', () => {
         syncNavCount('counters',         'nav-alert-count', 'bg-red-100',    'text-red-700');

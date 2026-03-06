@@ -200,8 +200,8 @@
       const orangeCount = risks.filter(r => r.worstSeverity === 'orange').length;
       if (countersEl) {
         countersEl.innerHTML = [
-          redCount    ? `<span class="bg-red-100 text-red-700 font-semibold text-xs px-3 py-1 rounded-full">🔴 ${redCount}</span>` : '',
-          orangeCount ? `<span class="bg-orange-100 text-orange-700 font-semibold text-xs px-3 py-1 rounded-full">🟠 ${orangeCount}</span>` : '',
+          redCount    ? `<span class="bg-red-100 text-red-700 font-semibold text-xs px-3 py-1 rounded-full" data-count="${redCount}">🔴 ${redCount}</span>` : '',
+          orangeCount ? `<span class="bg-orange-100 text-orange-700 font-semibold text-xs px-3 py-1 rounded-full" data-count="${orangeCount}">🟠 ${orangeCount}</span>` : '',
         ].join('');
       }
 
@@ -695,8 +695,8 @@
       const orange = uniqueHits.filter(h => h.threat.severity === 'orange').length;
       if (countersEl) {
         countersEl.innerHTML = [
-          red    ? `<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-semibold">🔴 ${red}</span>` : '',
-          orange ? `<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-semibold">🟠 ${orange}</span>` : '',
+          red    ? `<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-semibold" data-count="${red}">🔴 ${red}</span>` : '',
+          orange ? `<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-semibold" data-count="${orange}">🟠 ${orange}</span>` : '',
           uniqueHits.length ? `<span class="text-gray-400 text-xs">Total ${uniqueHits.length} vol${uniqueHits.length > 1 ? 's' : ''}</span>` : '',
         ].join('');
       }

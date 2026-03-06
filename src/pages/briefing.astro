@@ -12,7 +12,7 @@ import '../styles/global.css';
 
 <body class="text-gray-900 dark:text-gray-100 min-h-screen flex bg-slate-50 dark:bg-gray-950">
 
-  <!-- ─ Sidebar ──────────────────────────────────────────────── -->
+  <!-- ─ Sidebar ───────────────────────────────────────────────── -->
   <aside class="hidden lg:flex flex-col w-56 shrink-0 sticky top-0 h-screen
                 border-r border-gray-200 dark:border-gray-800
                 bg-white dark:bg-gray-900
@@ -48,7 +48,7 @@ import '../styles/global.css';
     </div>
   </aside>
 
-  <!-- ─ Contenu principal ──────────────────────────────────────────── -->
+  <!-- ─ Contenu principal ─────────────────────────────────────────────── -->
   <div class="flex-1 min-w-0 overflow-y-auto">
     <div class="max-w-3xl mx-auto px-4 py-6 xl:px-8">
 
@@ -90,6 +90,17 @@ import '../styles/global.css';
       orange: { dot: 'bg-orange-400', badge: 'bg-orange-100 text-orange-700' },
     };
 
+    // Badge pour le changeIndicator TAF (PROB30, TEMPO, PROB40 TEMPO, BECMG…)
+    function changeIndicatorBadge(ci) {
+      if (!ci || ci === 'INITIAL/FM') return '';
+      // Couleur selon le type d'indicateur
+      let cls = 'bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300';
+      if (ci.startsWith('PROB30')) cls = 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300';
+      else if (ci.startsWith('PROB40') || ci === 'TEMPO') cls = 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300';
+      else if (ci === 'BECMG') cls = 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300';
+      return `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold font-mono ${cls}">${ci}</span>`;
+    }
+
     function sectionHeader(icon, title, badge) {
       return `<div class="flex items-center justify-between px-6 py-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
         <span class="text-sm font-semibold text-gray-700 dark:text-gray-200">${icon} ${title}</span>
@@ -119,12 +130,16 @@ import '../styles/global.css';
       if (!form) return;
       let html = '';
 
-      // ── Météo hors Europe ────────────────────────────────────────────────────────
+      // ── Météo hors Europe ───────────────────────────────────────────────────────────────────────────────
       html += sectionHeader('🌩', 'Météo hors Europe', { cls: 'bg-green-100 text-green-700', label: '✓ Auto · 12h · 🔴 Rouge' });
 
       if (data.meteoHorsEurope.length > 0) {
         data.meteoHorsEurope.forEach((line, i) => {
           const c = SEV_COLORS[line.severity] || SEV_COLORS.orange;
+          const ciBadge  = changeIndicatorBadge(line.changeIndicator);
+          const snippetHtml = line.snippet
+            ? `<span class="font-mono text-[11px] text-gray-500 dark:text-gray-400">${line.snippet}</span>`
+            : '';
           html += `<div class="px-6 py-3 border-b border-gray-50 dark:border-gray-800">
             <div class="flex items-start gap-3">
               <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${c.dot}"></span>
@@ -134,6 +149,10 @@ import '../styles/global.css';
                   <span class="font-bold">${line.iata}</span>
                   <span class="text-blue-700 dark:text-blue-400 font-bold">${line.flight}</span>
                   <span class="text-gray-500 dark:text-gray-400 text-xs">(ETA <span class="font-mono font-semibold text-gray-700 dark:text-gray-300">${line.etaZ}</span> · Fenêtre <span class="font-mono text-gray-700 dark:text-gray-300">${line.fenetreZ}</span>)</span>
+                </div>
+                <div class="mt-1.5 flex flex-wrap items-center gap-2">
+                  ${ciBadge}
+                  ${snippetHtml}
                 </div>
                 <div class="mt-2 flex flex-wrap items-center gap-3">
                   <label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">Capa attente
@@ -155,8 +174,6 @@ import '../styles/global.css';
         });
       }
 
-      // Vent arrière — uniquement si l'API a renvoyé des entrées dans tailwindWatch
-      // (le filtre operatedIcaos est déjà fait côté serveur)
       const twWithTAF = (data.tailwindWatch || []).filter(tw => tw.forecastAlerts && tw.forecastAlerts.length > 0);
       twWithTAF.forEach(tw => {
         const runway = tw.forecastAlerts[0].runway;
@@ -183,7 +200,7 @@ import '../styles/global.css';
 
       if (data.meteoHorsEurope.length === 0 && twWithTAF.length === 0) html += nilLine();
 
-      // ── Perturbation tropicale ──────────────────────────────────────────────────
+      // ── Perturbation tropicale ────────────────────────────────────────────────────────────────────────
       html += sectionHeader('🌀', 'Perturbation tropicale', { cls: 'bg-green-100 text-green-700', label: '✓ Auto' });
       if (!data.tropicale.length) { html += nilLine(); }
       else data.tropicale.forEach(tc => {
@@ -194,7 +211,7 @@ import '../styles/global.css';
         </div>`;
       });
 
-      // ── Activité volcanique ─────────────────────────────────────────────────────
+      // ── Activité volcanique ───────────────────────────────────────────────────────────────────────────────
       html += sectionHeader('🌋', 'Activité volcanique', { cls: 'bg-green-100 text-green-700', label: '✓ Auto · VAAC' });
       if (!data.volcanique.length) { html += nilLine(); }
       else data.volcanique.forEach(v => {
@@ -205,7 +222,7 @@ import '../styles/global.css';
         </div>`;
       });
 
-      // ── Tirs de fusée ─────────────────────────────────────────────────────────────
+      // ── Tirs de fusée ───────────────────────────────────────────────────────────────────────────────────────
       html += sectionHeader('🚀', 'Tirs de fusée', { cls: 'bg-green-100 text-green-700', label: '✓ Auto · 12h' });
       if (!data.tirsFusee.length) { html += nilLine(); }
       else data.tirsFusee.forEach(launch => {
@@ -223,7 +240,7 @@ import '../styles/global.css';
         </div>`;
       });
 
-      // ── Champs manuels ─────────────────────────────────────────────────────────────
+      // ── Champs manuels ───────────────────────────────────────────────────────────────────────────────────────
       html += sectionHeader('⛽', 'Carburant', { cls: 'bg-orange-100 text-orange-700', label: '✏️ Manuel' });
       html += manualTextarea('field-carburant', 'Ex : Afrique + BZV + HAV', data.carburant);
       html += sectionHeader('🌐', 'Géopolitique', { cls: 'bg-orange-100 text-orange-700', label: '✏️ Manuel' });
@@ -254,6 +271,7 @@ import '../styles/global.css';
         const capaEl = document.querySelector(`[data-field="capa"][data-idx="${i}"]`);
         const degEl  = document.querySelector(`[data-field="deg"][data-idx="${i}"]`);
         const infos  = [`ETA ${line.etaZ}`, `Fenêtre ${line.fenetreZ}`];
+        if (line.changeIndicator && line.changeIndicator !== 'INITIAL/FM') infos.push(line.changeIndicator);
         if (capaEl?.value?.trim()) infos.push(`Capa attente ~${capaEl.value.trim()}min`);
         if (degEl?.value?.trim())  infos.push(`Dégagement ${degEl.value.trim().toUpperCase()}`);
         meteoItems.push(`-${line.phenomenon} ${line.iata} ${line.flight} (${infos.join(' - ')})`);

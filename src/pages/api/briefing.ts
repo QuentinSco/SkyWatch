@@ -9,15 +9,17 @@ import { fetchTailwindStatus }   from '../../lib/tailwindMonitor';
 import { fetchRocketLaunches }   from '../../lib/launchParser';
 
 export interface BriefingMeteoLine {
-  flight:         string;
-  iata:           string;
-  name:           string;
-  phenomenon:     string;
-  severity:       'red' | 'orange' | 'yellow';
-  etaZ:           string;
-  fenetreZ:       string;
-  capaAttenteMin: number | null;
-  degagement:     string | null;
+  flight:            string;
+  iata:              string;
+  name:              string;
+  phenomenon:        string;
+  severity:          'red' | 'orange' | 'yellow';
+  etaZ:              string;
+  fenetreZ:          string;
+  changeIndicator:   string;   // ex. "PROB30", "TEMPO", "PROB40 TEMPO", "BECMG"
+  snippet:           string;   // ex. "03015G25KT TSRA VIS 2000m SCT015CB"
+  capaAttenteMin:    number | null;
+  degagement:        string | null;
 }
 
 export interface BriefingData {
@@ -33,8 +35,8 @@ export interface BriefingData {
     currentTW:      number | null;
     runway:         string | null;
     forecastAlerts: any[];
-    depFlight?:     string;   // ex. "AF456" — vol départ depuis cet aéroport
-    depStdZ?:       string;   // ex. "06/14z" — STD formatée
+    depFlight?:     string;
+    depStdZ?:       string;
   }[];
   carburant:       string;
   geopolitique:    string;
@@ -109,15 +111,15 @@ export const GET: APIRoute = async () => {
       });
 
       for (const threat of taf.threats) {
-        // Alertes rouges uniquement
         if (threat.severity !== 'red') continue;
 
         for (const flight of flights) {
           const etaIso = flight.estimatedTouchDownTime ?? flight.scheduledArrival!;
           const etaMs  = new Date(etaIso).getTime();
+          // Fenêtre H-1/H+1 autour de l'ETA (au lieu de H-2/H+2)
           const inWindow =
-            etaMs >= threat.periodStart * 1000 - 60 * 60 * 1000 &&
-            etaMs <= threat.periodEnd   * 1000 + 2 * 60 * 60 * 1000;
+            etaMs >= threat.periodStart * 1000 - 1 * 60 * 60 * 1000 &&
+            etaMs <= threat.periodEnd   * 1000 + 1 * 60 * 60 * 1000;
           if (!inWindow) continue;
 
           const key = `AF${flight.flightNumber}-${taf.icao}-${threat.type}`;
@@ -125,15 +127,17 @@ export const GET: APIRoute = async () => {
           seen.add(key);
 
           meteoLines.push({
-            flight:         `AF${flight.flightNumber}`,
-            iata:           taf.iata,
-            name:           taf.name,
-            phenomenon:     PHENOMENON_LABELS[threat.type] ?? threat.type,
-            severity:       threat.severity,
-            etaZ:           fmtZ(etaIso),
-            fenetreZ:       `${fmtZ(threat.periodStart)}/${fmtZ(threat.periodEnd)}`,
-            capaAttenteMin: null,
-            degagement:     null,
+            flight:          `AF${flight.flightNumber}`,
+            iata:            taf.iata,
+            name:            taf.name,
+            phenomenon:      PHENOMENON_LABELS[threat.type] ?? threat.type,
+            severity:        threat.severity,
+            etaZ:            fmtZ(etaIso),
+            fenetreZ:        `${fmtZ(threat.periodStart)}/${fmtZ(threat.periodEnd)}`,
+            changeIndicator: threat.changeIndicator ?? '',
+            snippet:         threat.snippet ?? '',
+            capaAttenteMin:  null,
+            degagement:      null,
           });
         }
       }
@@ -188,9 +192,7 @@ export const GET: APIRoute = async () => {
         };
       });
 
-    // ── Tailwind watch — filtre sur le départ (STD/EOBT) vers SXM/SJO dans la fenêtre h-12 ──────────────────
-    // Le vent arrière se constate au décol depuis CDG, pas à l'atterrissage à SXM/SJO.
-    // On utilise EOBT en priorité, puis STD si absent, puis ETA en dernier recours.
+    // ── Tailwind watch ─────────────────────────────────────────────────────────────────────────────────────────
     const TAILWIND_ICAOS = new Set(['TNCM', 'MROC']);
 
     const operatedIcaos = new Set(
@@ -205,27 +207,23 @@ export const GET: APIRoute = async () => {
         .map(f => f.icao)
     );
 
-    // Cherche le prochain départ LC depuis chaque aéroport vent arrière dans les 12h
     const tailwindWatch = tailwind
       .filter(t => operatedIcaos.has(t.icao))
       .flatMap(t => {
         const depFlight = allDepartures
           .filter(f => f.icao === t.icao && f.isLongHaul)
           .sort((a, b) => {
-            // Tri sur l'heure de départ réelle (EOBT > STD)
             const tA = new Date(a.estimatedOffBlockTime ?? a.scheduledDeparture ?? a.scheduledArrival).getTime();
             const tB = new Date(b.estimatedOffBlockTime ?? b.scheduledDeparture ?? b.scheduledArrival).getTime();
             return tA - tB;
           })
           .find(f => {
-            // Fix : utiliser l'heure de départ (EOBT/STD) et non scheduledArrival (heure d'arrivée destination)
             const std = new Date(
               f.estimatedOffBlockTime ?? f.scheduledDeparture ?? f.scheduledArrival
             ).getTime();
             return std >= now && std <= now12h;
           });
 
-        // Pas de vol départ dans les 12h → on n'expose pas cette entrée
         if (!depFlight) return [];
 
         const stdIso = depFlight.estimatedOffBlockTime ?? depFlight.scheduledDeparture ?? depFlight.scheduledArrival;

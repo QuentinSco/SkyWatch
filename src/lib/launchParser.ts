@@ -33,8 +33,12 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
     const url = new URL('https://ll.thespacedevs.com/2.2.0/launch/upcoming/');
     url.searchParams.set('limit', '50');
     url.searchParams.set('ordering', 'window_start');
-    const windowTo = new Date(Date.now() + LAUNCH_WINDOW_HOURS * 3_600_000);
-    url.searchParams.set('window_start__lte', windowTo.toISOString());
+
+    // ── DEBUG ──────────────────────────────────────────────────────────────
+    console.log(`[LaunchLib:DEBUG] now = ${new Date().toISOString()}`);
+    console.log(`[LaunchLib:DEBUG] LAUNCH_WINDOW_HOURS = ${LAUNCH_WINDOW_HOURS}`);
+    console.log(`[LaunchLib:DEBUG] URL = ${url.toString()}`);
+    // ───────────────────────────────────────────────────────────────────────
 
     const res = await fetch(url.toString(), {
       headers: { 'User-Agent': 'SkyWatch/0.1', 'Accept': 'application/json' },
@@ -48,22 +52,57 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
     const json = await res.json();
     const now = Date.now();
 
+    // ── DEBUG ──────────────────────────────────────────────────────────────
+    console.log(`[LaunchLib:DEBUG] LL2 total count = ${json.count}, résultats reçus = ${json.results?.length ?? 0}`);
+    // ───────────────────────────────────────────────────────────────────────
+
     for (const launch of (json.results ?? [])) {
-      const statusId = launch.status?.id;
+      const statusId    = launch.status?.id;
       const windowStart = new Date(launch.window_start ?? launch.net).getTime();
       const windowEnd   = new Date(launch.window_end   ?? launch.net).getTime();
       const hoursUntil  = (windowStart - now) / 3_600_000;
       const isBackup    = BACKUP_STATUS_IDS.has(statusId);
 
-      if (EXCLUDE_STATUS_IDS.has(statusId)) continue;
-      if (hoursUntil < 0 || hoursUntil > LAUNCH_WINDOW_HOURS) continue;
+      // ── DEBUG : une ligne par lancement ──────────────────────────────────
+      const tag = launch.name?.includes('Starlink') ? '🚀★' : '🚀';
+      console.log(
+        `[LaunchLib:DEBUG] ${tag} "${launch.name}"` +
+        ` | statusId=${statusId} (${launch.status?.abbrev})` +
+        ` | hoursUntil=${hoursUntil.toFixed(1)}h` +
+        ` | window_start=${launch.window_start ?? '(null→net)'}` +
+        ` | net=${launch.net}`
+      );
+      // ─────────────────────────────────────────────────────────────────────
+
+      if (EXCLUDE_STATUS_IDS.has(statusId)) {
+        console.log(`[LaunchLib:DEBUG]   → ❌ EXCLU (statusId ${statusId} in EXCLUDE_STATUS_IDS)`);
+        continue;
+      }
+      if (hoursUntil < 0 || hoursUntil > LAUNCH_WINDOW_HOURS) {
+        console.log(`[LaunchLib:DEBUG]   → ❌ HORS FENÊTRE (hoursUntil=${hoursUntil.toFixed(1)} — doit être 0-${LAUNCH_WINDOW_HOURS})`);
+        continue;
+      }
 
       const lat = launch.pad?.latitude  ? parseFloat(launch.pad.latitude)  : null;
       const lon = launch.pad?.longitude ? parseFloat(launch.pad.longitude) : null;
-      if (lat === null || lon === null) continue;
+      if (lat === null || lon === null) {
+        console.log(`[LaunchLib:DEBUG]   → ❌ PAS DE COORDONNÉES pad`);
+        continue;
+      }
 
       const airports = getAirportsNearCoords(lat, lon, LAUNCH_IMPACT_RADIUS_KM);
-      if (airports.length === 0) continue;
+
+      // ── DEBUG ──────────────────────────────────────────────────────────────
+      console.log(`[LaunchLib:DEBUG]   → pad (${lat}, ${lon}) | aéroports trouvés : [${airports.join(', ')}]`);
+      // ───────────────────────────────────────────────────────────────────────
+
+      if (airports.length === 0) {
+        console.log(`[LaunchLib:DEBUG]   → ❌ AUCUN AÉROPORT dans ${LAUNCH_IMPACT_RADIUS_KM} km`);
+        continue;
+      }
+
+      console.log(`[LaunchLib:DEBUG]   → ✅ RETENU severity=${isBackup ? 'yellow(backup)' : '?'}`);
+
 
       const severity = isBackup
         ? 'yellow'

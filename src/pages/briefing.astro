@@ -166,12 +166,17 @@ import '../styles/global.css';
             ${windLabel}&nbsp;<span class="font-normal text-amber-700 dark:text-amber-400">${utcDZ(fa.periodStart)}→${utcDZ(fa.periodEnd)}</span>
           </span>`;
         }).join(' ');
+        const flightBadge = `<span class="text-blue-700 dark:text-blue-400 font-bold text-xs">${tw.depFlight}</span>
+             <span class="text-gray-400 dark:text-gray-500 text-xs">(STD&nbsp;${tw.depStdZ}</span>`;
+        const closeParen = `<span class="text-gray-400 dark:text-gray-500 text-xs">)</span>`;
         html += `<div class="px-6 py-3 border-b border-gray-50 dark:border-gray-800">
           <div class="flex flex-wrap items-center gap-2">
             <span class="font-bold text-gray-900 dark:text-white text-sm w-10">${tw.iata}</span>
             <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 font-mono">${runway}</span>
             <span class="text-xs text-gray-500 dark:text-gray-400">💨 Vent arrière —</span>
+            ${flightBadge}
             ${chips}
+            ${closeParen}
           </div>
         </div>`;
       });
@@ -260,7 +265,7 @@ import '../styles/global.css';
           const windStr = fa.hasGust ? `${fa.wspdBase}G${fa.wgst}kt` : `${fa.tailwindKt}kt`;
           return `${windStr} (${utcDZ(fa.periodStart)}→${utcDZ(fa.periodEnd)})`;
         });
-        meteoItems.push(`-Vent arrière ${tw.iata} ${runway} — TAF : ${fcsts.join(', ')}`);
+        meteoItems.push(`-Vent arrière ${tw.iata} ${runway}💨 ${tw.depFlight} (STD ${tw.depStdZ} - TAF : ${fcsts.join(', ')})`);
       });
       section('Météo hors Europe :', meteoItems.length ? meteoItems : ['-NIL']);
       section('Perturbation tropicale :',

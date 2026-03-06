@@ -35,7 +35,7 @@ export interface TafVolRisksResponse {
   hits:     TafFlightHit[];
   baseHits: TafFlightHit[];
   baseTafs: BaseTaf[];
-  cacheFetchedAt?: number | null;  // ✅ Timestamp du dernier fetch API AF (pour affichage âge cache)
+  cacheFetchedAt?: number | null;
 }
 
 // ✅ Cache Redis partagé — remplace le cache in-memory inopérant sur Vercel (cold-start)
@@ -43,7 +43,7 @@ const kv = new Redis({
   url:   import.meta.env.KV_REST_API_URL,
   token: import.meta.env.KV_REST_API_TOKEN,
 });
-const TAF_VOL_CACHE_VERSION = 'v2';  // ✅ Incrémente pour invalider l'ancien cache
+const TAF_VOL_CACHE_VERSION = 'v3';  // ✅ Incrémente pour invalider l'ancien cache après ce fix
 const TAF_VOL_CACHE_KEY     = `taf_vol_risks_cache_${TAF_VOL_CACHE_VERSION}`;
 const TAF_VOL_CACHE_TTL_SEC = 20 * 60; // 20 min
 
@@ -73,7 +73,6 @@ function overlapsThreatWindow(
 export const prerender = false;
 
 export const GET: APIRoute = async ({ url }) => {
-  // ✅ Paramètre force pour bypass cache (bouton Actualiser dans UI)
   const force = url.searchParams.get('force') === '1';
   
   if (force) {
@@ -96,11 +95,9 @@ export const GET: APIRoute = async ({ url }) => {
   }
 
   try {
-    // Fetch TAF bruts (tous aéroports AF) + vols en parallèle
-    // ✅ CORRECTION : passe lcOnly=false pour inclure CDG/ORY dans le parsing des menaces
     const [tafRisks, allFlights, rawBaseTafsResult] = await Promise.all([
-      fetchTafRisks(force, false),  // ✅ lcOnly=false pour avoir CDG/ORY avec menaces parsées
-      getCachedAfArrivals(force),  // ✅ Passe le paramètre force
+      fetchTafRisks(force, false),
+      getCachedAfArrivals(force),
       fetch(
         `https://aviationweather.gov/api/data/taf?ids=LFPG,LFPO&format=json&metar=false`,
         {
@@ -110,10 +107,8 @@ export const GET: APIRoute = async ({ url }) => {
       ).then(r => r.ok ? r.json() : Promise.resolve([])).catch(() => []),
     ]);
 
-    // ✅ Récupération du timestamp du cache AF pour affichage dans l'UI
     const cacheFetchedAt = await getCacheFetchedAt();
 
-    // ── Diagnostics généraux ────────────────────────────────────────────────────────────
     dbg(`TAF risques : ${tafRisks.length} aéroports`);
     dbg(`TAF ICAO concernés : ${tafRisks.map(t => t.icao).join(', ')}`);
     dbg(`Vols chargés total : ${allFlights.length}`);
@@ -135,7 +130,6 @@ export const GET: APIRoute = async ({ url }) => {
       dbg('⚠️ Aucun TAF avec menace détectée');
     }
 
-    // ── Filtrage vols invalides ────────────────────────────────────────────────────────
     const now = Date.now();
     const cleanedFlights = allFlights.filter(f => {
       if (f.aircraftType === 'BUS') return false;
@@ -145,7 +139,6 @@ export const GET: APIRoute = async ({ url }) => {
       return true;
     });
 
-    // ── Matching ──────────────────────────────────────────────────────────────────────
     const hits: TafFlightHit[] = [];
     let totalFlightsChecked = 0;
     let rejectedNoIcaoMatch = 0;
@@ -164,6 +157,13 @@ export const GET: APIRoute = async ({ url }) => {
       }
 
       for (const threat of taf.threats) {
+        // ── Sévérité yellow exclue du tableau Vols LC impactés ──────────────
+        // PROB30/PROB30 TEMPO → plafonnés yellow dans tafParser.ts.
+        // Une probabilité < 30% ne justifie pas une alerte dans le tableau.
+        // PROB40/PROB40 TEMPO → plafonnés orange = OK pour vigilance.
+        // Le bloc CDG/ORY (baseHits) utilise ce même filtre par cohérence.
+        if (threat.severity === 'yellow') continue;
+
         for (const flight of flights) {
           totalFlightsChecked++;
           const etaIso = flight.estimatedTouchDownTime ?? flight.scheduledArrival;
@@ -194,7 +194,6 @@ export const GET: APIRoute = async ({ url }) => {
       }
     }
 
-    // ── Résumé matching ──────────────────────────────────────────────────────────────
     dbg(`Matching terminé :`);
     dbg(`  Vols bruts         : ${allFlights.length}`);
     dbg(`  Vols après filtre  : ${cleanedFlights.length}`);
@@ -203,14 +202,12 @@ export const GET: APIRoute = async ({ url }) => {
     dbg(`  Rejetés (fenêtre)  : ${rejectedTimeWindow}`);
     dbg(`  Hits               : ${hits.length}`);
 
-    // ── Séparation vols LC (hors base) vs base CDG/ORY ────────────────────────────────────
     const filteredHits = hits.filter(h => !HOME_BASES.has(h.taf.icao));
     const baseHits     = hits.filter(h =>  HOME_BASES.has(h.taf.icao));
 
     dbg(`  Vols LC (hors CDG/ORY) : ${filteredHits.length}`);
     dbg(`  Vols base CDG/ORY      : ${baseHits.length}`);
 
-    // ── Construction baseTafs (CDG + ORY toujours présents) ─────────────────────────────────────────────
     const IATA_MAP: Record<string, string> = { LFPG: 'CDG', LFPO: 'ORY' };
     const NAME_MAP: Record<string, string> = { LFPG: 'Paris CDG', LFPO: 'Paris Orly' };
 
@@ -232,7 +229,6 @@ export const GET: APIRoute = async ({ url }) => {
       };
     });
 
-    // ── Tri ────────────────────────────────────────────────────────────────────────────────────
     const sortHits = (arr: TafFlightHit[]) => arr.sort((a, b) => {
       const sev: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
       if (sev[a.threat.severity] !== sev[b.threat.severity])
@@ -248,10 +244,9 @@ export const GET: APIRoute = async ({ url }) => {
       hits: filteredHits, 
       baseHits, 
       baseTafs,
-      cacheFetchedAt,  // ✅ Timestamp pour calcul âge cache dans UI
+      cacheFetchedAt,
     };
 
-    // ✅ Stockage en KV Redis (TTL 20 min) — partagé entre toutes les instances Vercel
     try {
       await kv.set(TAF_VOL_CACHE_KEY, response, { ex: TAF_VOL_CACHE_TTL_SEC });
       dbg(`Cache KV MISS → stocké (TTL ${TAF_VOL_CACHE_TTL_SEC}s)`);

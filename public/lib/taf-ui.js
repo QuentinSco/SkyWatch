@@ -6,7 +6,6 @@
     yellow: 'bg-yellow-400 text-black',
     none:   'bg-green-500 text-white',
   };
-  // Text-only severity style — used in table cells (no background pill)
   const SEVERITY_TEXT = {
     red:    'text-red-600',
     orange: 'text-orange-500',
@@ -113,7 +112,7 @@
       ?.addEventListener('click', loadTafVolRisks);
   }
 
-  // ── TAF : badge menace (utilisé dans les lignes détail — conserve le fond coloré) ────────────────────────────────────
+  // ── TAF : badge menace ────────────────────────────────────────────────────────────────────────
   function renderThreatBadge(threat) {
     const icon   = THREAT_ICONS[threat.type] ?? '⚠️';
     const badge  = SEVERITY_BADGE[threat.severity];
@@ -132,7 +131,7 @@
       </div>`;
   }
 
-  // ── TAF : ligne tableau ─────────────────────────────────────────────────────────────────────────────────────────
+  // ── TAF : ligne tableau ───────────────────────────────────────────────────────────────────────
   function renderTafRiskCard(risk) {
     const badgeCls    = SEVERITY_TEXT[risk.worstSeverity];
     const threatsHtml = risk.threats.map(t => `
@@ -173,7 +172,7 @@
       </tr>`;
   }
 
-  // ── TAF : chargement section ─────────────────────────────────────────────────────────────────────────────────────────────────────
+  // ── TAF : chargement section ──────────────────────────────────────────────────────────────────
   async function loadTafRisks() {
     const container  = document.getElementById('taf-main');
     const countersEl = document.getElementById('taf-counters');
@@ -241,7 +240,7 @@
     }
   }
 
-  // ── Vols AF : rendu ligne ──────────────────────────────────────────────────────────────────────────────────────
+  // ── Vols AF : rendu ligne ─────────────────────────────────────────────────────────────────────
   let _rowIdx = 0;
 
   function renderTafVolRow(hit) {
@@ -259,7 +258,6 @@
 
     const rowId = 'vol-row-' + (_rowIdx++);
 
-    // Afficher toutes les autres menaces du TAF (sauf la menace principale affichée)
     const otherThreats = taf.threats.filter(t =>
       !(t.type === threat.type &&
         t.periodStart === threat.periodStart &&
@@ -538,9 +536,7 @@
       </div>`;
   }
 
-  // ── Section CDG/ORY ───────────────────────────────────────────────────────────────────────────────────────────────────────
-  // hideHeader=true quand le contenu est injecté dans #base-status-body (widescreen)
-  // pour éviter de dupliquer l'entête déjà présente dans la barre du slot.
+  // ── Section CDG/ORY ───────────────────────────────────────────────────────────────────────────
   function renderBaseSection(baseHits, baseTafs, hideHeader) {
     const tafsToRender = (baseTafs && baseTafs.length > 0)
       ? baseTafs
@@ -621,9 +617,6 @@
         ${allThreats.length === 0 ? '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full font-semibold">✅ Aucune menace</span>' : ''}
       </div>`;
 
-    // En mode widescreen (hideHeader=true) : on supprime la section/h2,
-    // l'entête est déjà affichée dans la barre du slot CDG/ORY.
-    // On garde grid-cols-2 pour afficher CDG et ORY côte à côte.
     if (hideHeader) {
       return `
         <div class="px-4 py-3">
@@ -646,7 +639,7 @@
       </section>`;
   }
 
-  // ── Fonction de dédoublonnage des vols ──────────────────────────────────────────────────────────────────────────
+  // ── Dédoublonnage vols ────────────────────────────────────────────────────────────────────────
   function deduplicateFlights(hits) {
     const flightMap = {};
     
@@ -664,7 +657,7 @@
     return Object.values(flightMap);
   }
 
-  // ── Vols AF : chargement section ──────────────────────────────────────────────────────────────────────────────────────
+  // ── Vols AF : chargement section ─────────────────────────────────────────────────────────────
   async function loadTafVolRisks() {
     _rowIdx = 0;
     const container  = document.getElementById('taf-vol-main');
@@ -705,7 +698,7 @@
       if (uniqueHits.length === 0) {
         mainHtml = `
           <div class="text-gray-400 text-sm py-4">
-            Aucun vol AF LC actuellement dans une fenêtre de menace TAF détectée.
+            Aucun vol AF LC actuellement dans une fenêtre de menace TAF significative (rouge ou orange).
           </div>`;
       } else {
         mainHtml = `
@@ -731,13 +724,10 @@
       const baseBodyEl = document.getElementById('base-status-body');
 
       if (isWide && baseBodyEl) {
-        // Widescreen : injecte le contenu sans entête dans le slot dédié
         container.innerHTML = mainHtml + lastUpdateBar();
         baseBodyEl.innerHTML = renderBaseSection(baseHits, baseTafs, true);
-        // Retire la classe italic du conteneur pour éviter la propagation
         baseBodyEl.classList.remove('italic', 'text-gray-400');
       } else {
-        // Mobile/tablette : affiche tout dans la colonne principale avec entête
         container.innerHTML = mainHtml + renderBaseSection(baseHits, baseTafs, false) + lastUpdateBar();
       }
       bindRefreshBtn();
@@ -753,7 +743,7 @@
     }
   }
 
-  // ── Init ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  // ── Init ─────────────────────────────────────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
     loadTafRisks();
     loadTafVolRisks();

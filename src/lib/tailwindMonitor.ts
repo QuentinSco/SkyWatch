@@ -123,10 +123,16 @@ export async function fetchTailwindStatus(): Promise<TailwindStatus[]> {
     const id = m.icaoId ?? m.stationId;
     if (id && !metarByIcao[id]) metarByIcao[id] = m;
   }
+
+  // Fix COR/AMD : garder uniquement le TAF le plus récent par ICAO (issueTime le plus grand)
   const tafByIcao: Record<string, any> = {};
   for (const t of tafRaw) {
     const id = t.icaoId ?? t.stationId;
-    if (id) tafByIcao[id] = t;
+    if (!id) continue;
+    const existing = tafByIcao[id];
+    if (!existing || (t.issueTime ?? 0) > (existing.issueTime ?? 0)) {
+      tafByIcao[id] = t;
+    }
   }
 
   const now   = Date.now();

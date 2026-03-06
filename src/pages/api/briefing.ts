@@ -211,16 +211,24 @@ export const GET: APIRoute = async () => {
       .flatMap(t => {
         const depFlight = allDepartures
           .filter(f => f.icao === t.icao && f.isLongHaul)
-          .sort((a, b) =>
-            new Date(a.scheduledArrival).getTime() - new Date(b.scheduledArrival).getTime()
-          )
+          .sort((a, b) => {
+            // Tri sur l'heure de départ réelle (EOBT > STD)
+            const tA = new Date(a.estimatedOffBlockTime ?? a.scheduledDeparture ?? a.scheduledArrival).getTime();
+            const tB = new Date(b.estimatedOffBlockTime ?? b.scheduledDeparture ?? b.scheduledArrival).getTime();
+            return tA - tB;
+          })
           .find(f => {
-            const std = new Date(f.scheduledArrival).getTime();
+            // Fix : utiliser l'heure de départ (EOBT/STD) et non scheduledArrival (heure d'arrivée destination)
+            const std = new Date(
+              f.estimatedOffBlockTime ?? f.scheduledDeparture ?? f.scheduledArrival
+            ).getTime();
             return std >= now && std <= now12h;
           });
 
         // Pas de vol départ dans les 12h → on n'expose pas cette entrée
         if (!depFlight) return [];
+
+        const stdIso = depFlight.estimatedOffBlockTime ?? depFlight.scheduledDeparture ?? depFlight.scheduledArrival;
 
         return [{
           iata:           t.iata,
@@ -230,7 +238,7 @@ export const GET: APIRoute = async () => {
           runway:         t.worstRunway?.runway      ?? null,
           forecastAlerts: t.forecastAlerts,
           depFlight:      `AF${depFlight.flightNumber}`,
-          depStdZ:        fmtZ(depFlight.scheduledArrival),
+          depStdZ:        fmtZ(stdIso),
         }];
       });
 

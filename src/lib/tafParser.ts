@@ -25,7 +25,6 @@ export interface TafRisk {
 }
 
 // ─── Réseau AF Long-Courrier uniquement ────────────────────────────────────
-// Ces codes IATA correspondent aux escales LC opérées par Air France
 const AF_LC_IATA = new Set([
   'ABJ', 'ABV', 'ATL', 'BEY', 'BKK', 'BLR', 'BOG', 'BOM', 'BOS', 'BZV',
   'CAI', 'CAY', 'CDG', 'CKY', 'COO', 'CPT', 'CUN', 'DEL', 'DEN', 'DFW',
@@ -39,217 +38,57 @@ const AF_LC_IATA = new Set([
   'TLV', 'TNR', 'YOW', 'YUL', 'YVR', 'YYZ', 'ZNZ'
 ]);
 
-// ─── Réseau AF complet (LC + MC + régional) — IATA → ICAO ──────────────────
-// Garde toutes les escales pour le croisement vols/TAF, mais uniquement
-// les LC seront retournées dans la liste des risques TAF.
 export const AF_IATA_TO_ICAO: Record<string, string> = {
   // ── Afrique ────────────────────────────────────────────────────────────────
-  ABJ: 'DIAP', // Abidjan
-  ABV: 'DNAA', // Abuja
-  BZV: 'FCBB', // Brazzaville
-  CKY: 'GUCY', // Conakry
-  CMN: 'GMMN', // Casablanca
-  COO: 'DBBB', // Cotonou
-  CPT: 'FACT', // Le Cap
-  DLA: 'FKKD', // Douala
-  DSS: 'GOBD', // Dakar Blaise Diagne
-  FIH: 'FZAA', // Kinshasa
-  JIB: 'HDAM', // Djibouti
-  JNB: 'FAOR', // Johannesburg
-  JRO: 'HTKJ', // Kilimandjaro
-  LBV: 'FOOL', // Libreville
-  LFW: 'DXXX', // Lomé
-  LOS: 'DNMM', // Lagos
-  MRU: 'FIMP', // Maurice
-  NBJ: 'FNBJ', // Luanda
-  NBO: 'HKJK', // Nairobi
-  NDJ: 'FTTJ', // N'Djamena
-  NKC: 'GQNN', // Nouakchott
-  NSI: 'FKYS', // Yaoundé
-  PNR: 'FCPP', // Pointe-Noire
-  RAK: 'GMMX', // Marrakech
-  RBA: 'GMME', // Rabat
-  RUN: 'FMEE', // La Réunion
-  SSG: 'FGBT', // Malabo
-  TNG: 'GMTN', // Tanger
-  TNR: 'FMMI', // Antananarivo
-  TUN: 'DTTA', // Tunis
-  ZNZ: 'HTZA', // Zanzibar
-
+  ABJ: 'DIAP', ABV: 'DNAA', BZV: 'FCBB', CKY: 'GUCY', CMN: 'GMMN',
+  COO: 'DBBB', CPT: 'FACT', DLA: 'FKKD', DSS: 'GOBD', FIH: 'FZAA',
+  JIB: 'HDAM', JNB: 'FAOR', JRO: 'HTKJ', LBV: 'FOOL', LFW: 'DXXX',
+  LOS: 'DNMM', MRU: 'FIMP', NBJ: 'FNBJ', NBO: 'HKJK', NDJ: 'FTTJ',
+  NKC: 'GQNN', NSI: 'FKYS', PNR: 'FCPP', RAK: 'GMMX', RBA: 'GMME',
+  RUN: 'FMEE', SSG: 'FGBT', TNG: 'GMTN', TNR: 'FMMI', TUN: 'DTTA',
+  ZNZ: 'HTZA',
   // ── Amériques ──────────────────────────────────────────────────────────────
-  ATL: 'KATL', // Atlanta
-  BEL: 'SBBE', // Belém
-  BOG: 'SKBO', // Bogotá
-  BOS: 'KBOS', // Boston
-  CAY: 'SOCA', // Cayenne
-  CUN: 'MMUN', // Cancún
-  DEN: 'KDEN', // Denver
-  DFW: 'KDFW', // Dallas/Fort Worth
-  DTW: 'KDTW', // Detroit
-  EWR: 'KEWR', // Newark
-  EZE: 'SAEZ', // Buenos Aires Ezeiza
-  FDF: 'TFFF', // Fort-de-France
-  FOR: 'SBFZ', // Fortaleza
-  GDL: 'MMGL', // Guadalajara
-  GIG: 'SBGL', // Rio de Janeiro Galeão
-  GRU: 'SBGR', // São Paulo Guarulhos
-  HAV: 'MUHA', // La Havane
-  IAD: 'KIAD', // Washington Dulles
-  IAH: 'KIAH', // Houston
-  JFK: 'KJFK', // New York JFK
-  LAS: 'KLAS', // Las Vegas
-  LAX: 'KLAX', // Los Angeles
-  LIM: 'SPIM', // Lima
-  MCO: 'KMCO', // Orlando
-  MEX: 'MMMX', // Mexico City Benito Juárez
-  MIA: 'KMIA', // Miami
-  MSP: 'KMSP', // Minneapolis
-  NAS: 'MYNN', // Nassau
-  NLU: 'MMSM', // Mexico City Felipe Ángeles
-  ORD: 'KORD', // Chicago O'Hare
-  PHX: 'KPHX', // Phoenix
-  PPT: 'NTAA', // Papeete
-  PTP: 'TFFR', // Pointe-à-Pitre
-  PTY: 'MPTO', // Panama City
-  PUJ: 'MDPC', // Punta Cana
-  RDU: 'KRDU', // Raleigh-Durham
-  SAN: 'KSAN', // San Diego
-  SCL: 'SCEL', // Santiago
-  SEA: 'KSEA', // Seattle
-  SFO: 'KSFO', // San Francisco
-  SJO: 'MROC', // San José CR
-  SSA: 'SBSV', // Salvador de Bahia
-  SXM: 'TNCM', // Sint Maarten
-  YOW: 'CYOW', // Ottawa
-  YUL: 'CYUL', // Montréal
-  YVR: 'CYVR', // Vancouver
-  YYZ: 'CYYZ', // Toronto
-
+  ATL: 'KATL', BEL: 'SBBE', BOG: 'SKBO', BOS: 'KBOS', CAY: 'SOCA',
+  CUN: 'MMUN', DEN: 'KDEN', DFW: 'KDFW', DTW: 'KDTW', EWR: 'KEWR',
+  EZE: 'SAEZ', FDF: 'TFFF', FOR: 'SBFZ', GDL: 'MMGL', GIG: 'SBGL',
+  GRU: 'SBGR', HAV: 'MUHA', IAD: 'KIAD', IAH: 'KIAH', JFK: 'KJFK',
+  LAS: 'KLAS', LAX: 'KLAX', LIM: 'SPIM', MCO: 'KMCO', MEX: 'MMMX',
+  MIA: 'KMIA', MSP: 'KMSP', NAS: 'MYNN', NLU: 'MMSM', ORD: 'KORD',
+  PHX: 'KPHX', PPT: 'NTAA', PTP: 'TFFR', PTY: 'MPTO', PUJ: 'MDPC',
+  RDU: 'KRDU', SAN: 'KSAN', SCL: 'SCEL', SEA: 'KSEA', SFO: 'KSFO',
+  SJO: 'MROC', SSA: 'SBSV', SXM: 'TNCM', YOW: 'CYOW', YUL: 'CYUL',
+  YVR: 'CYVR', YYZ: 'CYYZ',
   // ── Asie / Pacifique ───────────────────────────────────────────────────────
-  BKK: 'VTBS', // Bangkok Suvarnabhumi
-  BLR: 'VOBL', // Bengaluru
-  BOM: 'VABB', // Mumbai
-  DEL: 'VIDP', // Delhi
-  HKG: 'VHHH', // Hong Kong
-  HKT: 'VTSP', // Phuket
-  HND: 'RJTT', // Tokyo Haneda
-  ICN: 'RKSI', // Séoul Incheon
-  KIX: 'RJBB', // Osaka Kansai
-  KUL: 'WMKK', // Kuala Lumpur
-  MNL: 'RPLL', // Manille
-  PEK: 'ZBAA', // Pékin Capital
-  PVG: 'ZSPD', // Shanghai Pudong
-  SGN: 'VVTS', // Ho Chi Minh City
-  SIN: 'WSSS', // Singapour
-
+  BKK: 'VTBS', BLR: 'VOBL', BOM: 'VABB', DEL: 'VIDP', HKG: 'VHHH',
+  HKT: 'VTSP', HND: 'RJTT', ICN: 'RKSI', KIX: 'RJBB', KUL: 'WMKK',
+  MNL: 'RPLL', PEK: 'ZBAA', PVG: 'ZSPD', SGN: 'VVTS', SIN: 'WSSS',
   // ── Moyen-Orient ───────────────────────────────────────────────────────────
-  AUH: 'OMAA', // Abu Dhabi
-  BEY: 'OLBA', // Beyrouth
-  DXB: 'OMDB', // Dubaï
-  EVN: 'UDYZ', // Erevan
-  IST: 'LTFM', // Istanbul
-  RUH: 'OERK', // Riyad
-  TBS: 'UGTB', // Tbilissi
-  TLV: 'LLBG', // Tel Aviv
-
+  AUH: 'OMAA', BEY: 'OLBA', DXB: 'OMDB', EVN: 'UDYZ', IST: 'LTFM',
+  RUH: 'OERK', TBS: 'UGTB', TLV: 'LLBG',
   // ── Europe ─────────────────────────────────────────────────────────────────
-  AGP: 'LEMG', // Malaga
-  AJA: 'LFKJ', // Ajaccio
-  ALG: 'DAAG', // Alger
-  AMS: 'EHAM', // Amsterdam
-  ARN: 'ESSA', // Stockholm Arlanda
-  ATH: 'LGAV', // Athènes
-  BCN: 'LEBL', // Barcelone
-  BER: 'EDDB', // Berlin Brandenburg
-  BES: 'LFRB', // Brest
-  BGO: 'ENBR', // Bergen
-  BHX: 'EGBB', // Birmingham
-  BIA: 'LFKB', // Bastia
-  BIO: 'LEBB', // Bilbao
-  BIQ: 'LFBZ', // Biarritz
-  BLL: 'EKBI', // Billund
-  BLQ: 'LIPE', // Bologne
-  BOD: 'LFBD', // Bordeaux
-  BRI: 'LIBD', // Bari
-  BSL: 'LFSB', // Bâle-Mulhouse
-  BUD: 'LHBP', // Budapest
-  CAI: 'HECA', // Le Caire
-  CDG: 'LFPG', // Paris CDG
-  CFE: 'LFLC', // Clermont-Ferrand
-  CFR: 'LFRK', // Caen
-  CLY: 'LFKC', // Calvi
-  CPH: 'EKCH', // Copenhague
-  CTA: 'LICC', // Catane
-  DBV: 'LDDU', // Dubrovnik
-  DNR: 'LFRD', // Dinard
-  DUB: 'EIDW', // Dublin
-  DUS: 'EDDL', // Düsseldorf
-  EDI: 'EGPH', // Édimbourg
-  FCO: 'LIRF', // Rome Fiumicino
-  FLR: 'LIRQ', // Florence
-  FRA: 'EDDF', // Francfort
-  FSC: 'LFKS', // Figari
-  GOT: 'ESGG', // Göteborg
-  GVA: 'LSGG', // Genève
-  HAJ: 'EDDV', // Hanovre
-  HAM: 'EDDH', // Hambourg
-  HEL: 'EFHK', // Helsinki
-  HER: 'LGIR', // Héraklion
-  IBZ: 'LEIB', // Ibiza
-  JMK: 'LGMK', // Mykonos
-  KRK: 'EPKK', // Cracovie
-  KTT: 'EFKT', // Kittilä
-  LGW: 'EGKK', // Londres Gatwick
-  LHR: 'EGLL', // Londres Heathrow
-  LIL: 'LFQQ', // Lille
-  LIN: 'LIML', // Milan Linate
-  LIS: 'LPPT', // Lisbonne
-  LJU: 'LJLJ', // Ljubljana
-  LYS: 'LFLL', // Lyon
-  MAD: 'LEMD', // Madrid
-  MAN: 'EGCC', // Manchester
-  MLA: 'LMML', // Malte
-  MPL: 'LFMT', // Montpellier
-  MRS: 'LFML', // Marseille
-  MUC: 'EDDM', // Munich
-  MXP: 'LIMC', // Milan Malpensa
-  NAP: 'LIRN', // Naples
-  NCE: 'LFMN', // Nice
-  NCL: 'EGNT', // Newcastle
-  NTE: 'LFRS', // Nantes
-  NUE: 'EDDN', // Nuremberg
-  OLB: 'LIEO', // Olbia
-  OPO: 'LPPR', // Porto
-  ORK: 'EICK', // Cork
-  ORN: 'DAOO', // Oran
-  ORY: 'LFPO', // Paris Orly
-  OSL: 'ENGM', // Oslo
-  OTP: 'LROP', // Bucarest
-  PIK: 'EGPK', // Glasgow Prestwick
-  PMI: 'LEPA', // Palma de Majorque
-  PMO: 'LICJ', // Palerme
-  PRG: 'LKPR', // Prague
-  PUF: 'LFBP', // Pau
-  RNS: 'LFRN', // Rennes
-  RVN: 'EFRO', // Rovaniemi
-  STR: 'EDDS', // Stuttgart
-  SVQ: 'LEZL', // Séville
-  TLS: 'LFBO', // Toulouse
-  TOS: 'ENTC', // Tromsø
-  TRN: 'LIMF', // Turin
-  VCE: 'LIPZ', // Venise
-  VIE: 'LOWW', // Vienne
-  VLC: 'LEVC', // Valence
-  VRN: 'LIPX', // Vérone
-  WAW: 'EPWA', // Varsovie
-  ZAG: 'LDZA', // Zagreb
-  ZRH: 'LSZH', // Zurich
-
+  AGP: 'LEMG', AJA: 'LFKJ', ALG: 'DAAG', AMS: 'EHAM', ARN: 'ESSA',
+  ATH: 'LGAV', BCN: 'LEBL', BER: 'EDDB', BES: 'LFRB', BGO: 'ENBR',
+  BHX: 'EGBB', BIA: 'LFKB', BIO: 'LEBB', BIQ: 'LFBZ', BLL: 'EKBI',
+  BLQ: 'LIPE', BOD: 'LFBD', BRI: 'LIBD', BSL: 'LFSB', BUD: 'LHBP',
+  CAI: 'HECA', CDG: 'LFPG', CFE: 'LFLC', CFR: 'LFRK', CLY: 'LFKC',
+  CPH: 'EKCH', CTA: 'LICC', DBV: 'LDDU', DNR: 'LFRD', DUB: 'EIDW',
+  DUS: 'EDDL', EDI: 'EGPH', FCO: 'LIRF', FLR: 'LIRQ', FRA: 'EDDF',
+  FSC: 'LFKS', GOT: 'ESGG', GVA: 'LSGG', HAJ: 'EDDV', HAM: 'EDDH',
+  HEL: 'EFHK', HER: 'LGIR', IBZ: 'LEIB', JMK: 'LGMK', KRK: 'EPKK',
+  KTT: 'EFKT', LGW: 'EGKK', LHR: 'EGLL', LIL: 'LFQQ', LIN: 'LIML',
+  LIS: 'LPPT', LJU: 'LJLJ', LYS: 'LFLL', MAD: 'LEMD', MAN: 'EGCC',
+  MLA: 'LMML', MPL: 'LFMT', MRS: 'LFML', MUC: 'EDDM', MXP: 'LIMC',
+  NAP: 'LIRN', NCE: 'LFMN', NCL: 'EGNT', NTE: 'LFRS', NUE: 'EDDN',
+  OLB: 'LIEO', OPO: 'LPPR', ORK: 'EICK', ORN: 'DAOO', ORY: 'LFPO',
+  OSL: 'ENGM', OTP: 'LROP', PIK: 'EGPK', PMI: 'LEPA', PMO: 'LICJ',
+  PRG: 'LKPR', PUF: 'LFBP', RNS: 'LFRN', RVN: 'EFRO', STR: 'EDDS',
+  SVQ: 'LEZL', TLS: 'LFBO', TOS: 'ENTC', TRN: 'LIMF', VCE: 'LIPZ',
+  VIE: 'LOWW', VLC: 'LEVC', VRN: 'LIPX', WAW: 'EPWA', ZAG: 'LDZA',
+  ZRH: 'LSZH',
   // ── Autres ─────────────────────────────────────────────────────────────────
-  LDE: 'LFBT', // Lourdes-Tarbes
+  LDE: 'LFBT',
 };
 
-// Index inverse ICAO → IATA
 const ICAO_TO_IATA: Record<string, string> = Object.fromEntries(
   Object.entries(AF_IATA_TO_ICAO).map(([iata, icao]) => [icao, iata])
 );
@@ -257,7 +96,6 @@ const ICAO_TO_IATA: Record<string, string> = Object.fromEntries(
 export const AF_AIRPORT_ICAOS: string[] = [...new Set(Object.values(AF_IATA_TO_ICAO))];
 
 const AIRPORT_NAMES: Record<string, string> = {
-  // ── Afrique ────────────────────────────────────────────────────────────────
   DIAP: 'Abidjan',            DNAA: 'Abuja',
   FCBB: 'Brazzaville',        GUCY: 'Conakry',
   GMMN: 'Casablanca',         DBBB: 'Cotonou',
@@ -274,8 +112,6 @@ const AIRPORT_NAMES: Record<string, string> = {
   FGBT: 'Malabo',             GMTN: 'Tanger',
   FMMI: 'Antananarivo',       DTTA: 'Tunis',
   HTZA: 'Zanzibar',           DAOO: 'Oran',
-
-  // ── Amériques ──────────────────────────────────────────────────────────────
   KATL: 'Atlanta',            SBBE: 'Belém',
   SKBO: 'Bogotá',             KBOS: 'Boston',
   SOCA: 'Cayenne',            MMUN: 'Cancún',
@@ -300,8 +136,6 @@ const AIRPORT_NAMES: Record<string, string> = {
   TNCM: 'Sint Maarten',       CYOW: 'Ottawa',
   CYUL: 'Montréal',           CYVR: 'Vancouver',
   CYYZ: 'Toronto',            OERK: 'Riyad',
-
-  // ── Asie / Pacifique ───────────────────────────────────────────────────────
   VTBS: 'Bangkok',            VOBL: 'Bengaluru',
   VABB: 'Mumbai',             VIDP: 'Delhi',
   VHHH: 'Hong Kong',          VTSP: 'Phuket',
@@ -310,14 +144,10 @@ const AIRPORT_NAMES: Record<string, string> = {
   RPLL: 'Manille',            ZBAA: 'Pékin Capital',
   ZSPD: 'Shanghai Pudong',    VVTS: 'Ho Chi Minh City',
   WSSS: 'Singapour',
-
-  // ── Moyen-Orient ───────────────────────────────────────────────────────────
   OMAA: 'Abu Dhabi',          OLBA: 'Beyrouth',
   OMDB: 'Dubaï',              UDYZ: 'Erevan',
   LTFM: 'Istanbul',           UGTB: 'Tbilissi',
   LLBG: 'Tel Aviv',
-
-  // ── Europe ─────────────────────────────────────────────────────────────────
   LEMG: 'Malaga',             LFKJ: 'Ajaccio',
   DAAG: 'Alger',              EHAM: 'Amsterdam',
   ESSA: 'Stockholm',          LGAV: 'Athènes',
@@ -368,6 +198,16 @@ const AIRPORT_NAMES: Record<string, string> = {
 
 const SEVERITY_ORDER: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
 
+// ─── Plafonnement de sévérité selon le changeIndicator ───────────────────────
+// PROB30 / PROB30 TEMPO → max yellow  (proba < 30% = information, pas d'alerte)
+// PROB40 / PROB40 TEMPO → max orange  (proba < 40% = vigilance, pas de rouge)
+// TEMPO, BECMG, FM, base → pas de plafonnement
+function cappedSeverity(baseSeverity: ThreatSeverity, ci: string): ThreatSeverity {
+  if (ci.startsWith('PROB30')) return 'yellow';
+  if (ci.startsWith('PROB40')) return baseSeverity === 'red' ? 'orange' : baseSeverity;
+  return baseSeverity;
+}
+
 function visMtoMeters(raw: string | number | null | undefined): number | null {
   if (raw == null || raw === '') return null;
   const s = String(raw).trim();
@@ -379,13 +219,8 @@ function visMtoMeters(raw: string | number | null | undefined): number | null {
   return Math.round((n * SM_TO_M) / 50) * 50;
 }
 
-function getAirportName(icao: string): string {
-  return AIRPORT_NAMES[icao] ?? icao;
-}
-
-function getIata(icao: string): string {
-  return ICAO_TO_IATA[icao] ?? icao;
-}
+function getAirportName(icao: string): string { return AIRPORT_NAMES[icao] ?? icao; }
+function getIata(icao: string): string { return ICAO_TO_IATA[icao] ?? icao; }
 
 function groupHasExplicitVisib(fcst: any): boolean {
   const raw: string = (fcst.rawFcst ?? fcst.fcstStr ?? '').toString();
@@ -425,26 +260,28 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
   const snippet = buildSnippet(fcst);
   const ci = formatChangeIndicator(changeIndicator);
 
+  const sev = (base: ThreatSeverity) => cappedSeverity(base, ci);
+
   if (wxString && /\bTSRA*/.test(wxString)) {
     threats.push({ type: 'THUNDERSTORM', label: 'Orage', value: wxString,
-      severity: 'red', periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
+      severity: sev('red'), periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
   }
   if (wxString && /\bFC\b/.test(wxString)) {
     threats.push({ type: 'FUNNEL_CLOUD', label: 'Trombe / Tornade', value: 'FC',
-      severity: 'red', periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
+      severity: sev('red'), periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
   }
   if (wxString && /\bSN\b|\bBLSN\b|\bSNGR\b/.test(wxString)) {
     const heavy = /\+SN|\+RASN|BLSN/.test(wxString);
     threats.push({ type: 'SNOW', label: heavy ? 'Neige forte / Tempête' : 'Neige', value: wxString,
-      severity: heavy ? 'red' : 'orange', periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
+      severity: sev(heavy ? 'red' : 'orange'), periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
   }
   if (wxString && /\bFZRA\b|\bFZDZ\b|\bFZFG\b/.test(wxString)) {
     threats.push({ type: 'FREEZING', label: 'Précip. verglaçantes', value: wxString,
-      severity: 'orange', periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
+      severity: sev('orange'), periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
   }
   if (wxString && /\bGR\b|\bGS\b/.test(wxString)) {
     threats.push({ type: 'HAIL', label: 'Grêle', value: wxString,
-      severity: 'orange', periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
+      severity: sev('orange'), periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
   }
   if (wspd != null || wgst != null) {
     const maxWind = Math.max(wspd ?? 0, wgst ?? 0);
@@ -452,28 +289,28 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
       const windStr = buildSnippet(fcst).split(' ')[0];
       threats.push({ type: 'WIND',
         label: wgst != null && wgst >= 30 ? `Rafales ${wgst}kt` : `Vent ${wspd}kt`,
-        value: windStr, severity: maxWind >= 40 ? 'red' : 'orange',
+        value: windStr, severity: sev(maxWind >= 40 ? 'red' : 'orange'),
         periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
     }
   }
   if (visib != null && visib !== '6+') {
     const visM = visMtoMeters(visib);
     if (visM !== null && visM < 3500 && groupHasExplicitVisib(fcst)) {
-      const severity: ThreatSeverity = visM < 400 ? 'red' : visM < 1000 ? 'orange' : 'yellow';
+      const base: ThreatSeverity = visM < 400 ? 'red' : visM < 1000 ? 'orange' : 'yellow';
       threats.push({ type: 'LOW_VIS', label: `Visibilité ${visM}m`, value: `${visM}m`,
-        severity, periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
+        severity: sev(base), periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
     }
   }
   if (Array.isArray(clouds)) {
     for (const cloud of clouds) {
       if (cloud.type === 'CB' || cloud.type === 'TCU') {
         const isCB = cloud.type === 'CB';
-        const severity: ThreatSeverity = isCB ? 'orange'
+        const base: ThreatSeverity = isCB ? 'orange'
           : (cloud.base != null && cloud.base < 1000) ? 'orange' : 'yellow';
         threats.push({ type: 'CB_TCU',
           label: cloud.base != null ? `${cloud.type} base ${cloud.base}ft` : `${cloud.type}`,
           value: `${cloud.cover}${cloudBaseToTafCode(cloud.base)}${cloud.type}`,
-          severity, periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
+          severity: sev(base), periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
       }
     }
     const ceilingLayers = clouds
@@ -483,10 +320,10 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
       .sort((a: any, b: any) => a.base - b.base);
     if (ceilingLayers.length > 0) {
       const lowest = ceilingLayers[0];
-      const severity: ThreatSeverity = lowest.base < 100 ? 'red' : lowest.base < 500 ? 'orange' : 'yellow';
+      const base: ThreatSeverity = lowest.base < 100 ? 'red' : lowest.base < 500 ? 'orange' : 'yellow';
       threats.push({ type: 'LOW_CEILING', label: `Plafond ${lowest.base}ft`,
         value: `${lowest.cover}${cloudBaseToTafCode(lowest.base)}`,
-        severity, periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
+        severity: sev(base), periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
     }
   }
   return threats;
@@ -519,18 +356,12 @@ export function parseTafToRisks(tafData: any[]): TafRisk[] {
 const KV_KEY_TAF     = 'taf_risks_cache';
 const KV_TTL_TAF_SEC = 30 * 60;
 
-/**
- * Récupère les risques TAF pour le réseau Air France.
- * @param force - Force le rafraîchissement du cache
- * @param lcOnly - Si true, filtre uniquement les escales Long-Courrier (défaut: true)
- */
 export async function fetchTafRisks(force = false, lcOnly = true): Promise<TafRisk[]> {
   if (!force && redis) {
     try {
       const cached = await redis.get<TafRisk[]>(KV_KEY_TAF);
       if (cached && cached.length > 0) {
         console.log(`[TAF] Cache KV HIT — ${cached.length} aéroports avec risques`);
-        // Applique le filtre LC si demandé, même sur le cache
         return lcOnly ? cached.filter(r => AF_LC_IATA.has(r.iata)) : cached;
       }
     } catch (e) {
@@ -572,12 +403,9 @@ export async function fetchTafRisks(force = false, lcOnly = true): Promise<TafRi
   console.log(`[TAF] ${allTafs.length} TAFs bruts → ${deduped.length} après déduplication`);
 
   const allRisks = parseTafToRisks(deduped);
-  
-  // ✅ Applique le filtre LC uniquement si demandé
   const risks = lcOnly ? allRisks.filter(r => AF_LC_IATA.has(r.iata)) : allRisks;
   console.log(`[TAF] ${allRisks.length} risques total → ${risks.length} ${lcOnly ? 'escales LC' : 'tous aéroports'}`);
 
-  // Cache tous les risques (sans filtre) pour flexibilité
   if (redis && allRisks.length > 0) {
     try {
       await redis.set(KV_KEY_TAF, allRisks, { ex: KV_TTL_TAF_SEC });

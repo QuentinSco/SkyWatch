@@ -71,7 +71,6 @@ export const GET: APIRoute = async () => {
   }
 
   const now    = Date.now();
-  const now10h = now + 10 * 60 * 60 * 1000;
   const now12h = now + 12 * 60 * 60 * 1000;
 
   try {
@@ -84,7 +83,7 @@ export const GET: APIRoute = async () => {
       fetchRocketLaunches(),
     ]);
 
-    // ── Météo hors Europe ──────────────────────────────────────────────────────────────────────
+    // ── Météo hors Europe — horizon 12h ───────────────────────────────────────────────────────────
     const meteoLines: BriefingMeteoLine[] = [];
     const seen = new Set<string>();
 
@@ -96,7 +95,7 @@ export const GET: APIRoute = async () => {
         const eta = f.estimatedTouchDownTime ?? f.scheduledArrival;
         if (!eta) return false;
         const ms = new Date(eta).getTime();
-        return ms >= now && ms <= now10h;
+        return ms >= now && ms <= now12h;
       });
 
       for (const threat of taf.threats) {
@@ -179,14 +178,14 @@ export const GET: APIRoute = async () => {
         };
       });
 
-    // ── Tailwind watch — uniquement si un vol AF opère vers SXM/SJO dans la fenêtre h-10 ──────────────────
+    // ── Tailwind watch — uniquement si un vol AF opère vers SXM/SJO dans la fenêtre h-12 ──────────────────
     const operatedIcaos = new Set(
       allFlights
         .filter(f => {
           const eta = f.estimatedTouchDownTime ?? f.scheduledArrival;
           if (!eta) return false;
           const ms = new Date(eta).getTime();
-          return ms >= now && ms <= now10h;
+          return ms >= now && ms <= now12h;
         })
         .map(f => f.icao)
     );

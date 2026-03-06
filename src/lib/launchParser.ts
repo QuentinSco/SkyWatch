@@ -33,6 +33,8 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
     const url = new URL('https://ll.thespacedevs.com/2.2.0/launch/upcoming/');
     url.searchParams.set('limit', '50');
     url.searchParams.set('ordering', 'window_start');
+    const windowTo = new Date(Date.now() + LAUNCH_WINDOW_HOURS * 3_600_000);
+    url.searchParams.set('window_start__lte', windowTo.toISOString());
 
     const res = await fetch(url.toString(), {
       headers: { 'User-Agent': 'SkyWatch/0.1', 'Accept': 'application/json' },

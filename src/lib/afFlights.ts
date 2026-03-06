@@ -20,6 +20,10 @@ export interface AfFlightArrival {
   scheduledArrival: string;
   estimatedTouchDownTime?: string;
   timeToArrivalMinutes?: number;
+  // ── Champs départ (optionnels — ne cassent aucun code existant) ──
+  departureIata?: string;           // IATA aéroport de départ (ex: CDG)
+  scheduledDeparture?: string;      // STD ISO
+  estimatedOffBlockTime?: string;   // EOBT / ETD ISO
 }
 
 export interface AfFlightsCache {
@@ -93,6 +97,13 @@ function mapLegToArrival(operationalFlight: any, leg: any): AfFlightArrival | nu
 
     const typeCode = leg.aircraft?.typeCode ?? undefined;
 
+    // ── Champs départ (optionnels) ──
+    const depInfo    = leg.departureInformation ?? {};
+    const depTimes   = depInfo.times ?? {};
+    const depCode    = depInfo.airport?.code ?? depInfo.airport?.iataCode;
+    const stdRaw     = depTimes.scheduled ?? depTimes.latestPublished;
+    const eobtRaw    = depTimes.estimatedOffBlockTime ?? depTimes.estimated?.value;
+
     return {
       flightId:               `${carrier}${fn}-${operationalFlight.flightScheduleDate ?? ''}`,
       marketingCarrier:       carrier,
@@ -106,6 +117,10 @@ function mapLegToArrival(operationalFlight: any, leg: any): AfFlightArrival | nu
       scheduledArrival:       scheduled,
       estimatedTouchDownTime: estimated,
       timeToArrivalMinutes:   minutesToArrival(estimated ?? scheduled),
+      // départ
+      ...(depCode  ? { departureIata: depCode.toUpperCase() }  : {}),
+      ...(stdRaw   ? { scheduledDeparture: stdRaw }            : {}),
+      ...(eobtRaw  ? { estimatedOffBlockTime: eobtRaw }        : {}),
     };
   } catch (e) {
     console.error('[AF mapLegToArrival]', e);
@@ -163,7 +178,7 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
 
   console.log(`[AF Flights] page 0/${totalPages} — ${ops.length} vols (avant filtre)`);
 
-  // ── Pagination avec délai 1.1s (respect QPS 1 req/s) ─────────────────────
+  // ── Pagination avec délai 1.1s (respect QPS 1 req/s) ─────────────────
   for (let p = 1; p < totalPages; p++) {
     await new Promise(r => setTimeout(r, 1100));
     const u = new URL(url.toString());
@@ -182,7 +197,7 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
     }
   }
 
-  // ── Mapping — filtre airline AF + aircraft LC ou MC ───────────────────────
+  // ── Mapping — filtre airline AF + aircraft LC ou MC ─────────────────
   const arrivals: AfFlightArrival[] = [];
   let skippedAirline  = 0;
   let skippedAircraft = 0;
@@ -212,7 +227,7 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
   const mcCount = arrivals.filter(f => !f.isLongHaul).length;
   console.log(`[AF Flights] ${arrivals.length} vols retenus (LC: ${lcCount}, MC: ${mcCount}) — ${skippedAirline} partenaires filtrés — ${skippedAircraft} autres types filtrés`);
 
-  // ── Dé-doublonnage ────────────────────────────────────────────────────────
+  // ── Dé-doublonnage ────────────────────────────────────────────────
   const dedup = new Map<string, AfFlightArrival>();
   for (const f of arrivals) {
     dedup.set(`${f.flightId}-${f.icao}`, f);
@@ -254,7 +269,7 @@ export async function getCachedAfArrivals(force = false, lcOnly = true): Promise
     }
   }
 
-  // ── 2. Distributed lock ───────────────────────────────────────────────────
+  // ── 2. Distributed lock ─────────────────────────────────────────────────────
   const lockAcquired = await kv.set(KV_LOCK_KEY, '1', { nx: true, ex: LOCK_TTL });
 
   if (!lockAcquired) {
@@ -277,7 +292,7 @@ export async function getCachedAfArrivals(force = false, lcOnly = true): Promise
     return [];
   }
 
-  // ── 3. Fetch API AF ───────────────────────────────────────────────────────
+  // ── 3. Fetch API AF ─────────────────────────────────────────────────────────
   try {
     const flights = await callAfApi();
     const ttl = flights.length === 0 ? KV_EMPTY_TTL : KV_TTL_SEC;

@@ -178,13 +178,18 @@ export const GET: APIRoute = async () => {
         };
       });
 
-    // ── Tailwind watch — uniquement si un vol AF opère vers SXM/SJO dans la fenêtre h-12 ──────────────────
+    // ── Tailwind watch — filtre sur le départ (STD/EOBT) vers SXM/SJO dans la fenêtre h-12 ──────────────────
+    // Le vent arrière se constate au décol depuis CDG, pas à l'atterrissage à SXM/SJO.
+    // On utilise EOBT en priorité, puis STD si absent, puis ETA en dernier recours.
+    const TAILWIND_ICAOS = new Set(['TNCM', 'MROC']);
+
     const operatedIcaos = new Set(
       allFlights
         .filter(f => {
-          const eta = f.estimatedTouchDownTime ?? f.scheduledArrival;
-          if (!eta) return false;
-          const ms = new Date(eta).getTime();
+          if (!TAILWIND_ICAOS.has(f.icao)) return false;
+          const depTime = f.estimatedOffBlockTime ?? f.scheduledDeparture ?? f.estimatedTouchDownTime ?? f.scheduledArrival;
+          if (!depTime) return false;
+          const ms = new Date(depTime).getTime();
           return ms >= now && ms <= now12h;
         })
         .map(f => f.icao)

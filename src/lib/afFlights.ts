@@ -11,7 +11,7 @@ export interface AfFlightArrival {
   flightId: string;
   marketingCarrier: string;
   flightNumber: string;
-  movementType: 'A' | 'D';   // A = arrivée, D = départ
+  movementType?: 'A' | 'D';   // A = arrivée, D = départ (optionnel pour rétrocompat)
   iata: string;
   icao: string;
   registration?: string;
@@ -255,7 +255,8 @@ export async function getCachedAfArrivals(force = false, lcOnly = true): Promise
           const eta = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
           return eta > now - 30 * 60 * 1000;
         });
-        const arrivals = futureFlights.filter(f => f.movementType === 'A');
+        // Rétrocompatibilité : si movementType absent, traiter comme arrivée
+        const arrivals = futureFlights.filter(f => !f.movementType || f.movementType === 'A');
         console.log(`[AF Flights] cache hit — ${arrivals.length} arrivées (lcOnly=${lcOnly})`);
         return lcOnly ? arrivals.filter(f => f.isLongHaul) : arrivals;
       }
@@ -277,7 +278,7 @@ export async function getCachedAfArrivals(force = false, lcOnly = true): Promise
             const eta = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
             return eta > now - 30 * 60 * 1000;
           });
-          const arrivals = futureFlights.filter(f => f.movementType === 'A');
+          const arrivals = futureFlights.filter(f => !f.movementType || f.movementType === 'A');
           return lcOnly ? arrivals.filter(f => f.isLongHaul) : arrivals;
         }
       } catch { /* continue */ }

@@ -2,7 +2,7 @@
 // ─── API Trame Briefing CCO ─────────────────────────────────────────────────────────────────────────────────────────
 import type { APIRoute } from 'astro';
 import { fetchTafRisks }         from '../../lib/tafParser';
-import { getCachedAfArrivals }   from '../../lib/afFlights';
+import { getCachedAfArrivals, getCachedAfDepartures } from '../../lib/afFlights';
 import { fetchCycloneBulletins } from '../../lib/cycloneParser';
 import { fetchVAAC }             from '../../lib/alertsServer';
 import { fetchTailwindStatus }   from '../../lib/tailwindMonitor';
@@ -26,7 +26,16 @@ export interface BriefingData {
   tropicale:       { name: string; basin: string; category: string; windKt: number; affected: string[] }[];
   volcanique:      { volcanoName: string; country: string; flLevel: string; vaac: string }[];
   tirsFusee:       { site: string; rocket: string; provider: string; timeZ: string; airports: string[] }[];
-  tailwindWatch:   { iata: string; name: string; alert: boolean; currentTW: number | null; runway: string | null; forecastAlerts: any[] }[];
+  tailwindWatch:   {
+    iata:           string;
+    name:           string;
+    alert:          boolean;
+    currentTW:      number | null;
+    runway:         string | null;
+    forecastAlerts: any[];
+    depFlight?:     string;   // ex. "AF456" — vol départ depuis cet aéroport
+    depStdZ?:       string;   // ex. "06/14z" — STD formatée
+  }[];
   carburant:       string;
   geopolitique:    string;
   effectifDsp:     string;
@@ -74,9 +83,10 @@ export const GET: APIRoute = async () => {
   const now12h = now + 12 * 60 * 60 * 1000;
 
   try {
-    const [tafRisks, allFlights, cyclones, vaacAlerts, tailwind, launches] = await Promise.all([
+    const [tafRisks, allFlights, allDepartures, cyclones, vaacAlerts, tailwind, launches] = await Promise.all([
       fetchTafRisks(),
       getCachedAfArrivals(false),
+      getCachedAfDepartures(false),
       fetchCycloneBulletins(),
       fetchVAAC(),
       fetchTailwindStatus(),
@@ -195,16 +205,34 @@ export const GET: APIRoute = async () => {
         .map(f => f.icao)
     );
 
+    // Cherche le prochain départ LC depuis chaque aéroport vent arrière dans les 12h
     const tailwindWatch = tailwind
       .filter(t => operatedIcaos.has(t.icao))
-      .map(t => ({
-        iata:           t.iata,
-        name:           t.name,
-        alert:          t.tailwindAlert,
-        currentTW:      t.worstRunway?.tailwindKt ?? null,
-        runway:         t.worstRunway?.runway      ?? null,
-        forecastAlerts: t.forecastAlerts,
-      }));
+      .flatMap(t => {
+        const depFlight = allDepartures
+          .filter(f => f.icao === t.icao && f.isLongHaul)
+          .sort((a, b) =>
+            new Date(a.scheduledArrival).getTime() - new Date(b.scheduledArrival).getTime()
+          )
+          .find(f => {
+            const std = new Date(f.scheduledArrival).getTime();
+            return std >= now && std <= now12h;
+          });
+
+        // Pas de vol départ dans les 12h → on n'expose pas cette entrée
+        if (!depFlight) return [];
+
+        return [{
+          iata:           t.iata,
+          name:           t.name,
+          alert:          t.tailwindAlert,
+          currentTW:      t.worstRunway?.tailwindKt ?? null,
+          runway:         t.worstRunway?.runway      ?? null,
+          forecastAlerts: t.forecastAlerts,
+          depFlight:      `AF${depFlight.flightNumber}`,
+          depStdZ:        fmtZ(depFlight.scheduledArrival),
+        }];
+      });
 
     const data: BriefingData = {
       generatedAt:     new Date().toISOString(),

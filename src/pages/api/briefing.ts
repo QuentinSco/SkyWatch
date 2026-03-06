@@ -149,13 +149,15 @@ export const GET: APIRoute = async () => {
       .filter(c => c.name !== 'SEASON' && c.category !== 'INVEST' && c.windKt > 0)
       .map(c => ({ name: c.name, basin: c.basin, category: c.category, windKt: c.windKt, affected: c.affectedAirports }));
 
-    // ── Volcanique ─────────────────────────────────────────────────────────────────────────────────────────
-    const volcanique = (vaacAlerts as any[]).map(a => ({
-      volcanoName: a.volcanoName ?? 'Volcan',
-      country:     a.country    ?? '',
-      flLevel:     a.headline?.match(/FL\d+/)?.[0] ?? '',
-      vaac:        a.region     ?? '',
-    }));
+    // ── Volcanique — uniquement si un aéroport AF est dans la zone d'impact ──────────────────────────
+    const volcanique = (vaacAlerts as any[])
+      .filter(a => Array.isArray(a.airports) && a.airports.length > 0)
+      .map(a => ({
+        volcanoName: a.volcanoName ?? 'Volcan',
+        country:     a.country    ?? '',
+        flLevel:     a.headline?.match(/FL\d+/)?.[0] ?? '',
+        vaac:        a.region     ?? '',
+      }));
 
     // ── Tirs de fusée — horizon 12h ───────────────────────────────────────────────────────────────────────────
     const tirsFusee = launches
@@ -177,15 +179,28 @@ export const GET: APIRoute = async () => {
         };
       });
 
-    // ── Tailwind watch ───────────────────────────────────────────────────────────────────────────────────────
-    const tailwindWatch = tailwind.map(t => ({
-      iata:           t.iata,
-      name:           t.name,
-      alert:          t.tailwindAlert,
-      currentTW:      t.worstRunway?.tailwindKt ?? null,
-      runway:         t.worstRunway?.runway      ?? null,
-      forecastAlerts: t.forecastAlerts,
-    }));
+    // ── Tailwind watch — uniquement si un vol AF opère vers SXM/SJO dans la fenêtre h-10 ──────────────────
+    const operatedIcaos = new Set(
+      allFlights
+        .filter(f => {
+          const eta = f.estimatedTouchDownTime ?? f.scheduledArrival;
+          if (!eta) return false;
+          const ms = new Date(eta).getTime();
+          return ms >= now && ms <= now10h;
+        })
+        .map(f => f.icao)
+    );
+
+    const tailwindWatch = tailwind
+      .filter(t => operatedIcaos.has(t.icao))
+      .map(t => ({
+        iata:           t.iata,
+        name:           t.name,
+        alert:          t.tailwindAlert,
+        currentTW:      t.worstRunway?.tailwindKt ?? null,
+        runway:         t.worstRunway?.runway      ?? null,
+        forecastAlerts: t.forecastAlerts,
+      }));
 
     const data: BriefingData = {
       generatedAt:     new Date().toISOString(),

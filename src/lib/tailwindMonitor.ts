@@ -44,7 +44,7 @@ const TAILWIND_AIRPORTS = [
       { heading: 100, name: 'RWY 10' },
       { heading: 280, name: 'RWY 28' },
     ],
-    thresholdKt: 5,
+    thresholdKt: 10,
   },
   {
     icao: 'MROC', iata: 'SJO', name: 'San José CR',
@@ -52,7 +52,7 @@ const TAILWIND_AIRPORTS = [
       { heading: 70,  name: 'RWY 07' },
       { heading: 250, name: 'RWY 25' },
     ],
-    thresholdKt: 5,
+    thresholdKt: 10,
   },
 ] as const;
 
@@ -130,7 +130,7 @@ export async function fetchTailwindStatus(): Promise<TailwindStatus[]> {
   }
 
   const now   = Date.now();
-  const limit = now + 6 * 60 * 60 * 1000;
+  const limit = now + 10 * 60 * 60 * 1000; // fenêtre 10h (alignée briefing)
 
   const statuses: TailwindStatus[] = TAILWIND_AIRPORTS.map(ap => {
     const raw      = metarByIcao[ap.icao];

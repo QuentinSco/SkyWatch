@@ -199,8 +199,8 @@ const AIRPORT_NAMES: Record<string, string> = {
 const SEVERITY_ORDER: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
 
 // ─── Plafonnement de sévérité selon le changeIndicator ───────────────────────
-// PROB30 / PROB30 TEMPO → max yellow  (proba < 30% = information, pas d'alerte)
-// PROB40 / PROB40 TEMPO → max orange  (proba < 40% = vigilance, pas de rouge)
+// PROB30 / PROB30 TEMPO → max yellow  (probabilité trop faible, jamais rouge ni orange)
+// PROB40 / PROB40 TEMPO → max orange  (vigilance, jamais rouge)
 // TEMPO, BECMG, FM, base → pas de plafonnement
 function cappedSeverity(baseSeverity: ThreatSeverity, ci: string): ThreatSeverity {
   if (ci.startsWith('PROB30')) return 'yellow';
@@ -269,6 +269,9 @@ function parseThreatsFromForecast(fcst: any): TafThreat[] {
   const snippet = buildSnippet(fcst);
   const ci = formatChangeIndicator(changeIndicator);
 
+  // ─── cappedSeverity applique le plafonnement selon le changeIndicator ───────
+  // PROB30 / PROB30 TEMPO → yellow (jamais rouge, même sur TSRA)
+  // PROB40 / PROB40 TEMPO → orange max (jamais rouge)
   const sev = (base: ThreatSeverity) => cappedSeverity(base, ci);
 
   if (wxString && /\bTSRA*/.test(wxString)) {

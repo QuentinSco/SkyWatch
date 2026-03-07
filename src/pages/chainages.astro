@@ -261,8 +261,9 @@ import '../styles/global.css';
         </div>
       </div>
 
-      <!-- Légende -->
-      <div id="ch-legend" class="hidden flex items-center gap-5 mb-4 text-xs text-gray-500 dark:text-gray-400">
+      <!-- FIX : suppression de "flex" du HTML — géré via style.display en JS
+           pour éviter le conflit hidden/flex avec Tailwind -->
+      <div id="ch-legend" class="hidden items-center gap-5 mb-4 text-xs text-gray-500 dark:text-gray-400">
         <span class="flex items-center gap-1.5"><span id="leg-known" class="inline-block w-3 h-3 rounded"></span> Au sol (durée connue)</span>
         <span class="flex items-center gap-1.5"><span id="leg-unk" class="inline-block w-3 h-3 rounded border border-dashed"></span> Au sol (départ inconnu)</span>
         <span class="flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-red-400"></span> Maintenant</span>
@@ -321,10 +322,9 @@ import '../styles/global.css';
       };
     }
 
-    // Redessine tous les canvas en mode impression avec dpr=1
-    // pour éviter la sur-résolution liée au devicePixelRatio de l'écran.
+    // FIX : isPrintMode supprimé comme variable d'état globale —
+    // chaque appel à drawAirportTimeline reçoit printMode en paramètre explicite.
     function redrawAllCanvases(printMode) {
-      isPrintMode = printMode;
       for (const { canvas, airStops, pal, wStart, wEnd } of lastDraws) {
         drawAirportTimeline(canvas, airStops, wStart, wEnd, pal, printMode);
       }
@@ -341,7 +341,6 @@ import '../styles/global.css';
     let lastData = null;
     let lastDraws = [];
     const tooltip = document.getElementById('ch-tooltip');
-    let isPrintMode = false;
 
     const timeRangeEnabled = document.getElementById('time-range-enabled');
     const timeRangeInputs = document.getElementById('time-range-inputs');
@@ -421,8 +420,9 @@ import '../styles/global.css';
       preparePrint();
       requestAnimationFrame(() => {
         window.print();
-        // cleanupPrint est appelé via afterprint, mais on sécurise
-        // le cas où afterprint ne se déclenche pas (ex: Firefox + annulation)
+        // FIX : filet de sécurité pour Firefox où afterprint peut ne pas se déclencher
+        // en cas d'annulation par l'utilisateur. cleanupPrint est idempotent.
+        setTimeout(cleanupPrint, 500);
       });
     });
 
@@ -444,8 +444,8 @@ import '../styles/global.css';
       return 360 * 60_000;
     }
 
-    function drawAirportTimeline(canvas, stops, wStart, wEnd, pal, forcePrint = false) {
-      const printMode = forcePrint || isPrintMode;
+    // FIX : printMode est maintenant uniquement un paramètre, plus de variable globale isPrintMode
+    function drawAirportTimeline(canvas, stops, wStart, wEnd, pal, printMode = false) {
       const T = printMode ? printTokens() : themeTokens();
       const nowMs = Date.now();
       const span = wEnd - wStart;
@@ -534,6 +534,7 @@ import '../styles/global.css';
           ctx.fillStyle = textColor;
           ctx.textAlign = 'left'; ctx.fillText(arrLabel, xArr + 5, midY);
           if (depLabel) { ctx.textAlign = 'right'; ctx.fillText(depLabel, xDep - 5, midY); }
+
           if (known) {
             const dm = Math.round((stop.depMs - stop.arrMs) / 60000);
             const dh = Math.floor(dm / 60), mm = String(dm % 60).padStart(2,'0');
@@ -575,6 +576,7 @@ import '../styles/global.css';
         ctx.fillText('NOW', xNow, HEADER_H - 6);
       }
 
+      // FIX : repositionnement du tooltip pour éviter le débordement hors viewport
       canvas.addEventListener('mousemove', e => {
         const rect = canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left, my = e.clientY - rect.top;
@@ -592,8 +594,18 @@ import '../styles/global.css';
           }
           tooltip.textContent = [arrL, depL, durL].filter(Boolean).join('\n');
           tooltip.style.opacity = '1';
-          tooltip.style.left = (e.clientX + 14) + 'px';
-          tooltip.style.top = (e.clientY - 10) + 'px';
+
+          // Calcul de la position en évitant le débordement
+          const ttW = tooltip.offsetWidth;
+          const ttH = tooltip.offsetHeight;
+          const left = e.clientX + 14 + ttW > window.innerWidth
+            ? e.clientX - ttW - 14
+            : e.clientX + 14;
+          const top = e.clientY - 10 + ttH > window.innerHeight
+            ? e.clientY - ttH + 10
+            : e.clientY - 10;
+          tooltip.style.left = left + 'px';
+          tooltip.style.top  = top  + 'px';
         } else { tooltip.style.opacity = '0'; }
       });
       canvas.addEventListener('mouseleave', () => { tooltip.style.opacity = '0'; });
@@ -607,20 +619,40 @@ import '../styles/global.css';
 
       if (age && data.generatedAt) {
         const d = new Date(data.generatedAt);
-        age.textContent = `Données à ${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}z`;
+        age.textContent = `Données à ${String(d.getUTCHours()).padStart(2,'00')}:${String(d.getUTCMinutes()).padStart(2,'00')}z`;
+      }
+
+      // FIX : affichage des codes IATA non reconnus renvoyés par l'API
+      if (data.unknownCodes && data.unknownCodes.length > 0) {
+        const warn = document.getElementById('ch-unknown-warn') || (() => {
+          const el = document.createElement('div');
+          el.id = 'ch-unknown-warn';
+          el.className = 'mb-3 text-xs text-amber-600 dark:text-amber-400';
+          container.before(el);
+          return el;
+        })();
+        warn.textContent = `⚠️ Code(s) non reconnu(s) : ${data.unknownCodes.join(', ')}`;
+      } else {
+        document.getElementById('ch-unknown-warn')?.remove();
       }
 
       const stops = data.stops || [];
       if (stops.length === 0) {
         container.innerHTML = '<div class="text-gray-400 text-sm italic text-center py-12">Aucun chaînage trouvé pour cette fenêtre.</div>';
-        legend.classList.add('hidden');
+        // FIX : utiliser style.display au lieu de classList pour cohérence avec l'affichage flex
+        legend.style.display = 'none';
         return;
       }
 
-      legend.classList.remove('hidden');
+      // FIX : affichage explicite via style.display='flex' — plus de conflit hidden/flex Tailwind
+      legend.style.display = 'flex';
+
       const firstPal = paletteFor(Array.from(airports)[0]);
       document.getElementById('leg-known').style.background = firstPal.bar;
-      document.getElementById('leg-unk').style.cssText = `background:${firstPal.barU};border-color:${firstPal.hatch};display:inline-block;width:12px;height:12px;border-radius:2px;border:1px dashed`;
+      // FIX : on ne réécrit plus cssText entièrement — on cible seulement les propriétés nécessaires
+      const legUnk = document.getElementById('leg-unk');
+      legUnk.style.background = firstPal.barU;
+      legUnk.style.borderColor = firstPal.hatch;
 
       const byAirport = new Map();
       airports.forEach(code => byAirport.set(code, []));
@@ -649,7 +681,6 @@ import '../styles/global.css';
           section.appendChild(header);
           const empty = document.createElement('div');
           empty.className = 'px-4 py-3 text-xs italic';
-          empty.style.cssText = '';
           empty.textContent = 'Aucun vol AF LC trouvé sur cet aéroport dans cette plage.';
           section.appendChild(empty);
         } else {
@@ -690,7 +721,8 @@ import '../styles/global.css';
       if (airports.size === 0) {
         document.getElementById('chainages-result').innerHTML =
           '<div class="text-gray-400 dark:text-gray-600 text-sm italic text-center py-12">Ajoutez un aéroport pour afficher les chaînages.</div>';
-        document.getElementById('ch-legend').classList.add('hidden');
+        // FIX : cohérence avec le nouveau style.display
+        document.getElementById('ch-legend').style.display = 'none';
         return;
       }
       document.getElementById('chainages-result').innerHTML =

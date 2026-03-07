@@ -198,10 +198,6 @@ const AIRPORT_NAMES: Record<string, string> = {
 
 const SEVERITY_ORDER: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
 
-// ─── Plafonnement de sévérité selon le changeIndicator ───────────────────────
-// PROB30 / PROB30 TEMPO → max yellow  (probabilité trop faible, jamais rouge ni orange)
-// PROB40 / PROB40 TEMPO → max orange  (vigilance, jamais rouge)
-// TEMPO, BECMG, FM, base → pas de plafonnement
 function cappedSeverity(baseSeverity: ThreatSeverity, ci: string): ThreatSeverity {
   if (ci.startsWith('PROB30')) return 'yellow';
   if (ci.startsWith('PROB40')) return baseSeverity === 'red' ? 'orange' : baseSeverity;
@@ -249,98 +245,139 @@ function buildSnippet(fcst: any): string {
   return [windStr, wxStr, visStr, cbStr].filter(Boolean).join(' ').trim();
 }
 
-// ─── Reconstruction du changeIndicator depuis le TAF brut ────────────────────
+// ─── Reconstruction du changeIndicator + segment rawTAF ────────────────────────────
 //
-// L'API AviationWeather.gov ne remplit pas le champ changeIndicator des fcsts.
-// On reconstruit le CI depuis le rawTAF :
-//   1. On découpe le TAF sur les mots-clés TEMPO/BECMG/PROB/FM.
-//   2. Pour chaque groupe on calcule le timestamp de début.
-//   3. Pour chaque fcst on cherche le groupe dont le début correspond à timeFrom (±5 min).
+// Pour chaque groupe (TEMPO/BECMG/PROB/FM) on stocke :
+//   - ci      : le change indicator
+//   - segment : le texte brut du groupe (jusqu'au prochain groupe ou fin)
 //
-// ⚠️  issueTime renvoyé par l'API est une STRING ISO ("2026-03-07T11:00:00Z"),
-//     PAS un unix timestamp. On doit utiliser new Date(issueTime) et non
-//     new Date(issueTime * 1000) pour éviter NaN.
-function buildCiMapFromRaw(rawTaf: string, issueTime: string | number | null | undefined): Map<number, string> {
-  const ciMap = new Map<number, string>();
+// Cela permet de détecter si un phénomène est "explicit" dans le groupe
+// ou hérité par erreur de propagation de l'API depuis le groupe de base.
+interface CiEntry { ci: string; segment: string; }
+
+function buildCiMapFromRaw(
+  rawTaf: string,
+  issueTime: string | number | null | undefined,
+): Map<number, CiEntry> {
+  const ciMap = new Map<number, CiEntry>();
   if (!rawTaf) return ciMap;
 
-  // ✅ Parsing robuste de issueTime : string ISO ou unix secondes
   const issueDate: Date = typeof issueTime === 'string'
-    ? new Date(issueTime)                        // "2026-03-07T11:00:00Z"
-    : new Date((issueTime ?? Date.now() / 1000) * 1000); // unix secondes
-
-  if (isNaN(issueDate.getTime())) return ciMap; // issueTime invalide : on abandonne
+    ? new Date(issueTime)
+    : new Date((issueTime ?? Date.now() / 1000) * 1000);
+  if (isNaN(issueDate.getTime())) return ciMap;
 
   const issueDay   = issueDate.getUTCDate();
-  const issueMonth = issueDate.getUTCMonth();   // 0-based
+  const issueMonth = issueDate.getUTCMonth();
   const issueYear  = issueDate.getUTCFullYear();
 
   function toUnix(day: number, hour: number): number {
     const d = new Date(Date.UTC(issueYear, issueMonth, day, hour, 0, 0));
-    // Rollover de mois si le jour cible est antérieur au jour d'émission
     if (day < issueDay) d.setUTCMonth(d.getUTCMonth() + 1);
     return Math.floor(d.getTime() / 1000);
   }
 
-  const GROUP_RE = /\b(PROB\d{2}\s+TEMPO|PROB\d{2}|TEMPO|BECMG)\s+(\d{2})(\d{2})\/(\d{2})(\d{2})|\bFM(\d{2})(\d{2})(\d{2})/g;
+  // Trouver les positions de chaque groupe dans le rawTAF
+  const HEADER_RE = /\b(PROB\d{2}\s+TEMPO|PROB\d{2}|TEMPO|BECMG)\s+(\d{2})(\d{2})\/(\d{2})(\d{2})|\bFM(\d{2})(\d{2})(\d{2})/g;
+  const entries: Array<{ start: number; ci: string; pos: number }> = [];
+
   let m: RegExpExecArray | null;
-  while ((m = GROUP_RE.exec(rawTaf)) !== null) {
+  while ((m = HEADER_RE.exec(rawTaf)) !== null) {
     if (m[1]) {
       const ci    = m[1].replace(/\s+/g, ' ').toUpperCase();
       const start = toUnix(parseInt(m[2], 10), parseInt(m[3], 10));
-      ciMap.set(start, ci);
+      entries.push({ start, ci, pos: m.index });
     } else if (m[6]) {
       const start = toUnix(parseInt(m[6], 10), parseInt(m[7], 10));
-      ciMap.set(start, 'FM');
+      entries.push({ start, ci: 'FM', pos: m.index });
     }
+  }
+
+  // Construire chaque segment = texte depuis ce groupe jusqu'au suivant
+  for (let i = 0; i < entries.length; i++) {
+    const { start, ci, pos } = entries[i];
+    const end = i + 1 < entries.length ? entries[i + 1].pos : rawTaf.length;
+    const segment = rawTaf.slice(pos, end);
+    ciMap.set(start, { ci, segment });
   }
 
   return ciMap;
 }
 
-function resolveCi(fcst: any, ciMap: Map<number, string>): string {
-  // L'API peut parfois renvoyer le bon CI — on l'utilise s'il est exploitable
+function resolveCiEntry(
+  fcst: any,
+  ciMap: Map<number, CiEntry>,
+): CiEntry | null {
   const raw = fcst.changeIndicator;
+  // L'API peut parfois renvoyer le bon CI — on le normalise si exploitable,
+  // mais on n'a pas le segment rawTAF dans ce cas (on renvoie null pour que
+  // le caller traite différemment).
   if (raw && raw !== 'FM') {
     const norm = raw.trim().replace(/\s+/g, ' ').toUpperCase();
-    if (norm === 'PROB40TEMPO') return 'PROB40 TEMPO';
-    if (norm === 'PROB30TEMPO') return 'PROB30 TEMPO';
-    if (norm !== 'INITIAL' && norm !== '') return norm;
+    if (norm === 'PROB40TEMPO') return { ci: 'PROB40 TEMPO', segment: '' };
+    if (norm === 'PROB30TEMPO') return { ci: 'PROB30 TEMPO', segment: '' };
+    if (norm !== 'INITIAL' && norm !== '') return { ci: norm, segment: '' };
   }
 
-  // Fallback : lookup dans la ciMap (±5 min de tolérance)
   const timeFrom: number = fcst.timeFrom ?? 0;
-  for (const [start, ci] of ciMap) {
-    if (Math.abs(start - timeFrom) <= 5 * 60) return ci;
+  for (const [start, entry] of ciMap) {
+    if (Math.abs(start - timeFrom) <= 5 * 60) return entry;
   }
 
-  return 'INITIAL/FM';
+  return null; // groupe de base
 }
 
-function parseThreatsFromForecast(fcst: any, ci: string): TafThreat[] {
+// ─── Détection d'héritage parasite (API propagation bug) ───────────────────────────
+//
+// Un BECMG ou FM annule et remplace le groupe précédent sur tous les
+// paramètres qu'il liste explicitement. Les paramètres non listés sont
+// implicitement annulés (NSW, pas de wxString, etc.).
+//
+// L'API propage à tort le wxString du groupe de base dans les fcsts
+// post-BECMG/FM. On détecte ce cas en vérifiant que :
+//   1. Le CI est BECMG ou FM
+//   2. Le segment rawTAF de ce groupe ne contient PAS le phénomène
+//
+// Pour TEMPO/PROB : l'API est censée lister explicitement les phénomènes,
+// pas besoin de filtrage.
+function isInheritedInBecmgOrFm(ci: string, segment: string, phenomenon: string): boolean {
+  if (!ci.startsWith('BECMG') && ci !== 'FM') return false;
+  if (!segment) return false; // pas de segment = on fait confiance au fcst
+  // Le phénomène est-il explicitement dans le segment ?
+  return !segment.includes(phenomenon);
+}
+
+function parseThreatsFromForecast(
+  fcst: any,
+  ci: string,
+  segment: string,
+): TafThreat[] {
   const threats: TafThreat[] = [];
   const { timeFrom, timeTo, wspd, wgst, wxString, clouds, visib } = fcst;
   const snippet = buildSnippet(fcst);
   const sev = (base: ThreatSeverity) => cappedSeverity(base, ci);
 
-  if (wxString && /\bTSRA*/.test(wxString)) {
+  // Helper : vérifie que le phénomène n'est pas un héritage parasite API
+  const ok = (phenomenon: string) => !isInheritedInBecmgOrFm(ci, segment, phenomenon);
+
+  if (wxString && /\bTSRA*/.test(wxString) && ok('TSRA') && ok('TS')) {
     threats.push({ type: 'THUNDERSTORM', label: 'Orage', value: wxString,
       severity: sev('red'), periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
   }
-  if (wxString && /\bFC\b/.test(wxString)) {
+  if (wxString && /\bFC\b/.test(wxString) && ok('FC')) {
     threats.push({ type: 'FUNNEL_CLOUD', label: 'Trombe / Tornade', value: 'FC',
       severity: sev('red'), periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
   }
-  if (wxString && /\bSN\b|\bBLSN\b|\bSNGR\b/.test(wxString)) {
+  if (wxString && /\bSN\b|\bBLSN\b|\bSNGR\b/.test(wxString) && ok('SN') && ok('BLSN') && ok('SNGR')) {
     const heavy = /\+SN|\+RASN|BLSN/.test(wxString);
     threats.push({ type: 'SNOW', label: heavy ? 'Neige forte / Tempête' : 'Neige', value: wxString,
       severity: sev(heavy ? 'red' : 'orange'), periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
   }
-  if (wxString && /\bFZRA\b|\bFZDZ\b|\bFZFG\b/.test(wxString)) {
+  if (wxString && /\bFZRA\b|\bFZDZ\b|\bFZFG\b/.test(wxString) && ok('FZ')) {
     threats.push({ type: 'FREEZING', label: 'Précip. verglaçantes', value: wxString,
       severity: sev('orange'), periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
   }
-  if (wxString && /\bGR\b|\bGS\b/.test(wxString)) {
+  if (wxString && /\bGR\b|\bGS\b/.test(wxString) && ok('GR') && ok('GS')) {
     threats.push({ type: 'HAIL', label: 'Grêle', value: wxString,
       severity: sev('orange'), periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
   }
@@ -365,6 +402,8 @@ function parseThreatsFromForecast(fcst: any, ci: string): TafThreat[] {
   if (Array.isArray(clouds)) {
     for (const cloud of clouds) {
       if (cloud.type === 'CB' || cloud.type === 'TCU') {
+        // Vérifier que le CB/TCU est explicit dans le segment (pas hérité)
+        if (isInheritedInBecmgOrFm(ci, segment, cloud.type)) continue;
         const isCB = cloud.type === 'CB';
         const base: ThreatSeverity = isCB ? 'orange'
           : (cloud.base != null && cloud.base < 1000) ? 'orange' : 'yellow';
@@ -395,17 +434,17 @@ export function parseTafToRisks(tafData: any[]): TafRisk[] {
   for (const taf of tafData) {
     const icao: string = taf.icaoId ?? taf.stationId ?? '';
     if (!icao) continue;
-    const fcsts: any[]  = taf.fcsts ?? [];
+    const fcsts: any[]   = taf.fcsts ?? [];
     const rawTaf: string = taf.rawTAF ?? '';
-
-    // ✅ issueTime peut être une string ISO ou un nombre unix
-    const issueTime: string | number | null = taf.issueTime ?? null;
-    const ciMap = buildCiMapFromRaw(rawTaf, issueTime);
+    const issueTime      = taf.issueTime ?? null;
+    const ciMap          = buildCiMapFromRaw(rawTaf, issueTime);
 
     const allThreats: TafThreat[] = [];
     for (const fcst of fcsts) {
-      const ci = resolveCi(fcst, ciMap);
-      allThreats.push(...parseThreatsFromForecast(fcst, ci));
+      const entry   = resolveCiEntry(fcst, ciMap);
+      const ci      = entry?.ci      ?? 'INITIAL/FM';
+      const segment = entry?.segment ?? '';
+      allThreats.push(...parseThreatsFromForecast(fcst, ci, segment));
     }
     if (allThreats.length === 0) continue;
     const worstSeverity = allThreats.reduce<ThreatSeverity>((worst, t) =>
@@ -421,7 +460,7 @@ export function parseTafToRisks(tafData: any[]): TafRisk[] {
 }
 
 // ─── Cache Redis ─────────────────────────────────────────────────────────────
-const KV_KEY_TAF     = 'taf_risks_cache_v3'; // v3 : issueTime string ISO fix
+const KV_KEY_TAF     = 'taf_risks_cache_v4'; // v4 : filtre héritage BECMG/FM
 const KV_TTL_TAF_SEC = 30 * 60;
 
 export async function fetchTafRisks(force = false, lcOnly = true): Promise<TafRisk[]> {

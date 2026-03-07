@@ -86,28 +86,13 @@ export const GET: APIRoute = async ({ url }) => {
     // Départs LC — même cache Redis, pas de second appel API
     const departures = await getCachedAfDepartures(force, true);
 
-    // FIX : filtre temporel sur les départs — on ne conserve que ceux dans
-    // la fenêtre [wStart - 2h, wEnd + 6h] pour éviter d'associer un départ aberrant
-    // Les noms de champs sont conservés tels que l'API amont les expose.
-    const windowDepartures = departures.filter(dep => {
-      const t = ms(dep.estimatedTouchDownTime ?? dep.scheduledArrival);
-      return t !== null && t >= wStart - 2 * 60 * 60 * 1000 && t <= wEnd + 6 * 60 * 60 * 1000;
-    });
-
-    // Index départs : reg-icao → vol de départ le plus proche dans le futur
-    const depIndex = new Map<string, typeof departures[number]>();
-    for (const dep of windowDepartures) {
-      const reg = (dep.registration ?? '').toUpperCase();
-      if (!reg || !dep.icao) continue;
-      const key = `${reg}-${dep.icao}`;
-      const existing = depIndex.get(key);
-      const depMs  = ms(dep.estimatedTouchDownTime ?? dep.scheduledArrival);
-      const exMs   = existing ? ms(existing.estimatedTouchDownTime ?? existing.scheduledArrival) : null;
-      // Garder le départ le plus tôt par reg-icao
-      if (!existing || (depMs !== null && exMs !== null && depMs < exMs)) {
-        depIndex.set(key, dep);
-      }
-    }
+    // Pré-calcul des timestamps de départ pour éviter de recalculer dans la boucle
+    const departuresWithMs = departures
+      .map(dep => ({ dep, depMs: ms(dep.estimatedTouchDownTime ?? dep.scheduledArrival) }))
+      .filter((d): d is { dep: typeof departures[number]; depMs: number } =>
+        d.depMs !== null &&
+        !!(dep => dep.registration && dep.icao)(d.dep)
+      );
 
     // Filtrer arrivées dans la fenêtre (marge 2h avant pour avions déjà au sol)
     const windowArrivals = arrivals.filter(f => {
@@ -123,16 +108,29 @@ export const GET: APIRoute = async ({ url }) => {
       const arrMs = ms(arr.estimatedTouchDownTime ?? arr.scheduledArrival);
       if (arrMs === null) continue;
 
-      const dep = depIndex.get(`${reg}-${arr.icao}`);
+      // FIX : pour chaque arrivée, on cherche le départ le plus tôt APRÈS cette arrivée
+      // sur le même reg+icao. Cela gère correctement les appareils avec plusieurs rotations
+      // sur la même escale (ex: F-GSQM qui fait JFK→CDG→JFK→CDG dans la fenêtre).
+      let bestDep: typeof departures[number] | null = null;
+      let bestDepMs: number | null = null;
+      for (const { dep, depMs } of departuresWithMs) {
+        const depReg = dep.registration!.toUpperCase();
+        if (depReg !== reg || dep.icao !== arr.icao) continue;
+        if (depMs <= arrMs) continue; // le départ doit être postérieur à l'arrivée
+        if (bestDepMs === null || depMs < bestDepMs) {
+          bestDep   = dep;
+          bestDepMs = depMs;
+        }
+      }
 
       stops.push({
         registration: reg,
         aircraftType: arr.aircraftType ?? '',
         iata:         arr.iata,
         arrFlight:    `AF${arr.flightNumber}`,
-        depFlight:    dep ? `AF${dep.flightNumber}` : null,
+        depFlight:    bestDep ? `AF${bestDep.flightNumber}` : null,
         arrMs,
-        depMs: dep ? (ms(dep.estimatedTouchDownTime ?? null) ?? ms(dep.scheduledArrival)) : null,
+        depMs: bestDepMs,
       });
     }
 

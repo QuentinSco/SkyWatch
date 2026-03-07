@@ -95,15 +95,26 @@ export const GET: APIRoute = async ({ url }) => {
 
     const stops: ChainageStop[] = [];
 
-    // Clés reg-icao couvertes par une arrivée (pour la détection orpheline ensuite)
-    const coveredKeys = new Set<string>();
-
+    // Pour chaque reg+icao, on mémorise la première heure d'arrivée dans la fenêtre.
+    // Cela servira à la phase 2 pour ne chercher des départs orphelins qu'AVANT
+    // cette première arrivée connue (et donc ne pas dupliquer la rotation suivante).
+    const firstWindowArrivalMs = new Map<string, number>();
     for (const arr of windowArrivals) {
       const reg = (arr.registration ?? 'UNKNOWN').toUpperCase();
       const arrMs = ms(arr.estimatedTouchDownTime ?? arr.scheduledArrival);
       if (arrMs === null) continue;
+      const key = `${reg}-${arr.icao}`;
+      const existing = firstWindowArrivalMs.get(key);
+      if (existing === undefined || arrMs < existing) {
+        firstWindowArrivalMs.set(key, arrMs);
+      }
+    }
 
-      coveredKeys.add(`${reg}-${arr.icao}`);
+    // Phase 1 : stops issus des arrivées dans la fenêtre
+    for (const arr of windowArrivals) {
+      const reg = (arr.registration ?? 'UNKNOWN').toUpperCase();
+      const arrMs = ms(arr.estimatedTouchDownTime ?? arr.scheduledArrival);
+      if (arrMs === null) continue;
 
       // Départ le plus tôt APRÈS cette arrivée, sur le même reg+icao
       let bestDep: typeof departures[number] | null = null;
@@ -129,10 +140,11 @@ export const GET: APIRoute = async ({ url }) => {
     }
 
     // ── 2. Appareils déjà au sol AVANT la fenêtre (arrivée non captée) ──────
-    // On cherche les départs sur les icaos cibles dont la registration n'est
-    // pas couverte par une arrivée dans la fenêtre. Pour chaque reg+icao orphelin
-    // on ne retient que le premier départ à venir, et on reconstitue l'arrivée
-    // passée la plus récente pour afficher le numéro de vol entrant.
+    // Pour chaque reg+icao sur un aéroport cible, on cherche s'il existe un départ
+    // dont l'heure est INFÉRIEURE à la première arrivée connue dans la fenêtre
+    // (ou sans arrivée du tout dans la fenêtre). Cela couvre :
+    //   - SQU : une seule rotation, pas d'arrivée dans la fenêtre
+    //   - SQM : deux rotations, arrivée passée non captée + arrivée demain dans la fenêtre
     const seenOrphanKeys = new Set<string>();
 
     for (const { dep, depMs } of departuresWithMs) {
@@ -140,11 +152,14 @@ export const GET: APIRoute = async ({ url }) => {
       const reg = dep.registration!.toUpperCase();
       const key = `${reg}-${dep.icao}`;
 
-      if (coveredKeys.has(key)) continue;    // déjà géré via une arrivée
+      // Ce départ est-il antérieur à la première arrivée connue dans la fenêtre ?
+      const firstKnownArrMs = firstWindowArrivalMs.get(key);
+      const isBeforeFirstKnownArr = firstKnownArrMs === undefined || depMs < firstKnownArrMs;
+
+      if (!isBeforeFirstKnownArr) continue; // ce départ sera couvert par la phase 1
       if (seenOrphanKeys.has(key)) continue; // on ne prend que le premier départ orphelin
 
-      // Arrivée passée la plus récente pour ce reg+icao (hors fenêtre)
-      // afin d'afficher le numéro de vol entrant et l'heure réelle d'arrivée.
+      // Arrivée passée la plus récente pour ce reg+icao, précédant ce départ
       let bestArr: typeof arrivals[number] | null = null;
       let bestArrMs: number | null = null;
       for (const arr of arrivals) {
@@ -164,11 +179,9 @@ export const GET: APIRoute = async ({ url }) => {
         registration: reg,
         aircraftType: dep.aircraftType ?? bestArr?.aircraftType ?? '',
         iata:         dep.iata,
-        // Numéro du vol entrant si retrouvé, sinon label neutre
         arrFlight:    bestArr ? `AF${bestArr.flightNumber}` : '(au sol)',
         depFlight:    `AF${dep.flightNumber}`,
-        // Heure d'arrivée réelle si connue, sinon début de fenêtre pour que
-        // la barre parte du bord gauche du canvas (appareil déjà présent)
+        // Heure réelle si connue, sinon début de fenêtre (barre depuis le bord gauche)
         arrMs:        bestArrMs ?? wStart,
         depMs,
       });

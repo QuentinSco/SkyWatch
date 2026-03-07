@@ -1,12 +1,13 @@
 // src/pages/api/briefing.ts
-// ─── API Trame Briefing CCO ─────────────────────────────────────────────────────────────────────────────────────────
+// ─── API Trame Briefing CCO ──────────────────────────────────────────────────
 import type { APIRoute } from 'astro';
-import { fetchTafRisks }         from '../../lib/tafParser';
+import { fetchTafRisks }                              from '../../lib/tafParser';
 import { getCachedAfArrivals, getCachedAfDepartures } from '../../lib/afFlights';
-import { fetchCycloneBulletins } from '../../lib/cycloneParser';
-import { fetchVAAC }             from '../../lib/alertsServer';
-import { fetchTailwindStatus }   from '../../lib/tailwindMonitor';
-import { fetchRocketLaunches }   from '../../lib/launchParser';
+import { fetchCycloneBulletins }                      from '../../lib/cycloneParser';
+import { fetchVAAC }                                  from '../../lib/alertsServer';
+import { fetchTailwindStatus }                        from '../../lib/tailwindMonitor';
+import { fetchRocketLaunches }                        from '../../lib/launchParser';
+import { redis }                                      from '../../lib/redis';
 
 export interface BriefingMeteoLine {
   flight:            string;
@@ -16,8 +17,8 @@ export interface BriefingMeteoLine {
   severity:          'red' | 'orange' | 'yellow';
   etaZ:              string;
   fenetreZ:          string;
-  changeIndicator:   string;   // ex. "PROB30", "TEMPO", "PROB40 TEMPO", "BECMG"
-  snippet:           string;   // ex. "03015G25KT TSRA VIS 2000m SCT015CB"
+  changeIndicator:   string;
+  snippet:           string;
   capaAttenteMin:    number | null;
   degagement:        string | null;
 }
@@ -43,11 +44,12 @@ export interface BriefingData {
   effectifDsp:     string;
 }
 
-// ─── Cache mémoire ──────────────────────────────────────────────────────────────────────────────────────
-const CACHE_TTL = 5 * 60 * 1000;
-let _cache: { ts: number; data: BriefingData } | null = null;
+// ─── Cache Redis ─────────────────────────────────────────────────────────────
+// Remplace le cache mémoire (inutilisable sur Vercel serverless / cold-start)
+const BRIEFING_CACHE_KEY     = 'briefing_cache_v1';
+const BRIEFING_CACHE_TTL_SEC = 5 * 60; // 5 min
 
-// ─── Constantes ─────────────────────────────────────────────────────────────────────────────────────────
+// ─── Constantes ──────────────────────────────────────────────────────────────
 const EUROPEAN_IATAS = new Set(['CDG', 'ORY', 'NCE', 'LDE', 'DUB', 'PIK']);
 
 const PHENOMENON_LABELS: Record<string, string> = {
@@ -71,14 +73,24 @@ function fmtZ(isoOrUnix: string | number): string {
   return `${String(d.getUTCHours()).padStart(2, '0')}${String(d.getUTCMinutes()).padStart(2, '0')}z`;
 }
 
-// ─── Route GET ─────────────────────────────────────────────────────────────────────────────────────────
+// ─── Route GET ───────────────────────────────────────────────────────────────
 export const prerender = false;
 
-export const GET: APIRoute = async () => {
-  if (_cache && Date.now() - _cache.ts < CACHE_TTL) {
-    return new Response(JSON.stringify(_cache.data), {
-      headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' },
-    });
+export const GET: APIRoute = async ({ url }) => {
+  const force = url.searchParams.get('force') === '1';
+
+  // ── Cache Redis ────────────────────────────────────────────────────────────
+  if (!force && redis) {
+    try {
+      const cached = await redis.get<BriefingData>(BRIEFING_CACHE_KEY);
+      if (cached) {
+        return new Response(JSON.stringify(cached), {
+          headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' },
+        });
+      }
+    } catch (e) {
+      console.warn('[briefing] KV read error:', e);
+    }
   }
 
   const now    = Date.now();
@@ -95,7 +107,9 @@ export const GET: APIRoute = async () => {
       fetchRocketLaunches(),
     ]);
 
-    // ── Météo hors Europe — horizon 12h ───────────────────────────────────────────────────────────
+    // ── Météo hors Europe — horizon 12h ──────────────────────────────────────
+    // ✅ Filtre sévérité aligné sur le tableau vols : red + orange
+    // (avant : red uniquement → les PROB40 TEMPO orange étaient absents de la trame)
     const meteoLines: BriefingMeteoLine[] = [];
     const seen = new Set<string>();
 
@@ -111,15 +125,17 @@ export const GET: APIRoute = async () => {
       });
 
       for (const threat of taf.threats) {
-        if (threat.severity !== 'red') continue;
+        // ✅ red + orange (aligné avec taf-vol-risks)
+        // yellow (PROB30/PROB30 TEMPO) reste exclu — probabilité trop faible
+        if (threat.severity === 'yellow') continue;
 
         for (const flight of flights) {
           const etaIso = flight.estimatedTouchDownTime ?? flight.scheduledArrival!;
           const etaMs  = new Date(etaIso).getTime();
-          // Fenêtre H-1/H+1 autour de l'ETA (au lieu de H-2/H+2)
+          // ✅ Fenêtre alignée sur taf-vol-risks : H-1 / H+2 après fin de menace
           const inWindow =
             etaMs >= threat.periodStart * 1000 - 1 * 60 * 60 * 1000 &&
-            etaMs <= threat.periodEnd   * 1000 + 1 * 60 * 60 * 1000;
+            etaMs <= threat.periodEnd   * 1000 + 2 * 60 * 60 * 1000;
           if (!inWindow) continue;
 
           const key = `AF${flight.flightNumber}-${taf.icao}-${threat.type}`;
@@ -143,7 +159,6 @@ export const GET: APIRoute = async () => {
       }
     }
 
-    // Tri par sévérité desc puis ETA croissant
     meteoLines.sort((a, b) =>
       SEV_ORDER[a.severity] - SEV_ORDER[b.severity] ||
       a.etaZ.localeCompare(b.etaZ)
@@ -157,12 +172,12 @@ export const GET: APIRoute = async () => {
       return true;
     });
 
-    // ── Perturbations tropicales ──────────────────────────────────────────────────────────────────
+    // ── Perturbations tropicales ──────────────────────────────────────────────
     const tropicale = cyclones
       .filter(c => c.name !== 'SEASON' && c.category !== 'INVEST' && c.windKt > 0)
       .map(c => ({ name: c.name, basin: c.basin, category: c.category, windKt: c.windKt, affected: c.affectedAirports }));
 
-    // ── Volcanique — uniquement si un aéroport AF est dans la zone d'impact ──────────────────────────
+    // ── Volcanique ────────────────────────────────────────────────────────────
     const volcanique = (vaacAlerts as any[])
       .filter(a => Array.isArray(a.airports) && a.airports.length > 0)
       .map(a => ({
@@ -172,7 +187,7 @@ export const GET: APIRoute = async () => {
         vaac:        a.region     ?? '',
       }));
 
-    // ── Tirs de fusée — horizon 12h ───────────────────────────────────────────────────────────────────────────
+    // ── Tirs de fusée — horizon 12h ───────────────────────────────────────────
     const tirsFusee = launches
       .filter(l => {
         const start = new Date(l.validFrom).getTime();
@@ -192,14 +207,11 @@ export const GET: APIRoute = async () => {
         };
       });
 
-    // ── Tailwind watch ─────────────────────────────────────────────────────────────────────────────────────────
-    // SXM (TNCM) et SJO (MROC) sont des aéroports de DÉPART pour AF.
-    // Il faut chercher dans allDepartures (et non allFlights=arrivées)
-    // pour détecter si un vol AF opère depuis ces escales dans les 12h.
+    // ── Tailwind watch ────────────────────────────────────────────────────────
     const TAILWIND_ICAOS = new Set(['TNCM', 'MROC']);
 
     const operatedIcaos = new Set(
-      allDepartures  // ← vols AF au départ de SXM/SJO
+      allDepartures
         .filter(f => {
           if (!TAILWIND_ICAOS.has(f.icao)) return false;
           const depTime = f.estimatedOffBlockTime ?? f.scheduledDeparture ?? f.estimatedTouchDownTime ?? f.scheduledArrival;
@@ -255,7 +267,14 @@ export const GET: APIRoute = async () => {
       effectifDsp:  'OK',
     };
 
-    _cache = { ts: Date.now(), data };
+    // ── Stockage Redis ────────────────────────────────────────────────────────
+    if (redis) {
+      try {
+        await redis.set(BRIEFING_CACHE_KEY, data, { ex: BRIEFING_CACHE_TTL_SEC });
+      } catch (e) {
+        console.warn('[briefing] KV write error:', e);
+      }
+    }
 
     return new Response(JSON.stringify(data), {
       headers: { 'Content-Type': 'application/json', 'X-Cache': 'MISS' },

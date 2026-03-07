@@ -13,14 +13,20 @@ function ms(iso: string | undefined | null): number | null {
   return isNaN(t) ? null : t;
 }
 
+// Une escale = un segment "au sol" sur l'aéroport
+export interface ChainageSegment {
+  arrFlight: string;
+  depFlight: string | null;
+  arrMs:     number;
+  depMs:     number | null;
+}
+
+// Un appareil peut avoir plusieurs escales sur le même aéroport dans la fenêtre
 export interface ChainageStop {
   registration: string;
   aircraftType: string;
   iata:         string;
-  arrFlight:    string;
-  depFlight:    string | null;
-  arrMs:        number;
-  depMs:        number | null;
+  segments:     ChainageSegment[];
 }
 
 export const GET: APIRoute = async ({ url }) => {
@@ -81,23 +87,22 @@ export const GET: APIRoute = async ({ url }) => {
     const arrivals   = await getCachedAfArrivals(force, true);
     const departures = await getCachedAfDepartures(force, true);
 
-    // Pré-calcul des timestamps de départ
     type DepWithMs = { dep: typeof departures[number]; depMs: number };
     const departuresWithMs: DepWithMs[] = departures
       .map(dep => ({ dep, depMs: ms(dep.estimatedTouchDownTime ?? dep.scheduledArrival) }))
       .filter((d): d is DepWithMs => d.depMs !== null && !!(d.dep.registration && d.dep.icao));
 
-    // ── 1. Arrivées dans la fenêtre (marge 2h pour appareils déjà au sol proches) ──
+    // ── 1. Arrivées dans la fenêtre (marge 2h) ────────────────────────────
     const windowArrivals = arrivals.filter(f => {
       const t = ms(f.estimatedTouchDownTime ?? f.scheduledArrival);
       return t !== null && t >= wStart - 2 * 60 * 60 * 1000 && t <= wEnd && targetIcaos.has(f.icao);
     });
 
-    const stops: ChainageStop[] = [];
+    // Segments bruts avant regroupement : clé = reg-icao
+    type RawSegment = ChainageSegment & { reg: string; icao: string; aircraftType: string; iata: string };
+    const rawSegments: RawSegment[] = [];
 
-    // Pour chaque reg+icao, on mémorise la première heure d'arrivée dans la fenêtre.
-    // Cela servira à la phase 2 pour ne chercher des départs orphelins qu'AVANT
-    // cette première arrivée connue (et donc ne pas dupliquer la rotation suivante).
+    // Première arrivée dans la fenêtre par reg+icao (pour la détection orpheline)
     const firstWindowArrivalMs = new Map<string, number>();
     for (const arr of windowArrivals) {
       const reg = (arr.registration ?? 'UNKNOWN').toUpperCase();
@@ -105,61 +110,47 @@ export const GET: APIRoute = async ({ url }) => {
       if (arrMs === null) continue;
       const key = `${reg}-${arr.icao}`;
       const existing = firstWindowArrivalMs.get(key);
-      if (existing === undefined || arrMs < existing) {
-        firstWindowArrivalMs.set(key, arrMs);
-      }
+      if (existing === undefined || arrMs < existing) firstWindowArrivalMs.set(key, arrMs);
     }
 
-    // Phase 1 : stops issus des arrivées dans la fenêtre
+    // Phase 1 : segments depuis les arrivées dans la fenêtre
     for (const arr of windowArrivals) {
       const reg = (arr.registration ?? 'UNKNOWN').toUpperCase();
       const arrMs = ms(arr.estimatedTouchDownTime ?? arr.scheduledArrival);
       if (arrMs === null) continue;
 
-      // Départ le plus tôt APRÈS cette arrivée, sur le même reg+icao
       let bestDep: typeof departures[number] | null = null;
       let bestDepMs: number | null = null;
       for (const { dep, depMs } of departuresWithMs) {
         if (dep.registration!.toUpperCase() !== reg || dep.icao !== arr.icao) continue;
         if (depMs <= arrMs) continue;
-        if (bestDepMs === null || depMs < bestDepMs) {
-          bestDep   = dep;
-          bestDepMs = depMs;
-        }
+        if (bestDepMs === null || depMs < bestDepMs) { bestDep = dep; bestDepMs = depMs; }
       }
 
-      stops.push({
-        registration: reg,
+      rawSegments.push({
+        reg,
+        icao:        arr.icao,
+        iata:        arr.iata,
         aircraftType: arr.aircraftType ?? '',
-        iata:         arr.iata,
-        arrFlight:    `AF${arr.flightNumber}`,
-        depFlight:    bestDep ? `AF${bestDep.flightNumber}` : null,
+        arrFlight:   `AF${arr.flightNumber}`,
+        depFlight:   bestDep ? `AF${bestDep.flightNumber}` : null,
         arrMs,
-        depMs: bestDepMs,
+        depMs:       bestDepMs,
       });
     }
 
-    // ── 2. Appareils déjà au sol AVANT la fenêtre (arrivée non captée) ──────
-    // Pour chaque reg+icao sur un aéroport cible, on cherche s'il existe un départ
-    // dont l'heure est INFÉRIEURE à la première arrivée connue dans la fenêtre
-    // (ou sans arrivée du tout dans la fenêtre). Cela couvre :
-    //   - SQU : une seule rotation, pas d'arrivée dans la fenêtre
-    //   - SQM : deux rotations, arrivée passée non captée + arrivée demain dans la fenêtre
+    // Phase 2 : appareils déjà au sol avant la fenêtre (arrivée non captée)
     const seenOrphanKeys = new Set<string>();
-
     for (const { dep, depMs } of departuresWithMs) {
       if (!targetIcaos.has(dep.icao)) continue;
       const reg = dep.registration!.toUpperCase();
       const key = `${reg}-${dep.icao}`;
 
-      // Ce départ est-il antérieur à la première arrivée connue dans la fenêtre ?
       const firstKnownArrMs = firstWindowArrivalMs.get(key);
-      const isBeforeFirstKnownArr = firstKnownArrMs === undefined || depMs < firstKnownArrMs;
+      // On ne traite que les départs antérieurs à la première arrivée connue dans la fenêtre
+      if (firstKnownArrMs !== undefined && depMs >= firstKnownArrMs) continue;
+      if (seenOrphanKeys.has(key)) continue;
 
-      if (!isBeforeFirstKnownArr) continue; // ce départ sera couvert par la phase 1
-      if (seenOrphanKeys.has(key)) continue; // on ne prend que le premier départ orphelin
-
-      // Arrivée passée la plus récente pour ce reg+icao, précédant ce départ
       let bestArr: typeof arrivals[number] | null = null;
       let bestArrMs: number | null = null;
       for (const arr of arrivals) {
@@ -167,27 +158,48 @@ export const GET: APIRoute = async ({ url }) => {
         if (aReg !== reg || arr.icao !== dep.icao) continue;
         const aMs = ms(arr.estimatedTouchDownTime ?? arr.scheduledArrival);
         if (aMs === null || aMs >= depMs) continue;
-        if (bestArrMs === null || aMs > bestArrMs) {
-          bestArr   = arr;
-          bestArrMs = aMs;
-        }
+        if (bestArrMs === null || aMs > bestArrMs) { bestArr = arr; bestArrMs = aMs; }
       }
 
       seenOrphanKeys.add(key);
-
-      stops.push({
-        registration: reg,
+      rawSegments.push({
+        reg,
+        icao:        dep.icao,
+        iata:        dep.iata,
         aircraftType: dep.aircraftType ?? bestArr?.aircraftType ?? '',
-        iata:         dep.iata,
-        arrFlight:    bestArr ? `AF${bestArr.flightNumber}` : '(au sol)',
-        depFlight:    `AF${dep.flightNumber}`,
-        // Heure réelle si connue, sinon début de fenêtre (barre depuis le bord gauche)
-        arrMs:        bestArrMs ?? wStart,
+        arrFlight:   bestArr ? `AF${bestArr.flightNumber}` : '(au sol)',
+        depFlight:   `AF${dep.flightNumber}`,
+        arrMs:       bestArrMs ?? wStart,
         depMs,
       });
     }
 
-    stops.sort((a, b) => a.arrMs - b.arrMs);
+    // ── Regroupement : une ligne par reg+icao, plusieurs segments ────────────
+    const stopMap = new Map<string, ChainageStop>();
+    for (const s of rawSegments) {
+      const key = `${s.reg}-${s.icao}`;
+      if (!stopMap.has(key)) {
+        stopMap.set(key, {
+          registration: s.reg,
+          aircraftType: s.aircraftType,
+          iata:         s.iata,
+          segments:     [],
+        });
+      }
+      stopMap.get(key)!.segments.push({
+        arrFlight: s.arrFlight,
+        depFlight: s.depFlight,
+        arrMs:     s.arrMs,
+        depMs:     s.depMs,
+      });
+    }
+
+    // Trier les segments de chaque appareil par arrMs, puis les stops par premier segment
+    const stops: ChainageStop[] = Array.from(stopMap.values()).map(stop => ({
+      ...stop,
+      segments: stop.segments.sort((a, b) => a.arrMs - b.arrMs),
+    }));
+    stops.sort((a, b) => a.segments[0].arrMs - b.segments[0].arrMs);
 
     return new Response(
       JSON.stringify({

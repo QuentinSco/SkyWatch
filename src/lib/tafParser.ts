@@ -249,29 +249,93 @@ function buildSnippet(fcst: any): string {
   return [windStr, wxStr, visStr, cbStr].filter(Boolean).join(' ').trim();
 }
 
-// ─── Normalisation du changeIndicator ────────────────────────────────────────
-// L'API AviationWeather peut renvoyer "PROB40TEMPO" (sans espace) ou d'autres
-// variantes. On normalise pour correspondre exactement aux clés de CI_LABEL
-// dans taf-ui.js : 'PROB30', 'PROB40', 'PROB30 TEMPO', 'PROB40 TEMPO', 'TEMPO', 'BECMG'.
-function formatChangeIndicator(ci: string | null | undefined): string {
-  if (!ci || ci === 'FM') return 'INITIAL/FM';
-  // Normaliser : trim + collapse espaces multiples + uppercase
-  const norm = ci.trim().replace(/\s+/g, ' ').toUpperCase();
-  // Gérer variantes sans espace renvoyées par certaines versions de l'API
-  if (norm === 'PROB40TEMPO') return 'PROB40 TEMPO';
-  if (norm === 'PROB30TEMPO') return 'PROB30 TEMPO';
-  return norm;
+// ─── Reconstruction du changeIndicator depuis le TAF brut ────────────────────
+//
+// L'API AviationWeather.gov ne renvoie PAS de champ changeIndicator fiable :
+// tous les groupes (TEMPO, BECMG, PROB40, FM…) arrivent avec null/undefined,
+// ce qui faisait tomber tous les CI dans le fallback "INITIAL/FM".
+//
+// On reconstruit le CI en parsant le rawTAF :
+//  1. On découpe le TAF en segments sur les mots-clés TEMPO/BECMG/PROB/FM.
+//  2. Pour chaque segment, on extrait le CI et la fenêtre temporelle DDhh/DDhh.
+//  3. On convertit les fenêtres en timestamps Unix en tenant compte
+//     du rollover de jour (ex. 0718 → lendemain si hh < début).
+//  4. Pour chaque fcst, on cherche le segment dont la fenêtre contient timeFrom.
+//
+// Retourne un Map<timeFrom_unix, ciString>.
+function buildCiMapFromRaw(rawTaf: string, issueTime: number): Map<number, string> {
+  const ciMap = new Map<number, string>();
+  if (!rawTaf) return ciMap;
+
+  // Regex : capturer CI + fenêtre DDhh/DDhh (groupes TEMPO/BECMG/PROB)
+  // ou FM suivi de DDhhMM (sans fenêtre, borne de début seulement)
+  const GROUP_RE = /\b(PROB\d{2}\s+TEMPO|PROB\d{2}|TEMPO|BECMG)\s+(\d{2})(\d{2})\/(\d{2})(\d{2})|\bFM(\d{2})(\d{2})(\d{2})/g;
+
+  // Date de référence : on extrait le jour UTC de l'issueTime
+  const issueDate = new Date(issueTime * 1000);
+  const issueDay  = issueDate.getUTCDate();
+  const issueMonth = issueDate.getUTCMonth();
+  const issueYear  = issueDate.getUTCFullYear();
+
+  function toUnix(day: number, hour: number, refDay: number): number {
+    // Si le jour cible est inférieur au jour de référence → mois suivant
+    const d = new Date(Date.UTC(issueYear, issueMonth, day, hour, 0, 0));
+    if (day < refDay) d.setUTCMonth(d.getUTCMonth() + 1);
+    return Math.floor(d.getTime() / 1000);
+  }
+
+  let m: RegExpExecArray | null;
+  while ((m = GROUP_RE.exec(rawTaf)) !== null) {
+    if (m[1]) {
+      // TEMPO/BECMG/PROB — fenêtre DDhh/DDhh
+      const ci    = m[1].replace(/\s+/g, ' ').toUpperCase();
+      const d1    = parseInt(m[2], 10);
+      const h1    = parseInt(m[3], 10);
+      const start = toUnix(d1, h1, issueDay);
+      ciMap.set(start, ci);
+    } else if (m[6]) {
+      // FM DDhhMM
+      const d1    = parseInt(m[6], 10);
+      const h1    = parseInt(m[7], 10);
+      const start = toUnix(d1, h1, issueDay);
+      ciMap.set(start, 'FM');
+    }
+  }
+
+  return ciMap;
 }
 
-function parseThreatsFromForecast(fcst: any): TafThreat[] {
-  const threats: TafThreat[] = [];
-  const { timeFrom, timeTo, wspd, wgst, wxString, clouds, visib, changeIndicator } = fcst;
-  const snippet = buildSnippet(fcst);
-  const ci = formatChangeIndicator(changeIndicator);
+// Résout le CI d'un fcst : priorité au champ de l'API s'il est exploitable,
+// sinon reconstruction depuis le rawTAF via ciMap.
+function resolveCi(
+  fcst: any,
+  ciMap: Map<number, string>,
+): string {
+  const raw = fcst.changeIndicator;
+  // L'API renvoie parfois la valeur correcte — on la normalise
+  if (raw && raw !== 'FM') {
+    const norm = raw.trim().replace(/\s+/g, ' ').toUpperCase();
+    if (norm === 'PROB40TEMPO') return 'PROB40 TEMPO';
+    if (norm === 'PROB30TEMPO') return 'PROB30 TEMPO';
+    if (norm !== 'INITIAL' && norm !== '') return norm;
+  }
 
-  // ─── cappedSeverity applique le plafonnement selon le changeIndicator ───────
-  // PROB30 / PROB30 TEMPO → yellow (jamais rouge, même sur TSRA)
-  // PROB40 / PROB40 TEMPO → orange max (jamais rouge)
+  // Fallback : lookup dans la ciMap construite depuis le rawTAF
+  // On cherche la fenêtre dont le début correspond à timeFrom (tolérance ±5 min)
+  const timeFrom: number = fcst.timeFrom ?? 0;
+  for (const [start, ci] of ciMap) {
+    if (Math.abs(start - timeFrom) <= 5 * 60) return ci;
+  }
+
+  // Aucun match → groupe de base ou FM
+  return 'INITIAL/FM';
+}
+
+function parseThreatsFromForecast(fcst: any, ci: string): TafThreat[] {
+  const threats: TafThreat[] = [];
+  const { timeFrom, timeTo, wspd, wgst, wxString, clouds, visib } = fcst;
+  const snippet = buildSnippet(fcst);
+
   const sev = (base: ThreatSeverity) => cappedSeverity(base, ci);
 
   if (wxString && /\bTSRA*/.test(wxString)) {
@@ -347,16 +411,23 @@ export function parseTafToRisks(tafData: any[]): TafRisk[] {
     const icao: string = taf.icaoId ?? taf.stationId ?? '';
     if (!icao) continue;
     const fcsts: any[] = taf.fcsts ?? [];
+    const rawTaf: string = taf.rawTAF ?? '';
+    const issueTime: number = taf.issueTime ?? Math.floor(Date.now() / 1000);
+
+    // Reconstruction du CI depuis le rawTAF pour compenser l'API
+    const ciMap = buildCiMapFromRaw(rawTaf, issueTime);
+
     const allThreats: TafThreat[] = [];
     for (const fcst of fcsts) {
-      allThreats.push(...parseThreatsFromForecast(fcst));
+      const ci = resolveCi(fcst, ciMap);
+      allThreats.push(...parseThreatsFromForecast(fcst, ci));
     }
     if (allThreats.length === 0) continue;
     const worstSeverity = allThreats.reduce<ThreatSeverity>((worst, t) =>
       SEVERITY_ORDER[t.severity] < SEVERITY_ORDER[worst] ? t.severity : worst, 'yellow');
     risks.push({
       icao, iata: getIata(icao), name: getAirportName(icao),
-      rawTaf: taf.rawTAF ?? '',
+      rawTaf,
       worstSeverity,
       threats: allThreats.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]),
     });
@@ -365,7 +436,7 @@ export function parseTafToRisks(tafData: any[]): TafRisk[] {
 }
 
 // ─── Cache Redis ─────────────────────────────────────────────────────────────
-const KV_KEY_TAF     = 'taf_risks_cache';
+const KV_KEY_TAF     = 'taf_risks_cache_v2'; // v2 : invalide l'ancien cache (CI corrigé)
 const KV_TTL_TAF_SEC = 30 * 60;
 
 export async function fetchTafRisks(force = false, lcOnly = true): Promise<TafRisk[]> {

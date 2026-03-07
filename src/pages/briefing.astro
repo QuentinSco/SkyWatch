@@ -139,33 +139,35 @@ import '../styles/global.css';
             ? `<span class="font-mono text-[11px] text-gray-500 dark:text-gray-400">${line.snippet}</span>`
             : '';
           html += `<div class="px-6 py-3 border-b border-gray-50 dark:border-gray-800">
-            <div class="flex items-start gap-3">
-              <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${c.dot}"></span>
-              <div class="flex-1 min-w-0">
-                <div class="flex flex-wrap items-center gap-2 text-sm font-medium text-gray-800 dark:text-gray-200">
-                  <span>${line.phenomenon}</span>
-                  <span class="font-bold">${line.iata}</span>
-                  <span class="text-blue-700 dark:text-blue-400 font-bold">${line.flight}</span>
-                  <span class="text-gray-500 dark:text-gray-400 text-xs">(ETA <span class="font-mono font-semibold text-gray-700 dark:text-gray-300">${line.etaZ}</span> · <span class="font-mono text-gray-700 dark:text-gray-300">${line.fenetreZ}</span>)</span>
+            <div class="flex items-start justify-between gap-4">
+              <div class="flex items-start gap-3 flex-1 min-w-0">
+                <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${c.dot}"></span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex flex-wrap items-center gap-2 text-base font-medium text-gray-800 dark:text-gray-200">
+                    <span>${line.phenomenon}</span>
+                    <span class="font-bold">${line.iata}</span>
+                    <span class="text-blue-700 dark:text-blue-400 font-bold">${line.flight}</span>
+                    <span class="text-gray-500 dark:text-gray-400 text-xs">(ETA <span class="font-mono font-semibold text-gray-700 dark:text-gray-300">${line.etaZ}</span> · <span class="font-mono text-gray-700 dark:text-gray-300">${line.fenetreZ}</span>)</span>
+                  </div>
+                  <div class="mt-1.5 flex flex-wrap items-center gap-2">
+                    ${ciBadge}
+                    ${snippetHtml}
+                  </div>
                 </div>
-                <div class="mt-1.5 flex flex-wrap items-center gap-2">
-                  ${ciBadge}
-                  ${snippetHtml}
-                </div>
-                <div class="mt-2 flex flex-wrap items-center gap-3">
-                  <label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">Capa attente
-                    <input type="number" min="0" placeholder="min" data-field="capa" data-idx="${i}"
-                      class="w-16 border border-orange-200 dark:border-orange-800 rounded-md px-2 py-0.5
-                             bg-orange-50 dark:bg-orange-950 text-xs font-mono
-                             focus:outline-none focus:ring-1 focus:ring-orange-300 text-center" />
-                  </label>
-                  <label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">Dégagement
-                    <input type="text" placeholder="ICAO / IATA" data-field="deg" data-idx="${i}"
-                      class="w-24 border border-orange-200 dark:border-orange-800 rounded-md px-2 py-0.5
-                             bg-orange-50 dark:bg-orange-950 text-xs font-mono
-                             uppercase focus:outline-none focus:ring-1 focus:ring-orange-300" />
-                  </label>
-                </div>
+              </div>
+              <div class="flex flex-col gap-2 flex-shrink-0">
+                <label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">Capa attente
+                  <input type="number" min="0" placeholder="min" data-field="capa" data-idx="${i}"
+                    class="w-16 border border-orange-200 dark:border-orange-800 rounded-md px-2 py-0.5
+                           bg-orange-50 dark:bg-orange-950 text-xs font-mono
+                           focus:outline-none focus:ring-1 focus:ring-orange-300 text-center" />
+                </label>
+                <label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">Dégagement
+                  <input type="text" placeholder="ICAO / IATA" data-field="deg" data-idx="${i}"
+                    class="w-24 border border-orange-200 dark:border-orange-800 rounded-md px-2 py-0.5
+                           bg-orange-50 dark:bg-orange-950 text-xs font-mono
+                           uppercase focus:outline-none focus:ring-1 focus:ring-orange-300" />
+                </label>
               </div>
             </div>
           </div>`;

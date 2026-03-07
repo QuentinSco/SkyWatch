@@ -193,10 +193,13 @@ export const GET: APIRoute = async () => {
       });
 
     // ── Tailwind watch ─────────────────────────────────────────────────────────────────────────────────────────
+    // SXM (TNCM) et SJO (MROC) sont des aéroports de DÉPART pour AF.
+    // Il faut chercher dans allDepartures (et non allFlights=arrivées)
+    // pour détecter si un vol AF opère depuis ces escales dans les 12h.
     const TAILWIND_ICAOS = new Set(['TNCM', 'MROC']);
 
     const operatedIcaos = new Set(
-      allFlights
+      allDepartures  // ← vols AF au départ de SXM/SJO
         .filter(f => {
           if (!TAILWIND_ICAOS.has(f.icao)) return false;
           const depTime = f.estimatedOffBlockTime ?? f.scheduledDeparture ?? f.estimatedTouchDownTime ?? f.scheduledArrival;

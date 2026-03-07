@@ -249,9 +249,18 @@ function buildSnippet(fcst: any): string {
   return [windStr, wxStr, visStr, cbStr].filter(Boolean).join(' ').trim();
 }
 
+// ─── Normalisation du changeIndicator ────────────────────────────────────────
+// L'API AviationWeather peut renvoyer "PROB40TEMPO" (sans espace) ou d'autres
+// variantes. On normalise pour correspondre exactement aux clés de CI_LABEL
+// dans taf-ui.js : 'PROB30', 'PROB40', 'PROB30 TEMPO', 'PROB40 TEMPO', 'TEMPO', 'BECMG'.
 function formatChangeIndicator(ci: string | null | undefined): string {
   if (!ci || ci === 'FM') return 'INITIAL/FM';
-  return ci;
+  // Normaliser : trim + collapse espaces multiples + uppercase
+  const norm = ci.trim().replace(/\s+/g, ' ').toUpperCase();
+  // Gérer variantes sans espace renvoyées par certaines versions de l'API
+  if (norm === 'PROB40TEMPO') return 'PROB40 TEMPO';
+  if (norm === 'PROB30TEMPO') return 'PROB30 TEMPO';
+  return norm;
 }
 
 function parseThreatsFromForecast(fcst: any): TafThreat[] {

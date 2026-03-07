@@ -286,10 +286,7 @@
         </td>
         <td class="py-2 px-3 text-sm text-gray-800">${taf.iata} (${taf.icao}) — ${taf.name}</td>
         <td class="py-2 px-3 text-xs text-gray-700">
-          <div class="flex flex-col gap-0.5">
-            <span>${icon} ${threat.label}</span>
-            ${ci ? `<span class="${ci.cls} px-1.5 py-0.5 rounded text-[10px] font-semibold w-fit">${ci.text}</span>` : ''}
-          </div>
+          <span>${icon} ${threat.label}</span>
         </td>
         <td class="py-2 px-3 text-xs font-mono text-gray-700 whitespace-nowrap">
           <div class="font-semibold text-gray-800">${windowStr}</div>

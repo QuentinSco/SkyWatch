@@ -87,12 +87,11 @@ export const GET: APIRoute = async ({ url }) => {
     const departures = await getCachedAfDepartures(force, true);
 
     // FIX : filtre temporel sur les départs — on ne conserve que ceux dans
-    // la fenêtre [wStart, wEnd + 6h] pour éviter d'associer un départ aberrant
+    // la fenêtre [wStart - 2h, wEnd + 6h] pour éviter d'associer un départ aberrant
+    // Les noms de champs sont conservés tels que l'API amont les expose.
     const windowDepartures = departures.filter(dep => {
-      // FIX : utiliser estimatedTakeOffTime / scheduledDeparture pour les départs,
-      // pas estimatedTouchDownTime / scheduledArrival qui sont des champs d'atterrissage
-      const t = ms(dep.estimatedTakeOffTime ?? dep.scheduledDeparture);
-      return t !== null && t >= wStart && t <= wEnd + 6 * 60 * 60 * 1000;
+      const t = ms(dep.estimatedTouchDownTime ?? dep.scheduledArrival);
+      return t !== null && t >= wStart - 2 * 60 * 60 * 1000 && t <= wEnd + 6 * 60 * 60 * 1000;
     });
 
     // Index départs : reg-icao → vol de départ le plus proche dans le futur
@@ -102,9 +101,8 @@ export const GET: APIRoute = async ({ url }) => {
       if (!reg || !dep.icao) continue;
       const key = `${reg}-${dep.icao}`;
       const existing = depIndex.get(key);
-      // FIX : utiliser les bons champs de décollage
-      const depMs  = ms(dep.estimatedTakeOffTime ?? dep.scheduledDeparture);
-      const exMs   = existing ? ms(existing.estimatedTakeOffTime ?? existing.scheduledDeparture) : null;
+      const depMs  = ms(dep.estimatedTouchDownTime ?? dep.scheduledArrival);
+      const exMs   = existing ? ms(existing.estimatedTouchDownTime ?? existing.scheduledArrival) : null;
       // Garder le départ le plus tôt par reg-icao
       if (!existing || (depMs !== null && exMs !== null && depMs < exMs)) {
         depIndex.set(key, dep);
@@ -134,8 +132,7 @@ export const GET: APIRoute = async ({ url }) => {
         arrFlight:    `AF${arr.flightNumber}`,
         depFlight:    dep ? `AF${dep.flightNumber}` : null,
         arrMs,
-        // FIX : utiliser les bons champs de décollage pour depMs
-        depMs: dep ? (ms(dep.estimatedTakeOffTime ?? null) ?? ms(dep.scheduledDeparture)) : null,
+        depMs: dep ? (ms(dep.estimatedTouchDownTime ?? null) ?? ms(dep.scheduledArrival)) : null,
       });
     }
 

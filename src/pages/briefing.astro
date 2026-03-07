@@ -90,10 +90,8 @@ import '../styles/global.css';
       orange: { dot: 'bg-orange-400', badge: 'bg-orange-100 text-orange-700' },
     };
 
-    // Badge pour le changeIndicator TAF (PROB30, TEMPO, PROB40 TEMPO, BECMG…)
     function changeIndicatorBadge(ci) {
       if (!ci || ci === 'INITIAL/FM') return '';
-      // Couleur selon le type d'indicateur
       let cls = 'bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300';
       if (ci.startsWith('PROB30')) cls = 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300';
       else if (ci.startsWith('PROB40') || ci === 'TEMPO') cls = 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300';
@@ -148,7 +146,7 @@ import '../styles/global.css';
                   <span>${line.phenomenon}</span>
                   <span class="font-bold">${line.iata}</span>
                   <span class="text-blue-700 dark:text-blue-400 font-bold">${line.flight}</span>
-                  <span class="text-gray-500 dark:text-gray-400 text-xs">(ETA <span class="font-mono font-semibold text-gray-700 dark:text-gray-300">${line.etaZ}</span> · Fenêtre <span class="font-mono text-gray-700 dark:text-gray-300">${line.fenetreZ}</span>)</span>
+                  <span class="text-gray-500 dark:text-gray-400 text-xs">(ETA <span class="font-mono font-semibold text-gray-700 dark:text-gray-300">${line.etaZ}</span> · <span class="font-mono text-gray-700 dark:text-gray-300">${line.fenetreZ}</span>)</span>
                 </div>
                 <div class="mt-1.5 flex flex-wrap items-center gap-2">
                   ${ciBadge}
@@ -270,8 +268,9 @@ import '../styles/global.css';
       d.meteoHorsEurope.forEach((line, i) => {
         const capaEl = document.querySelector(`[data-field="capa"][data-idx="${i}"]`);
         const degEl  = document.querySelector(`[data-field="deg"][data-idx="${i}"]`);
-        const infos  = [`ETA ${line.etaZ}`, `Fenêtre ${line.fenetreZ}`];
-        if (line.changeIndicator && line.changeIndicator !== 'INITIAL/FM') infos.push(line.changeIndicator);
+        // Format : -Phénomène IATA AF000 (ETA 1234z - Capa attente ~Xmin - Dégagement XXX)
+        // Fenêtre et changeIndicator supprimés de la trame copiée
+        const infos = [`ETA ${line.etaZ}`];
         if (capaEl?.value?.trim()) infos.push(`Capa attente ~${capaEl.value.trim()}min`);
         if (degEl?.value?.trim())  infos.push(`Dégagement ${degEl.value.trim().toUpperCase()}`);
         meteoItems.push(`-${line.phenomenon} ${line.iata} ${line.flight} (${infos.join(' - ')})`);

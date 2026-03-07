@@ -45,7 +45,6 @@ export interface BriefingData {
 }
 
 // ─── Cache Redis ─────────────────────────────────────────────────────────────
-// Remplace le cache mémoire (inutilisable sur Vercel serverless / cold-start)
 const BRIEFING_CACHE_KEY     = 'briefing_cache_v1';
 const BRIEFING_CACHE_TTL_SEC = 5 * 60; // 5 min
 
@@ -108,8 +107,7 @@ export const GET: APIRoute = async ({ url }) => {
     ]);
 
     // ── Météo hors Europe — horizon 12h ──────────────────────────────────────
-    // ✅ Filtre sévérité aligné sur le tableau vols : red + orange
-    // (avant : red uniquement → les PROB40 TEMPO orange étaient absents de la trame)
+    // ✅ Filtre sévérité : red uniquement (orange/yellow exclus de la trame CCO)
     const meteoLines: BriefingMeteoLine[] = [];
     const seen = new Set<string>();
 
@@ -125,14 +123,12 @@ export const GET: APIRoute = async ({ url }) => {
       });
 
       for (const threat of taf.threats) {
-        // ✅ red + orange (aligné avec taf-vol-risks)
-        // yellow (PROB30/PROB30 TEMPO) reste exclu — probabilité trop faible
-        if (threat.severity === 'yellow') continue;
+        // ✅ Red uniquement — orange (CB/TCU, PROB40) et yellow (PROB30) exclus
+        if (threat.severity !== 'red') continue;
 
         for (const flight of flights) {
           const etaIso = flight.estimatedTouchDownTime ?? flight.scheduledArrival!;
           const etaMs  = new Date(etaIso).getTime();
-          // ✅ Fenêtre alignée sur taf-vol-risks : H-1 / H+2 après fin de menace
           const inWindow =
             etaMs >= threat.periodStart * 1000 - 1 * 60 * 60 * 1000 &&
             etaMs <= threat.periodEnd   * 1000 + 2 * 60 * 60 * 1000;

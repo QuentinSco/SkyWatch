@@ -32,10 +32,10 @@
   const CI_LABEL = {
     'TEMPO':       { text: 'TEMPO',         cls: 'bg-purple-100 text-purple-700 border border-purple-300' },
     'BECMG':       { text: 'BECMG',         cls: 'bg-blue-100 text-blue-700 border border-blue-300' },
-    'PROB30':      { text: 'PROB 30%',      cls: 'bg-gray-100 text-gray-600 border border-gray-300' },
-    'PROB40':      { text: 'PROB 40%',      cls: 'bg-yellow-100 text-yellow-700 border border-yellow-300' },
-    'PROB30 TEMPO':{ text: 'PROB 30% TEMPO',cls: 'bg-purple-50 text-purple-600 border border-purple-200' },
-    'PROB40 TEMPO':{ text: 'PROB 40% TEMPO',cls: 'bg-yellow-50 text-yellow-700 border border-yellow-200' },
+    'PROB30':      { text: 'PROB30',        cls: 'bg-gray-100 text-gray-600 border border-gray-300' },
+    'PROB40':      { text: 'PROB40',        cls: 'bg-yellow-100 text-yellow-700 border border-yellow-300' },
+    'PROB30 TEMPO':{ text: 'PROB30 TEMPO',  cls: 'bg-purple-50 text-purple-600 border border-purple-200' },
+    'PROB40 TEMPO':{ text: 'PROB40 TEMPO',  cls: 'bg-yellow-50 text-yellow-700 border border-yellow-200' },
   };
   const SEVERITY_ORDER = { red: 0, orange: 1, yellow: 2, none: 3 };
 
@@ -97,6 +97,12 @@
     });
   }
 
+  // ── Snippet préfixé par le changeIndicator ────────────────────────────────────────────────────
+  function snippetWithCi(snippet, ci) {
+    if (!ci) return snippet.trim();
+    return `${ci.text} ${snippet.trim()}`;
+  }
+
   function lastUpdateBar() {
     return `
       <div class="text-xs text-gray-400 mt-2 flex items-center gap-2">
@@ -127,7 +133,7 @@
           <span class="${badge} px-2 py-0.5 rounded font-bold whitespace-nowrap">${icon} ${threat.label}</span>
           <span class="text-gray-500 font-mono">${threat.value ?? ''}</span>
         </div>
-        <div class="font-mono bg-white border border-gray-100 rounded px-2 py-1 text-gray-600">${threat.snippet.trim()}</div>
+        <div class="font-mono bg-white border border-gray-100 rounded px-2 py-1 text-gray-600">${snippetWithCi(threat.snippet, ci)}</div>
       </div>`;
   }
 
@@ -306,7 +312,7 @@
                 <span class="text-gray-500">ETA <strong>${etaStr}</strong></span>
                 <span class="font-semibold ${tta !== null && tta > 0 ? 'text-orange-600' : 'text-green-600'}">${ttaStr}</span>
               </div>
-              <div class="font-mono bg-gray-50 border border-gray-100 rounded px-2 py-1 text-gray-700">${threat.snippet.trim()}</div>
+              <div class="font-mono bg-gray-50 border border-gray-100 rounded px-2 py-1 text-gray-700">${snippetWithCi(threat.snippet, ci)}</div>
             </div>
             <div>
               <button

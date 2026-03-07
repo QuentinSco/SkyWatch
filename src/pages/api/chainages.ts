@@ -33,7 +33,6 @@ export const GET: APIRoute = async ({ url }) => {
     });
   }
 
-  // FIX : limite le nombre d'aéroports acceptés pour éviter les abus
   if (inputCodes.length > MAX_AIRPORTS) {
     return new Response(JSON.stringify({ error: `Trop d'aéroports (max ${MAX_AIRPORTS})` }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
@@ -41,7 +40,6 @@ export const GET: APIRoute = async ({ url }) => {
   }
 
   const targetIcaos = new Set<string>();
-  // FIX : on mémorise les codes non reconnus pour les renvoyer au client
   const unknownCodes: string[] = [];
 
   for (const code of inputCodes) {
@@ -77,46 +75,42 @@ export const GET: APIRoute = async ({ url }) => {
     wEnd   = now + 24 * 60 * 60 * 1000;
   }
 
-  // FIX : lire le paramètre force pour bypass du cache si supporté
   const force = url.searchParams.get('force') === '1';
 
   try {
-    // Arrivées LC uniquement (comportement historique)
     const arrivals   = await getCachedAfArrivals(force, true);
-    // Départs LC — même cache Redis, pas de second appel API
     const departures = await getCachedAfDepartures(force, true);
 
-    // Pré-calcul des timestamps de départ pour éviter de recalculer dans la boucle
-    const departuresWithMs = departures
+    // Pré-calcul des timestamps de départ
+    type DepWithMs = { dep: typeof departures[number]; depMs: number };
+    const departuresWithMs: DepWithMs[] = departures
       .map(dep => ({ dep, depMs: ms(dep.estimatedTouchDownTime ?? dep.scheduledArrival) }))
-      .filter((d): d is { dep: typeof departures[number]; depMs: number } =>
-        d.depMs !== null &&
-        !!(dep => dep.registration && dep.icao)(d.dep)
-      );
+      .filter((d): d is DepWithMs => d.depMs !== null && !!(d.dep.registration && d.dep.icao));
 
-    // Filtrer arrivées dans la fenêtre (marge 2h avant pour avions déjà au sol)
+    // ── 1. Arrivées dans la fenêtre (marge 2h pour appareils déjà au sol proches) ──
     const windowArrivals = arrivals.filter(f => {
       const t = ms(f.estimatedTouchDownTime ?? f.scheduledArrival);
       return t !== null && t >= wStart - 2 * 60 * 60 * 1000 && t <= wEnd && targetIcaos.has(f.icao);
     });
 
     const stops: ChainageStop[] = [];
-    for (const arr of windowArrivals) {
-      const reg   = (arr.registration ?? 'UNKNOWN').toUpperCase();
 
-      // FIX : remplacement du non-null assertion (!) par une vérification explicite
+    // Clés reg-icao couvertes par une arrivée (pour la détection orpheline ensuite)
+    const coveredKeys = new Set<string>();
+
+    for (const arr of windowArrivals) {
+      const reg = (arr.registration ?? 'UNKNOWN').toUpperCase();
       const arrMs = ms(arr.estimatedTouchDownTime ?? arr.scheduledArrival);
       if (arrMs === null) continue;
 
-      // FIX : pour chaque arrivée, on cherche le départ le plus tôt APRÈS cette arrivée
-      // sur le même reg+icao. Cela gère correctement les appareils avec plusieurs rotations
-      // sur la même escale (ex: F-GSQM qui fait JFK→CDG→JFK→CDG dans la fenêtre).
+      coveredKeys.add(`${reg}-${arr.icao}`);
+
+      // Départ le plus tôt APRÈS cette arrivée, sur le même reg+icao
       let bestDep: typeof departures[number] | null = null;
       let bestDepMs: number | null = null;
       for (const { dep, depMs } of departuresWithMs) {
-        const depReg = dep.registration!.toUpperCase();
-        if (depReg !== reg || dep.icao !== arr.icao) continue;
-        if (depMs <= arrMs) continue; // le départ doit être postérieur à l'arrivée
+        if (dep.registration!.toUpperCase() !== reg || dep.icao !== arr.icao) continue;
+        if (depMs <= arrMs) continue;
         if (bestDepMs === null || depMs < bestDepMs) {
           bestDep   = dep;
           bestDepMs = depMs;
@@ -134,6 +128,52 @@ export const GET: APIRoute = async ({ url }) => {
       });
     }
 
+    // ── 2. Appareils déjà au sol AVANT la fenêtre (arrivée non captée) ──────
+    // On cherche les départs sur les icaos cibles dont la registration n'est
+    // pas couverte par une arrivée dans la fenêtre. Pour chaque reg+icao orphelin
+    // on ne retient que le premier départ à venir, et on reconstitue l'arrivée
+    // passée la plus récente pour afficher le numéro de vol entrant.
+    const seenOrphanKeys = new Set<string>();
+
+    for (const { dep, depMs } of departuresWithMs) {
+      if (!targetIcaos.has(dep.icao)) continue;
+      const reg = dep.registration!.toUpperCase();
+      const key = `${reg}-${dep.icao}`;
+
+      if (coveredKeys.has(key)) continue;    // déjà géré via une arrivée
+      if (seenOrphanKeys.has(key)) continue; // on ne prend que le premier départ orphelin
+
+      // Arrivée passée la plus récente pour ce reg+icao (hors fenêtre)
+      // afin d'afficher le numéro de vol entrant et l'heure réelle d'arrivée.
+      let bestArr: typeof arrivals[number] | null = null;
+      let bestArrMs: number | null = null;
+      for (const arr of arrivals) {
+        const aReg = (arr.registration ?? '').toUpperCase();
+        if (aReg !== reg || arr.icao !== dep.icao) continue;
+        const aMs = ms(arr.estimatedTouchDownTime ?? arr.scheduledArrival);
+        if (aMs === null || aMs >= depMs) continue;
+        if (bestArrMs === null || aMs > bestArrMs) {
+          bestArr   = arr;
+          bestArrMs = aMs;
+        }
+      }
+
+      seenOrphanKeys.add(key);
+
+      stops.push({
+        registration: reg,
+        aircraftType: dep.aircraftType ?? bestArr?.aircraftType ?? '',
+        iata:         dep.iata,
+        // Numéro du vol entrant si retrouvé, sinon label neutre
+        arrFlight:    bestArr ? `AF${bestArr.flightNumber}` : '(au sol)',
+        depFlight:    `AF${dep.flightNumber}`,
+        // Heure d'arrivée réelle si connue, sinon début de fenêtre pour que
+        // la barre parte du bord gauche du canvas (appareil déjà présent)
+        arrMs:        bestArrMs ?? wStart,
+        depMs,
+      });
+    }
+
     stops.sort((a, b) => a.arrMs - b.arrMs);
 
     return new Response(
@@ -142,7 +182,6 @@ export const GET: APIRoute = async ({ url }) => {
         generatedAt: new Date().toISOString(),
         windowStart: wStart,
         windowEnd: wEnd,
-        // FIX : on informe le client des codes non reconnus
         unknownCodes: unknownCodes.length > 0 ? unknownCodes : undefined,
       }),
       { headers: { 'Content-Type': 'application/json' } }

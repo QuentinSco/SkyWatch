@@ -1,8 +1,8 @@
 # 🛡 SkyWatch
 
-**Agrégateur d'alertes météorologiques pour dispatchers aéronautiques**
+**Suite d'outils opérationnels météo pour dispatchers aéronautiques**
 
-SkyWatch est un outil de supervision en temps réel qui agrège et affiche les alertes météorologiques critiques affectant les opérations aériennes d'Air France. Conçu pour les dispatchers, il combine données météo, TAF (Terminal Aerodrome Forecast) et informations de vol pour une vision complète de la situation opérationnelle.
+SkyWatch est une application multi-pages de supervision en temps réel conçue pour les dispatchers Air France. Elle agrège alertes météorologiques, données TAF et informations de vol, et propose des outils de calcul et de génération de briefings opérationnels.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Built with Astro](https://img.shields.io/badge/Built%20with-Astro-FF5D01?logo=astro)](https://astro.build)
@@ -13,14 +13,13 @@ SkyWatch est un outil de supervision en temps réel qui agrège et affiche les a
 ## 📋 Table des matières
 
 - [Fonctionnalités](#-fonctionnalités)
+- [Pages](#-pages)
 - [Architecture](#-architecture)
 - [Sources de données](#-sources-de-données)
 - [Prérequis](#-prérequis)
 - [Installation](#-installation)
 - [Configuration](#️-configuration)
 - [Déploiement](#-déploiement)
-- [Utilisation](#-utilisation)
-- [Développement](#-développement)
 - [Structure du projet](#-structure-du-projet)
 - [Améliorations futures](#-améliorations-futures)
 - [Contribution](#-contribution)
@@ -38,9 +37,26 @@ SkyWatch est un outil de supervision en temps réel qui agrège et affiche les a
 
 ### Données Aéronautiques
 - ✈️ **Vols impactés** : Croisement TAF/vols AF avec fenêtre de menace
-- 🌩 **TAF Risques** : Phénomènes significatifs sur le réseau Air France
+- 🌩 **TAF Risques** : Phénomènes significatifs sur le réseau Air France (groupes BECMG/FM correctement parsés)
 - 🛫 **État bases** : Monitoring CDG/ORY avec conditions actuelles
 - 🌀 **Cyclones tropicaux** : NHC, RSMC La Réunion, JTWC
+- 🌋 **Alertes volcaniques** : Cendres SIGMET via VAAC avec direction en point cardinal et déduplication
+- 🚀 **Lancements spatiaux** : Suivi des prochains tirs de fusée via Launch Library 2, pour information et awareness opérationnel des dispatchers
+
+### Briefing Opérationnel
+- 📋 **Page Briefing** : Vue dédiée à la génération d'un compte-rendu météo opérationnel
+- 📝 **Trame copiable** : Génération automatique d'un texte structuré (alertes rouges, orages groupés par phénomène, vols regroupés par escale)
+- 🖨️ **Impression A4** : Mise en page optimisée pour impression paysage
+
+### Vent Traversier (Crosswind)
+- 💨 **Calcul crosswind/headwind** : Décomposition vectorielle du vent par piste
+- 🕒 **Filtrage temporel** : Masquage automatique des vols hors validité TAF
+- 🖨️ **Impression A4** : Export optimisé pour briefing piste
+
+### Chainages de Vol
+- 📊 **Visualisation en barres** : Représentation temporelle des chainages d'appareils
+- 🏷️ **Labels flottants** : Identifiants hors barre pour lisibilité maximale
+- 🖨️ **Impression A4 paysage** : Export pour planning opérationnel
 
 ### Interface & UX
 - 🌙 **Mode sombre** : Basculement automatique avec sauvegarde de préférence
@@ -52,6 +68,17 @@ SkyWatch est un outil de supervision en temps réel qui agrège et affiche les a
 - 🚀 **Cache Redis** : Upstash Redis pour minimiser les appels API
 - 📦 **Optimisation Bundle** : Code splitting et assets optimisés
 - 🔄 **Rafraîchissement intelligent** : Polling adaptatif selon la criticité
+
+---
+
+## 📄 Pages
+
+| Page | Route | Description |
+|------|-------|-------------|
+| **Tableau de bord** | `/` | Carte interactive, alertes en temps réel, vols impactés, TAF risques |
+| **Briefing** | `/briefing` | Génération de trame opérationnelle copiable, impression A4 |
+| **Crosswind** | `/crosswind` | Calcul vent traversier par piste, filtrage par validité TAF |
+| **Chainages** | `/chainages` | Visualisation temporelle des rotations d'appareils |
 
 ---
 
@@ -111,10 +138,12 @@ SkyWatch est un outil de supervision en temps réel qui agrège et affiche les a
 | **NOAA/NWS** | Weather Alerts | Temps réel | Illimité |
 | **MeteoAlarm** | European Alerts | 5 min | Illimité |
 | **AviationWeather** | TAF | 1h | Illimité |
-| **Air France API** | Flights | Temps réel | 100 req/jour |
+| **Air France API** | Flights & Chainages | Temps réel | 100 req/jour |
 | **NHC** | Hurricanes | 6h | Illimité |
 | **RSMC La Réunion** | Cyclones IO | 6h | Illimité |
 | **JTWC** | Typhoons | 6h | Illimité |
+| **VAAC** | Cendres volcaniques | Événement | Illimité |
+| **Launch Library 2** | Lancements spatiaux | Temps réel | 15 req/h (free) |
 
 ---
 
@@ -199,7 +228,6 @@ L'application sera disponible sur `http://localhost:4321`
 
 ```bash
 npm run build
-# Deploy sur Netlify
 ```
 
 **Configuration Netlify** :
@@ -211,7 +239,6 @@ npm run build
 
 ```bash
 npm run build
-# Deploy sur Vercel
 ```
 
 **Configuration Vercel** :
@@ -229,133 +256,36 @@ node dist/server/entry.mjs
 
 ---
 
-## 🖥 Utilisation
-
-### Interface Principale
-
-1. **Carte interactive** : Cliquez sur les markers pour voir les détails d'une alerte
-2. **Sidebar navigation** : Accès rapide aux sections (Carte, Alertes, Vols, TAF)
-3. **Mode sombre** : Cliquez sur l'icône 🌙 pour basculer
-4. **Compteurs temps réel** : Nombre d'alertes actives par catégorie
-
-### Navigation
-
-- **Scroll automatique** : Cliquez sur un lien de la sidebar pour naviguer
-- **Highlighting actif** : La section visible est automatiquement mise en évidence
-- **Lazy loading** : Les sections lourdes (Vols, TAF) se chargent au scroll
-
-### Alertes
-
-**Codes couleur** :
-- 🔴 **Rouge** : Alerte critique (ouragan cat. 4+, séisme majeur)
-- 🟠 **Orange** : Alerte modérée (tempête sévère, inondations)
-- 🟡 **Jaune** : Alerte mineure (vent fort, neige)
-
----
-
-## 💻 Développement
-
-### Structure du Code
-
-```
-src/
-├── pages/
-│   ├── index.astro          # Page principale
-│   └── api/
-│       ├── alerts.json.ts   # API agrégation alertes
-│       ├── tafs.json.ts     # API TAF risques
-│       └── flights.json.ts  # API vols impactés
-├── lib/
-│   ├── alertsServer.ts      # Parsers multi-sources
-│   ├── tafParser.ts         # Parser TAF
-│   ├── afFlights.ts         # Intégration API AF
-│   ├── cycloneParser.ts     # Parser cyclones
-│   └── redis.ts             # Client Redis
-├── styles/
-│   └── global.css           # Styles + dark mode
-└── components/              # Composants réutilisables
-
-public/lib/
-├── main.js                  # Logique principale client
-├── taf-ui.js                # Rendu TAF
-├── map.js                   # Carte Leaflet
-├── dark-mode.js             # Gestion mode sombre
-└── lazy-load.js             # Lazy loading sections
-```
-
-### Scripts npm
-
-```bash
-npm run dev        # Serveur de développement
-npm run build      # Build production
-npm run preview    # Preview du build
-npm run astro      # CLI Astro
-```
-
-### Ajouter une Source de Données
-
-1. Créer un parser dans `src/lib/` :
-
-```typescript
-// src/lib/mySourceParser.ts
-export async function fetchMySource() {
-  const response = await fetch('https://api.example.com/data');
-  return response.json();
-}
-
-export function normalizeMySource(data: any) {
-  return {
-    id: data.id,
-    title: data.title,
-    severity: mapSeverity(data.level),
-    // ...
-  };
-}
-```
-
-2. Intégrer dans `src/lib/alertsServer.ts` :
-
-```typescript
-import { fetchMySource, normalizeMySource } from './mySourceParser';
-
-export async function aggregateAlerts() {
-  const mySourceData = await fetchMySource();
-  const normalized = mySourceData.map(normalizeMySource);
-  // Fusionner avec autres sources
-}
-```
-
----
-
 ## 📁 Structure du Projet
 
 ```
 SkyWatch/
-├── .astro/              # Cache Astro (ignoré)
-├── .vscode/             # Config VS Code
-├── node_modules/        # Dépendances (ignoré)
 ├── public/
-│   ├── favicon.svg
-│   └── lib/             # Scripts client
-│       ├── main.js
-│       ├── taf-ui.js
-│       ├── map.js
-│       ├── dark-mode.js
-│       └── lazy-load.js
+│   └── lib/                 # Scripts client
+│       ├── main.js          # Logique principale dashboard
+│       ├── taf-ui.js        # Rendu TAF
+│       ├── map.js           # Carte Leaflet
+│       ├── dark-mode.js     # Gestion mode sombre
+│       └── lazy-load.js     # Lazy loading sections
 ├── src/
-│   ├── assets/          # Images, fonts
-│   ├── components/      # Composants Astro
-│   ├── layouts/         # Layouts pages
-│   ├── lib/             # Logique serveur
-│   ├── pages/           # Routes & API
-│   ├── styles/          # CSS global
-│   └── types/           # Types TypeScript
-├── .gitignore
-├── astro.config.mjs     # Config Astro
-├── package.json
-├── README.md
-├── tailwind.config.mjs  # Config Tailwind
-└── tsconfig.json        # Config TypeScript
+│   ├── lib/                 # Logique serveur
+│   │   ├── alertsServer.ts  # Parsers multi-sources
+│   │   ├── tafParser.ts     # Parser TAF (groupes BECMG/FM)
+│   │   ├── afFlights.ts     # Intégration API AF (vols + chainages)
+│   │   ├── cycloneParser.ts # Parser cyclones
+│   │   └── redis.ts         # Client Redis
+│   ├── pages/
+│   │   ├── index.astro      # Dashboard principal
+│   │   ├── briefing.astro   # Génération trame opérationnelle
+│   │   ├── crosswind.astro  # Calcul vent traversier
+│   │   ├── chainages.astro  # Visualisation chainages d'appareils
+│   │   └── api/             # API Routes SSR
+│   ├── styles/
+│   │   └── global.css       # Styles globaux + dark mode
+│   └── types/               # Types TypeScript
+├── astro.config.mjs
+├── tailwind.config.mjs
+└── tsconfig.json
 ```
 
 ---
@@ -383,24 +313,20 @@ SkyWatch/
 
 ## 🤝 Contribution
 
-Les contributions sont les bienvenues ! Voici comment contribuer :
-
 1. **Fork** le repository
 2. **Créer une branche** : `git checkout -b feature/ma-feature`
 3. **Commit** : `git commit -m 'feat: ajout de ma feature'`
 4. **Push** : `git push origin feature/ma-feature`
 5. **Pull Request** : Ouvrir une PR sur GitHub
 
-### Conventions
-
-- **Commits** : [Conventional Commits](https://www.conventionalcommits.org/)
-  - `feat:` nouvelle fonctionnalité
-  - `fix:` correction bug
-  - `docs:` documentation
-  - `style:` formatage
-  - `refactor:` refactoring
-  - `test:` ajout tests
-  - `chore:` maintenance
+### Conventions de commit
+- `feat:` nouvelle fonctionnalité
+- `fix:` correction bug
+- `docs:` documentation
+- `style:` formatage
+- `refactor:` refactoring
+- `test:` ajout tests
+- `chore:` maintenance
 
 ---
 
@@ -412,7 +338,7 @@ Ce projet est sous license **MIT**. Voir [LICENSE](LICENSE) pour plus de détail
 
 ## 👥 Auteurs
 
-- **Quentin S** - *Initial work* - [@QuentinSco](https://github.com/QuentinSco)
+- **Quentin S** - [@QuentinSco](https://github.com/QuentinSco)
 
 ---
 
@@ -430,10 +356,11 @@ Ce projet est sous license **MIT**. Voir [LICENSE](LICENSE) pour plus de détail
 
 Pour toute question ou problème :
 - **Issues GitHub** : [github.com/QuentinSco/SkyWatch/issues](https://github.com/QuentinSco/SkyWatch/issues)
+
 ---
 
 <div align="center">
   <strong>Fait avec ❤️ pour les dispatchers Air France</strong>
   <br>
-  <sub>SkyWatch POC v0.1 - Open source uniquement</sub>
+  <sub>SkyWatch v0.3 — Open source uniquement</sub>
 </div>

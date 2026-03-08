@@ -55,8 +55,6 @@
     }) + 'Z';
   }
 
-  // Bug 1 fix — toLocaleString('fr-FR') renvoie 'HH h MM' sur certains navigateurs
-  // (Safari, Firefox selon locale). On utilise toISOString() pour un format garanti HH:MM.
   function formatHHMM(ts) {
     const d = new Date(ts * 1000);
     const hh = String(d.getUTCHours()).padStart(2, '0');
@@ -99,16 +97,16 @@
     });
   }
 
-  // Bug 2 fix — conversion visibilité SM → mètres (miroir de visMtoMeters dans tafParser.ts)
+  // Conversion visibilité SM → mètres
   function visMtoMeters(raw) {
     if (raw == null || raw === '') return null;
     const s = String(raw).trim();
     if (s === '6+' || s.toUpperCase() === 'P6SM' || s === '9999') return 9999;
     const n = parseFloat(s);
     if (isNaN(n)) return null;
-    if (Number.isInteger(n) && n >= 800) return n;   // déjà en mètres
+    if (Number.isInteger(n) && n >= 800) return n;
     const SM_TO_M = 1609.344;
-    return Math.round((n * SM_TO_M) / 50) * 50;      // SM → mètres, arrondi 50m
+    return Math.round((n * SM_TO_M) / 50) * 50;
   }
 
   // ── Snippet préfixé par le changeIndicator ────────────────────────────────────────────────────
@@ -132,7 +130,7 @@
       ?.addEventListener('click', loadTafVolRisks);
   }
 
-  // ── TAF : badge menace ────────────────────────────────────────────────────────────────────────
+  // ── TAF : badge menace ───────────────────────────────────────────────────────────────────────
   function renderThreatBadge(threat) {
     const icon   = THREAT_ICONS[threat.type] ?? '⚠️';
     const badge  = SEVERITY_BADGE[threat.severity];
@@ -385,8 +383,11 @@
       const gst = fcst.wgst ? `G${String(fcst.wgst).padStart(2, '0')}` : '';
       parts.push(`${dir}${spd}${gst}KT`);
     }
-    if (fcst.wxString) parts.push(fcst.wxString);
-    // Bug 2 fix — convertir la visibilité en mètres (l'API renvoie parfois des SM décimaux)
+    // Fix NSW — l'API AviationWeather renvoie wxString='NSW' comme valeur interne
+    // pour indiquer l'absence de phénomène sur un groupe de base. Ne pas afficher.
+    if (fcst.wxString && fcst.wxString.trim().toUpperCase() !== 'NSW') {
+      parts.push(fcst.wxString);
+    }
     if (fcst.visib != null && fcst.visib !== '9999' && fcst.visib !== '6+') {
       const visM = visMtoMeters(fcst.visib);
       if (visM !== null && visM !== 9999) parts.push(`VIS ${visM}m`);
@@ -478,7 +479,12 @@
       const ci      = fcst?.changeIndicator ?? '';
       const snippet = sev !== 'none' && fcst ? buildFcstSnippet(fcst) : '';
 
-      segments.push({ left, width, sev, label, ci, segStart, segEnd, snippet });
+      // Fix horaires tooltip — on stocke les bornes réelles du forecast TAF
+      // (timeFrom/timeTo) plutôt que les bornes de slots basées sur nowSec.
+      const tipTimeFrom = fcst?.timeFrom ?? segStart;
+      const tipTimeTo   = fcst?.timeTo   ?? segEnd;
+
+      segments.push({ left, width, sev, label, ci, segStart, segEnd, snippet, tipTimeFrom, tipTimeTo });
       i = j;
     }
 
@@ -521,7 +527,7 @@
         <div id="${tipId}" data-taf-group="${groupId}"
              class="hidden absolute z-30 bg-white border border-gray-200 rounded-xl shadow-xl p-3 text-xs w-56 pointer-events-none"
              style="${posStyle}top:calc(100% + 6px)">
-          <div class="font-semibold text-gray-700 mb-1">${formatHHMM(s.segStart)} → ${formatHHMM(s.segEnd)}</div>
+          <div class="font-semibold text-gray-700 mb-1">${formatHHMM(s.tipTimeFrom)} → ${formatHHMM(s.tipTimeTo)}</div>
           <div class="mb-1">${s.label}</div>
           ${s.ci ? `<div class="text-gray-400 text-[10px]">${s.ci}</div>` : ''}
           ${s.snippet ? `<div class="font-mono text-gray-600 mt-1 bg-gray-50 rounded px-1 py-0.5">${s.snippet}</div>` : ''}

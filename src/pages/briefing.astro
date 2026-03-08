@@ -276,10 +276,10 @@ import '../styles/global.css';
         plainLines.push(''); htmlLines.push('');
       }
 
-      // ── Météo hors Europe : grouper par phénomène ──
+      // ── Météo hors Europe : grouper par phénomène, puis par escale ──
       const meteoItems = [];
 
-      // Grouper les lignes meteoHorsEurope par phénomène
+      // Étape 1 : grouper par phénomène
       const byPhenomenon = new Map();
       d.meteoHorsEurope.forEach((line, i) => {
         const key = line.phenomenon;
@@ -288,28 +288,46 @@ import '../styles/global.css';
       });
 
       byPhenomenon.forEach((entries, phenomenon) => {
-        if (entries.length === 1) {
-          // Une seule occurrence : format habituel
-          const { line, i } = entries[0];
-          const capaEl = document.querySelector(`[data-field="capa"][data-idx="${i}"]`);
-          const degEl  = document.querySelector(`[data-field="deg"][data-idx="${i}"]`);
-          const infos = [`ETA ${line.etaZ}`];
-          if (capaEl?.value?.trim()) infos.push(`Capa attente ~${capaEl.value.trim()}min`);
-          if (degEl?.value?.trim())  infos.push(`Dégagement ${degEl.value.trim().toUpperCase()}`);
-          meteoItems.push(`-${phenomenon} ${line.iata} ${line.flight} (${infos.join(' - ')})`);
-        } else {
-          // Plusieurs vols touchés par le même phénomène : une ligne groupée
-          // Format : -Orages IATA1 AF000 (ETA …) / IATA2 AF001 (ETA …)
-          const parts = entries.map(({ line, i }) => {
+        // Étape 2 : regrouper par escale (iata) au sein du même phénomène
+        const byIata = new Map();
+        entries.forEach(({ line, i }) => {
+          if (!byIata.has(line.iata)) byIata.set(line.iata, []);
+          byIata.get(line.iata).push({ line, i });
+        });
+
+        // Étape 3 : construire une ligne par escale
+        const escaleLines = [];
+        byIata.forEach((escaleEntries, iata) => {
+          // Tous les vols de cette escale : même infos TAC (capa/dég partagent la 1ère entrée),
+          // les vols sont listés avec leur ETA individuel
+          if (escaleEntries.length === 1) {
+            const { line, i } = escaleEntries[0];
             const capaEl = document.querySelector(`[data-field="capa"][data-idx="${i}"]`);
             const degEl  = document.querySelector(`[data-field="deg"][data-idx="${i}"]`);
             const infos = [`ETA ${line.etaZ}`];
             if (capaEl?.value?.trim()) infos.push(`Capa attente ~${capaEl.value.trim()}min`);
             if (degEl?.value?.trim())  infos.push(`Dégagement ${degEl.value.trim().toUpperCase()}`);
-            return `${line.iata} ${line.flight} (${infos.join(' - ')})`;
-          });
-          meteoItems.push(`-${phenomenon} ${parts.join(' / ')}`);
-        }
+            escaleLines.push(`${iata} ${line.flight} (${infos.join(' - ')})`);
+          } else {
+            // Plusieurs vols sur la même escale : partager les infos de la 1ère entrée
+            const { i: i0 } = escaleEntries[0];
+            const capaEl = document.querySelector(`[data-field="capa"][data-idx="${i0}"]`);
+            const degEl  = document.querySelector(`[data-field="deg"][data-idx="${i0}"]`);
+            const flights = escaleEntries.map(({ line }) => `${line.flight} (ETA ${line.etaZ})`).join(' / ');
+            const infos = [];
+            if (capaEl?.value?.trim()) infos.push(`Capa attente ~${capaEl.value.trim()}min`);
+            if (degEl?.value?.trim())  infos.push(`Dégagement ${degEl.value.trim().toUpperCase()}`);
+            const suffix = infos.length ? ` - ${infos.join(' - ')}` : '';
+            escaleLines.push(`${iata} ${flights}${suffix}`);
+          }
+        });
+
+        // Première escale préfixée par "-Phénomène", les suivantes indentées
+        const indent = ' '.repeat(`-${phenomenon} `.length);
+        escaleLines.forEach((el, idx) => {
+          if (idx === 0) meteoItems.push(`-${phenomenon} ${el}`);
+          else           meteoItems.push(`${indent}${el}`);
+        });
       });
 
       const twWithTAF = (d.tailwindWatch || []).filter(tw => tw.forecastAlerts && tw.forecastAlerts.length > 0);
@@ -319,7 +337,6 @@ import '../styles/global.css';
           const windStr = fa.hasGust ? `${fa.wspdBase}G${fa.wgst}kt` : `${fa.tailwindKt}kt`;
           return `${windStr} (${utcDZ(fa.periodStart)}→${utcDZ(fa.periodEnd)})`;
         });
-        // Pas d'icône 💨 dans la trame copiée
         meteoItems.push(`-Vent arrière ${tw.iata} ${runway} ${tw.depFlight} (STD ${tw.depStdZ} - TAF : ${fcsts.join(', ')})`);
       });
       section('Météo hors Europe :', meteoItems.length ? meteoItems : ['-NIL']);

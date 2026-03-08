@@ -28,13 +28,13 @@ import '../styles/global.css';
     .dark #ch-tooltip { background: #0f172a; color: #e2e8f0; }
 
     @media print {
-      @page { size: A4 portrait; margin: 15mm 10mm; }
+      @page { size: A4 landscape; margin: 10mm 15mm; }
       * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
       body { background: white !important; color: black !important; font-size: 10pt; line-height: 1.3; }
       aside, #btn-refresh, #btn-print, #ch-tooltip, #airport-input-section, .no-print { display: none !important; }
       body > .flex { display: block !important; background: white !important; }
       .flex-1.min-w-0 { width: 100% !important; max-width: 100% !important; overflow: visible !important; }
-      .max-w-5xl { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
+      .max-w-7xl { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
       h1 {
         font-size: 16pt !important; font-weight: bold; color: black !important;
         margin-bottom: 4mm !important; border-bottom: 2px solid black;
@@ -119,7 +119,7 @@ import '../styles/global.css';
 
   <!-- ─ Contenu ───────────────────────────────────────────── -->
   <div class="flex-1 min-w-0 overflow-y-auto">
-    <div class="max-w-5xl mx-auto px-4 py-6 xl:px-8">
+    <div class="max-w-7xl mx-auto px-4 py-6 xl:px-8">
 
       <div class="flex items-center justify-between flex-wrap gap-4 mb-6">
         <div>
@@ -133,7 +133,7 @@ import '../styles/global.css';
                                          bg-white dark:bg-gray-800
                                          hover:bg-gray-50 dark:hover:bg-gray-700
                                          text-gray-600 dark:text-gray-300 transition"
-                  title="Imprimer au format A4">
+                  title="Imprimer au format A4 paysage">
             🖨️ Imprimer
           </button>
           <button id="btn-refresh" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg
@@ -268,7 +268,9 @@ import '../styles/global.css';
     const FONT = '11px/1 Inter, system-ui, sans-serif';
     const FONT_BOLD = 'bold 11px/1 Inter, system-ui, sans-serif';
     const FONT_SM = 'bold 10px/1 Inter, system-ui, sans-serif';
-    const W_FULL = 130, W_SPLIT = 72, W_SHORT = 34;
+    const W_FULL = 130, W_SPLIT = 72;
+    // Seuil en-dessous duquel on bascule en labels flottants hors barre
+    const W_FLOAT = 72;
 
     const airports = new Set();
     let lastData = null;
@@ -361,7 +363,6 @@ import '../styles/global.css';
       const d = new Date(ms);
       return String(d.getUTCDate()).padStart(2,'0') + '/' + String(d.getUTCMonth()+1).padStart(2,'0');
     }
-    function shortFlight(f) { return f ? f.replace(/^AF0*/, '') : ''; }
 
     function tickInterval(spanMs, availW) {
       const targets = [15, 30, 60, 120, 180, 240, 360];
@@ -371,7 +372,9 @@ import '../styles/global.css';
       return 360 * 60_000;
     }
 
-    // Dessine un segment (barre + texte) pour un stop donné
+    // Dessine un segment (barre + texte) pour un stop donné.
+    // Retourne { x1, x2, floatLabels } où floatLabels contient les labels à dessiner
+    // après tous les segments (pour éviter les chevauchements avec les barres voisines).
     function drawSegment(ctx, seg, barY, midY, xMin, xMax, pal, printMode) {
       const known = seg.depMs !== null;
       const xArr = Math.max(seg._xArr, xMin);
@@ -393,13 +396,18 @@ import '../styles/global.css';
       }
 
       const textColor = printMode ? '#000000' : (known ? '#fff' : pal.text);
+      const floatColor = printMode ? '#000000' : pal.text;
       ctx.font = FONT_SM; ctx.textBaseline = 'middle';
       const arrLabel = '↓ ' + seg.arrFlight;
       const depLabel = seg.depFlight ? '↑ ' + seg.depFlight : null;
       const arrW = ctx.measureText(arrLabel).width;
       const depW = depLabel ? ctx.measureText(depLabel).width : 0;
 
+      // Accumulateur de labels flottants à rendre après coup
+      const floatLabels = [];
+
       if (barW >= W_FULL) {
+        // Cas nominal : tout tient dans la barre
         ctx.fillStyle = textColor;
         ctx.textAlign = 'left'; ctx.fillText(arrLabel, xArr + 5, midY);
         if (depLabel) { ctx.textAlign = 'right'; ctx.fillText(depLabel, xDep - 5, midY); }
@@ -416,20 +424,28 @@ import '../styles/global.css';
           }
         }
       } else if (barW >= W_SPLIT) {
+        // Barre moyenne : on tente de caser les deux labels
         ctx.fillStyle = textColor;
         if (arrW + depW + 18 <= barW) {
           ctx.textAlign = 'left'; ctx.fillText(arrLabel, xArr + 5, midY);
           if (depLabel) { ctx.textAlign = 'right'; ctx.fillText(depLabel, xDep - 5, midY); }
         } else if (arrW + 10 <= barW) {
           ctx.textAlign = 'left'; ctx.fillText(arrLabel, xArr + 5, midY);
+          // Le label de départ ne rentre pas : flottant à droite de la barre
+          if (depLabel) floatLabels.push({ label: depLabel, x: xDep + 4, align: 'left', color: floatColor });
+        } else {
+          // Rien ne rentre : les deux labels sont flottants
+          floatLabels.push({ label: arrLabel, x: xArr - 4, align: 'right', color: floatColor });
+          if (depLabel) floatLabels.push({ label: depLabel, x: xDep + 4, align: 'left', color: floatColor });
         }
-      } else if (barW >= W_SHORT) {
-        ctx.fillStyle = textColor; ctx.textAlign = 'center';
-        const short = [shortFlight(seg.arrFlight), seg.depFlight ? shortFlight(seg.depFlight) : null].filter(Boolean).join('·');
-        ctx.fillText(short, (xArr + xDep) / 2, midY);
+      } else {
+        // Barre trop étroite (< W_FLOAT) : labels systématiquement hors barre
+        // ARR à gauche de la barre, DEP à droite
+        floatLabels.push({ label: arrLabel, x: xArr - 4, align: 'right', color: floatColor });
+        if (depLabel) floatLabels.push({ label: depLabel, x: xDep + 4, align: 'left', color: floatColor });
       }
 
-      return { x1: xArr, x2: xDep };
+      return { x1: xArr, x2: xDep, floatLabels };
     }
 
     function drawAirportTimeline(canvas, stops, wStart, wEnd, pal, printMode = false) {
@@ -499,10 +515,23 @@ import '../styles/global.css';
           _xDep: seg.depMs !== null ? toX(seg.depMs) : canvasW - CHART_PAD,
         }));
 
-        // Dessin de chaque segment sur la même ligne
+        // Passe 1 : dessin des barres, collecte des labels flottants
+        const allFloats = [];
         for (const seg of segs) {
-          const { x1, x2 } = drawSegment(ctx, seg, barY, midY, LABEL_W, canvasW - CHART_PAD, pal, printMode);
+          const { x1, x2, floatLabels } = drawSegment(ctx, seg, barY, midY, LABEL_W, canvasW - CHART_PAD, pal, printMode);
           hitZones.push({ x1, y1: barY, x2, y2: barY + BAR_H, seg });
+          allFloats.push(...floatLabels.map(fl => ({ ...fl, midY })));
+        }
+
+        // Passe 2 : dessin des labels flottants par-dessus toutes les barres de la ligne
+        ctx.font = FONT_SM; ctx.textBaseline = 'middle';
+        for (const fl of allFloats) {
+          // Clip à la zone du graphe pour ne pas déborder sur les labels de registration
+          if (fl.align === 'right' && fl.x < LABEL_W + 2) continue;
+          if (fl.align === 'left'  && fl.x > canvasW - CHART_PAD - 2) continue;
+          ctx.fillStyle = fl.color;
+          ctx.textAlign = fl.align;
+          ctx.fillText(fl.label, fl.x, fl.midY);
         }
       });
 

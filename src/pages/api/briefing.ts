@@ -1,6 +1,6 @@
 // src/pages/api/briefing.ts
-// ─── API Trame Briefing CCO ──────────────────────────────────────────────────
-import type { APIRoute } from 'astro';
+// ─── API Trame Briefing CCO ────────────────────────────────────────────
+Import type { APIRoute } from 'astro';
 import { fetchTafRisks }                              from '../../lib/tafParser';
 import { getCachedAfArrivals, getCachedAfDepartures } from '../../lib/afFlights';
 import { fetchCycloneBulletins }                      from '../../lib/cycloneParser';
@@ -27,7 +27,7 @@ export interface BriefingData {
   generatedAt:     string;
   meteoHorsEurope: BriefingMeteoLine[];
   tropicale:       { name: string; basin: string; category: string; windKt: number; affected: string[] }[];
-  volcanique:      { volcanoName: string; country: string; flLevel: string; vaac: string }[];
+  volcanique:      { volcanoName: string; country: string; flLevel: string; vaac: string; direction: number | null; speedKt: number | null }[];
   tirsFusee:       { site: string; rocket: string; provider: string; timeZ: string; airports: string[] }[];
   tailwindWatch:   {
     iata:           string;
@@ -44,11 +44,11 @@ export interface BriefingData {
   effectifDsp:     string;
 }
 
-// ─── Cache Redis ─────────────────────────────────────────────────────────────
-const BRIEFING_CACHE_KEY     = 'briefing_cache_v1';
+// ─── Cache Redis ───────────────────────────────────────────────
+const BRIEFING_CACHE_KEY     = 'briefing_cache_v2';
 const BRIEFING_CACHE_TTL_SEC = 5 * 60; // 5 min
 
-// ─── Constantes ──────────────────────────────────────────────────────────────
+// ─── Constantes ─────────────────────────────────────────────────
 const EUROPEAN_IATAS = new Set(['CDG', 'ORY', 'NCE', 'LDE', 'DUB', 'PIK']);
 
 const PHENOMENON_LABELS: Record<string, string> = {
@@ -72,13 +72,23 @@ function fmtZ(isoOrUnix: string | number): string {
   return `${String(d.getUTCHours()).padStart(2, '0')}${String(d.getUTCMinutes()).padStart(2, '0')}z`;
 }
 
-// ─── Route GET ───────────────────────────────────────────────────────────────
+/** Extrait direction et vitesse depuis la description d'un advisory VAAC Washington */
+function parseVaacMotion(description: string): { direction: number | null; speedKt: number | null } {
+  const dirMatch = description.match(/Direction\s*:\s*(\d+)°/);
+  const spdMatch = description.match(/Vitesse\s*:\s*(\d+)\s*kt/);
+  return {
+    direction: dirMatch ? parseInt(dirMatch[1], 10) : null,
+    speedKt:   spdMatch ? parseInt(spdMatch[1], 10) : null,
+  };
+}
+
+// ─── Route GET ─────────────────────────────────────────────────
 export const prerender = false;
 
 export const GET: APIRoute = async ({ url }) => {
   const force = url.searchParams.get('force') === '1';
 
-  // ── Cache Redis ────────────────────────────────────────────────────────────
+  // ── Cache Redis ────────────────────────────────────────────────────
   if (!force && redis) {
     try {
       const cached = await redis.get<BriefingData>(BRIEFING_CACHE_KEY);
@@ -106,7 +116,7 @@ export const GET: APIRoute = async ({ url }) => {
       fetchRocketLaunches(),
     ]);
 
-    // ── Météo hors Europe — horizon 12h ──────────────────────────────────────
+    // ── Météo hors Europe — horizon 12h ────────────────────────────────────
     // ✅ Filtre sévérité : red uniquement (orange/yellow exclus de la trame CCO)
     const meteoLines: BriefingMeteoLine[] = [];
     const seen = new Set<string>();
@@ -168,22 +178,28 @@ export const GET: APIRoute = async ({ url }) => {
       return true;
     });
 
-    // ── Perturbations tropicales ──────────────────────────────────────────────
+    // ── Perturbations tropicales ───────────────────────────────────────
     const tropicale = cyclones
       .filter(c => c.name !== 'SEASON' && c.category !== 'INVEST' && c.windKt > 0)
       .map(c => ({ name: c.name, basin: c.basin, category: c.category, windKt: c.windKt, affected: c.affectedAirports }));
 
-    // ── Volcanique ────────────────────────────────────────────────────────────
+    // ── Volcanique ────────────────────────────────────────────────────
+    // direction & speedKt extraits depuis la description de l'advisory Washington
     const volcanique = (vaacAlerts as any[])
       .filter(a => Array.isArray(a.airports) && a.airports.length > 0)
-      .map(a => ({
-        volcanoName: a.volcanoName ?? 'Volcan',
-        country:     a.country    ?? '',
-        flLevel:     a.headline?.match(/FL\d+/)?.[0] ?? '',
-        vaac:        a.region     ?? '',
-      }));
+      .map(a => {
+        const motion = parseVaacMotion(a.description ?? '');
+        return {
+          volcanoName: a.volcanoName ?? 'Volcan',
+          country:     a.country    ?? '',
+          flLevel:     a.headline?.match(/FL\d+/)?.[0] ?? '',
+          vaac:        a.region     ?? '',
+          direction:   motion.direction,
+          speedKt:     motion.speedKt,
+        };
+      });
 
-    // ── Tirs de fusée — horizon 12h ───────────────────────────────────────────
+    // ── Tirs de fusée — horizon 12h ───────────────────────────────────
     const tirsFusee = launches
       .filter(l => {
         const start = new Date(l.validFrom).getTime();
@@ -203,7 +219,7 @@ export const GET: APIRoute = async ({ url }) => {
         };
       });
 
-    // ── Tailwind watch ────────────────────────────────────────────────────────
+    // ── Tailwind watch ───────────────────────────────────────────────
     const TAILWIND_ICAOS = new Set(['TNCM', 'MROC']);
 
     const operatedIcaos = new Set(
@@ -263,7 +279,7 @@ export const GET: APIRoute = async ({ url }) => {
       effectifDsp:  'OK',
     };
 
-    // ── Stockage Redis ────────────────────────────────────────────────────────
+    // ── Stockage Redis ───────────────────────────────────────────────
     if (redis) {
       try {
         await redis.set(BRIEFING_CACHE_KEY, data, { ex: BRIEFING_CACHE_TTL_SEC });

@@ -190,7 +190,7 @@ import '../styles/global.css';
           <div class="flex flex-wrap items-center gap-2">
             <span class="font-bold text-gray-900 dark:text-white text-sm w-10">${tw.iata}</span>
             <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 font-mono">${runway}</span>
-            <span class="text-xs text-gray-500 dark:text-gray-400">💨 Vent arrière —</span>
+            <span class="text-xs text-gray-500 dark:text-gray-400">Vent arrière —</span>
             ${flightBadge}
             ${chips}
             ${closeParen}
@@ -214,13 +214,22 @@ import '../styles/global.css';
       // ── Activité volcanique ───────────────────────────────────────────────────────────────────────────────
       html += sectionHeader('🌋', 'Activité volcanique', { cls: 'bg-green-100 text-green-700', label: '✓ Auto · VAAC' });
       if (!data.volcanique.length) { html += nilLine(); }
-      else data.volcanique.forEach(v => {
-        const fl = v.flLevel ? ` — ${v.flLevel}` : '';
-        html += `<div class="px-6 py-3 text-sm text-gray-800 dark:text-gray-200 border-b border-gray-50 dark:border-gray-800 last:border-b-0">
-          <span class="font-bold">${v.volcanoName}</span>
-          <span class="text-gray-500 dark:text-gray-400 ml-2">${v.country}${fl} (VAAC ${v.vaac})</span>
-        </div>`;
-      });
+      else {
+        // Dédupliquer par nom de volcan
+        const seenVolcanos = new Map();
+        data.volcanique.forEach(v => {
+          const key = v.volcanoName;
+          if (!seenVolcanos.has(key)) seenVolcanos.set(key, v);
+        });
+        seenVolcanos.forEach(v => {
+          const fl = v.flLevel ? ` — ${v.flLevel}` : '';
+          const dir = v.direction != null ? ` — Direction : ${v.direction}°` : '';
+          html += `<div class="px-6 py-3 text-sm text-gray-800 dark:text-gray-200 border-b border-gray-50 dark:border-gray-800 last:border-b-0">
+            <span class="font-bold">${v.volcanoName}</span>
+            <span class="text-gray-500 dark:text-gray-400 ml-2">${v.country}${fl}${dir} (VAAC ${v.vaac})</span>
+          </div>`;
+        });
+      }
 
       // ── Tirs de fusée ───────────────────────────────────────────────────────────────────────────────────────
       html += sectionHeader('🚀', 'Tirs de fusée', { cls: 'bg-green-100 text-green-700', label: '✓ Auto · 12h' });
@@ -266,17 +275,43 @@ import '../styles/global.css';
         items.forEach(line => { plainLines.push(line); htmlLines.push(line); });
         plainLines.push(''); htmlLines.push('');
       }
+
+      // ── Météo hors Europe : grouper par phénomène ──
       const meteoItems = [];
+
+      // Grouper les lignes meteoHorsEurope par phénomène
+      const byPhenomenon = new Map();
       d.meteoHorsEurope.forEach((line, i) => {
-        const capaEl = document.querySelector(`[data-field="capa"][data-idx="${i}"]`);
-        const degEl  = document.querySelector(`[data-field="deg"][data-idx="${i}"]`);
-        // Format : -Phénomène IATA AF000 (ETA 1234z - Capa attente ~Xmin - Dégagement XXX)
-        // Fenêtre et changeIndicator supprimés de la trame copiée
-        const infos = [`ETA ${line.etaZ}`];
-        if (capaEl?.value?.trim()) infos.push(`Capa attente ~${capaEl.value.trim()}min`);
-        if (degEl?.value?.trim())  infos.push(`Dégagement ${degEl.value.trim().toUpperCase()}`);
-        meteoItems.push(`-${line.phenomenon} ${line.iata} ${line.flight} (${infos.join(' - ')})`);
+        const key = line.phenomenon;
+        if (!byPhenomenon.has(key)) byPhenomenon.set(key, []);
+        byPhenomenon.get(key).push({ line, i });
       });
+
+      byPhenomenon.forEach((entries, phenomenon) => {
+        if (entries.length === 1) {
+          // Une seule occurrence : format habituel
+          const { line, i } = entries[0];
+          const capaEl = document.querySelector(`[data-field="capa"][data-idx="${i}"]`);
+          const degEl  = document.querySelector(`[data-field="deg"][data-idx="${i}"]`);
+          const infos = [`ETA ${line.etaZ}`];
+          if (capaEl?.value?.trim()) infos.push(`Capa attente ~${capaEl.value.trim()}min`);
+          if (degEl?.value?.trim())  infos.push(`Dégagement ${degEl.value.trim().toUpperCase()}`);
+          meteoItems.push(`-${phenomenon} ${line.iata} ${line.flight} (${infos.join(' - ')})`);
+        } else {
+          // Plusieurs vols touchés par le même phénomène : une ligne groupée
+          // Format : -Orages IATA1 AF000 (ETA …) / IATA2 AF001 (ETA …)
+          const parts = entries.map(({ line, i }) => {
+            const capaEl = document.querySelector(`[data-field="capa"][data-idx="${i}"]`);
+            const degEl  = document.querySelector(`[data-field="deg"][data-idx="${i}"]`);
+            const infos = [`ETA ${line.etaZ}`];
+            if (capaEl?.value?.trim()) infos.push(`Capa attente ~${capaEl.value.trim()}min`);
+            if (degEl?.value?.trim())  infos.push(`Dégagement ${degEl.value.trim().toUpperCase()}`);
+            return `${line.iata} ${line.flight} (${infos.join(' - ')})`;
+          });
+          meteoItems.push(`-${phenomenon} ${parts.join(' / ')}`);
+        }
+      });
+
       const twWithTAF = (d.tailwindWatch || []).filter(tw => tw.forecastAlerts && tw.forecastAlerts.length > 0);
       twWithTAF.forEach(tw => {
         const runway = tw.forecastAlerts[0].runway;
@@ -284,15 +319,31 @@ import '../styles/global.css';
           const windStr = fa.hasGust ? `${fa.wspdBase}G${fa.wgst}kt` : `${fa.tailwindKt}kt`;
           return `${windStr} (${utcDZ(fa.periodStart)}→${utcDZ(fa.periodEnd)})`;
         });
-        meteoItems.push(`-Vent arrière ${tw.iata} ${runway}💨 ${tw.depFlight} (STD ${tw.depStdZ} - TAF : ${fcsts.join(', ')})`);
+        // Pas d'icône 💨 dans la trame copiée
+        meteoItems.push(`-Vent arrière ${tw.iata} ${runway} ${tw.depFlight} (STD ${tw.depStdZ} - TAF : ${fcsts.join(', ')})`);
       });
       section('Météo hors Europe :', meteoItems.length ? meteoItems : ['-NIL']);
       section('Perturbation tropicale :',
         !d.tropicale.length ? ['-NIL'] :
         d.tropicale.map(tc => `-${tc.name} — ${tc.basin} — ${tc.category} — ${tc.windKt}kt`));
-      section('Activité volcanique :',
-        !d.volcanique.length ? ['-NIL'] :
-        d.volcanique.map(v => `-${v.volcanoName}${v.flLevel ? ' ' + v.flLevel : ''} (VAAC ${v.vaac})`));
+
+      // ── Activité volcanique : dédupliquer par nom + ajouter Direction ──
+      if (!d.volcanique.length) {
+        section('Activité volcanique :', ['-NIL']);
+      } else {
+        const seenVolcanos = new Map();
+        d.volcanique.forEach(v => {
+          if (!seenVolcanos.has(v.volcanoName)) seenVolcanos.set(v.volcanoName, v);
+        });
+        const volLines = [];
+        seenVolcanos.forEach(v => {
+          const fl  = v.flLevel  ? ` ${v.flLevel}`       : '';
+          const dir = v.direction != null ? ` - Direction : ${v.direction}°` : '';
+          volLines.push(`-${v.volcanoName}${fl}${dir} (VAAC ${v.vaac})`);
+        });
+        section('Activité volcanique :', volLines);
+      }
+
       section('Tirs de fusée :',
         !d.tirsFusee.length ? ['-NIL'] :
         d.tirsFusee.map(l => `-${l.provider} — ${l.rocket} | ${l.site} | ${l.timeZ} (${l.airports.join(', ')})`) );

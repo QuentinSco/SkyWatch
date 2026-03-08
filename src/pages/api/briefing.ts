@@ -1,6 +1,6 @@
 // src/pages/api/briefing.ts
 // ─── API Trame Briefing CCO ────────────────────────────────────────────
-Import type { APIRoute } from 'astro';
+import type { APIRoute } from 'astro';
 import { fetchTafRisks }                              from '../../lib/tafParser';
 import { getCachedAfArrivals, getCachedAfDepartures } from '../../lib/afFlights';
 import { fetchCycloneBulletins }                      from '../../lib/cycloneParser';
@@ -88,7 +88,6 @@ export const prerender = false;
 export const GET: APIRoute = async ({ url }) => {
   const force = url.searchParams.get('force') === '1';
 
-  // ── Cache Redis ────────────────────────────────────────────────────
   if (!force && redis) {
     try {
       const cached = await redis.get<BriefingData>(BRIEFING_CACHE_KEY);
@@ -116,8 +115,6 @@ export const GET: APIRoute = async ({ url }) => {
       fetchRocketLaunches(),
     ]);
 
-    // ── Météo hors Europe — horizon 12h ────────────────────────────────────
-    // ✅ Filtre sévérité : red uniquement (orange/yellow exclus de la trame CCO)
     const meteoLines: BriefingMeteoLine[] = [];
     const seen = new Set<string>();
 
@@ -133,7 +130,6 @@ export const GET: APIRoute = async ({ url }) => {
       });
 
       for (const threat of taf.threats) {
-        // ✅ Red uniquement — orange (CB/TCU, PROB40) et yellow (PROB30) exclus
         if (threat.severity !== 'red') continue;
 
         for (const flight of flights) {
@@ -178,13 +174,10 @@ export const GET: APIRoute = async ({ url }) => {
       return true;
     });
 
-    // ── Perturbations tropicales ───────────────────────────────────────
     const tropicale = cyclones
       .filter(c => c.name !== 'SEASON' && c.category !== 'INVEST' && c.windKt > 0)
       .map(c => ({ name: c.name, basin: c.basin, category: c.category, windKt: c.windKt, affected: c.affectedAirports }));
 
-    // ── Volcanique ────────────────────────────────────────────────────
-    // direction & speedKt extraits depuis la description de l'advisory Washington
     const volcanique = (vaacAlerts as any[])
       .filter(a => Array.isArray(a.airports) && a.airports.length > 0)
       .map(a => {
@@ -199,7 +192,6 @@ export const GET: APIRoute = async ({ url }) => {
         };
       });
 
-    // ── Tirs de fusée — horizon 12h ───────────────────────────────────
     const tirsFusee = launches
       .filter(l => {
         const start = new Date(l.validFrom).getTime();
@@ -210,18 +202,10 @@ export const GET: APIRoute = async ({ url }) => {
         const site  = parts[1] ?? 'Site inconnu';
         const rocket = parts[0]?.split('—')[1]?.trim() ?? 'Lanceur';
         const provider = parts[0]?.split('—')[0]?.replace(/🚀/g, '').trim() ?? '?';
-        return {
-          site,
-          rocket,
-          provider,
-          timeZ:    fmtZ(l.validFrom),
-          airports: l.airports,
-        };
+        return { site, rocket, provider, timeZ: fmtZ(l.validFrom), airports: l.airports };
       });
 
-    // ── Tailwind watch ───────────────────────────────────────────────
     const TAILWIND_ICAOS = new Set(['TNCM', 'MROC']);
-
     const operatedIcaos = new Set(
       allDepartures
         .filter(f => {
@@ -245,16 +229,11 @@ export const GET: APIRoute = async ({ url }) => {
             return tA - tB;
           })
           .find(f => {
-            const std = new Date(
-              f.estimatedOffBlockTime ?? f.scheduledDeparture ?? f.scheduledArrival
-            ).getTime();
+            const std = new Date(f.estimatedOffBlockTime ?? f.scheduledDeparture ?? f.scheduledArrival).getTime();
             return std >= now && std <= now12h;
           });
-
         if (!depFlight) return [];
-
         const stdIso = depFlight.estimatedOffBlockTime ?? depFlight.scheduledDeparture ?? depFlight.scheduledArrival;
-
         return [{
           iata:           t.iata,
           name:           t.name,
@@ -279,7 +258,6 @@ export const GET: APIRoute = async ({ url }) => {
       effectifDsp:  'OK',
     };
 
-    // ── Stockage Redis ───────────────────────────────────────────────
     if (redis) {
       try {
         await redis.set(BRIEFING_CACHE_KEY, data, { ex: BRIEFING_CACHE_TTL_SEC });

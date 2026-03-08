@@ -24,7 +24,7 @@ import '../styles/global.css';
       html, body { 
         background: white !important; 
         color: black !important; 
-        font-size: 9pt; 
+        font-size: 10pt; 
         line-height: 1.2; 
       }
 
@@ -73,7 +73,7 @@ import '../styles/global.css';
       /* Date seulement si l'attribut est présent */
       h1[data-print-date]::after { 
         content: " — Impression du " attr(data-print-date); 
-        font-size: 9pt; 
+        font-size: 10pt; 
         font-weight: normal; 
         color: #555 !important;
       }
@@ -81,7 +81,7 @@ import '../styles/global.css';
       #crosswind-updated { 
         display: inline !important; 
         color: #555 !important; 
-        font-size: 8pt !important; 
+        font-size: 9pt !important; 
       }
 
       /* ─ Légende des seuils ─ */
@@ -96,20 +96,22 @@ import '../styles/global.css';
       }
       #threshold-legend span { 
         color: black !important; 
-        font-size: 7pt !important; 
+        font-size: 8pt !important; 
       }
 
       /* ─ Bloc aéroport ─
-         NB : on n'applique PAS break-inside:avoid sur le bloc entier —
-         les navigateurs l'ignorent dès qu'il dépasse la hauteur d'une page.
-         La stratégie est de protéger granulellement chaque sous-partie.       */
+         break-inside:avoid sur chaque box pour éviter la coupure au milieu.
+         Les navigateurs modernes (Chrome/Edge ≥ 109, Firefox ≥ 116) respectent
+         cette règle pour des blocs raisonnables (< 1 page).
+         Pour des boxes plus longues, chaque ligne tbody a aussi avoid.        */
       #crosswind-container > div { 
         margin-bottom: 4mm;
         border: 1px solid #333 !important;
         background: white !important;
         box-shadow: none !important;
-        /* Forcer un nouveau contexte de formatage pour les sauts de page */
         display: block !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
       }
 
       /* En-tête aéroport : ne jamais laisser seul en bas de page */
@@ -133,38 +135,38 @@ import '../styles/global.css';
       }
 
       /* ─ Grille des tableaux : colonne unique en impression ─ */
-      .grid.grid-cols-1.xl\:grid-cols-2 { 
+      .grid.grid-cols-1.xl\\:grid-cols-2 { 
         display: block !important;
       }
-      .grid.grid-cols-1.xl\:grid-cols-2 > div { 
+      .grid.grid-cols-1.xl\\:grid-cols-2 > div { 
         background: white !important;
         border-top: 1px solid #ddd !important;
       }
 
       /* En-tête de sous-section (📋 TAF / ✈️ Vols) : colle à son tableau */
-      .grid.grid-cols-1.xl\:grid-cols-2 > div > div:first-child {
+      .grid.grid-cols-1.xl\\:grid-cols-2 > div > div:first-child {
         background: #f5f5f5 !important;
         border-bottom: 1px solid #bbb !important;
         padding: 1mm 2mm !important;
         break-after: avoid !important;
         page-break-after: avoid !important;
       }
-      .grid.grid-cols-1.xl\:grid-cols-2 > div > div:first-child span {
-        font-size: 7pt !important;
+      .grid.grid-cols-1.xl\\:grid-cols-2 > div > div:first-child span {
+        font-size: 8pt !important;
         font-weight: bold;
         color: #222 !important;
         background: transparent !important;
       }
 
       /* Le wrapper overflow-x-auto colle à l'en-tête qui précède */
-      .grid.grid-cols-1.xl\:grid-cols-2 > div .overflow-x-auto {
+      .grid.grid-cols-1.xl\\:grid-cols-2 > div .overflow-x-auto {
         break-before: avoid !important;
         page-break-before: avoid !important;
       }
 
       /* ─ Tableaux ─ */
       table { 
-        font-size: 7pt !important;
+        font-size: 8pt !important;
         width: 100% !important;
         border-collapse: collapse !important;
         background: white !important;
@@ -203,23 +205,23 @@ import '../styles/global.css';
          Caution → fond gris clair + bordure tiretée (vigilance)
          Limite  → fond gris moyen + bordure épaisse (attention)
          Dépassé → fond noir + texte blanc            (alerte maximale)          */
-      .bg-green-100, .dark\:bg-green-900\/30 { 
+      .bg-green-100, .dark\\:bg-green-900\\/30 { 
         background: white !important; 
         border: 1px solid #555 !important;
         color: black !important;
       }
-      .bg-yellow-100, .dark\:bg-yellow-900\/30 { 
+      .bg-yellow-100, .dark\\:bg-yellow-900\\/30 { 
         background: #e0e0e0 !important; 
         border: 1.5px dashed #333 !important;
         color: black !important;
       }
-      .bg-orange-100, .dark\:bg-orange-900\/30 { 
+      .bg-orange-100, .dark\\:bg-orange-900\\/30 { 
         background: #aaaaaa !important; 
         border: 2px solid #000 !important;
         color: black !important;
         font-weight: bold !important;
       }
-      .bg-red-100, .dark\:bg-red-900\/30 { 
+      .bg-red-100, .dark\\:bg-red-900\\/30 { 
         background: #111 !important; 
         border: 2px solid #000 !important;
         color: white !important;
@@ -227,32 +229,32 @@ import '../styles/global.css';
       }
 
       /* Couleurs texte des badges → noirs sauf rouge inversé */
-      .text-green-700, .dark\:text-green-400,
-      .text-yellow-700, .dark\:text-yellow-400,
-      .text-orange-700, .dark\:text-orange-400 { 
+      .text-green-700, .dark\\:text-green-400,
+      .text-yellow-700, .dark\\:text-yellow-400,
+      .text-orange-700, .dark\\:text-orange-400 { 
         color: black !important; 
       }
-      .text-red-700, .dark\:text-red-400 {
+      .text-red-700, .dark\\:text-red-400 {
         color: white !important;
       }
 
       /* ─ Badges conditions météo ─ */
-      .bg-blue-100, .dark\:bg-blue-900\/40 { 
+      .bg-blue-100, .dark\\:bg-blue-900\\/40 { 
         background: #d8d8d8 !important;
         color: #111 !important;
         border: 1px solid #777 !important;
       }
-      .bg-purple-100, .dark\:bg-purple-900\/40 { 
+      .bg-purple-100, .dark\\:bg-purple-900\\/40 { 
         background: #c0c0c0 !important;
         color: #111 !important;
         border: 1px solid #555 !important;
       }
-      .bg-gray-100, .dark\:bg-gray-700 { 
+      .bg-gray-100, .dark\\:bg-gray-700 { 
         background: #eeeeee !important;
         color: black !important;
       }
-      .text-blue-700, .dark\:text-blue-300,
-      .text-purple-700, .dark\:text-purple-300,
+      .text-blue-700, .dark\\:text-blue-300,
+      .text-purple-700, .dark\\:text-purple-300,
       .text-gray-500, .text-gray-600 { 
         color: #333 !important; 
       }
@@ -279,7 +281,7 @@ import '../styles/global.css';
       /* ─ Footer impression ─ */
       .print-info { 
         display: block !important; 
-        font-size: 7pt; 
+        font-size: 8pt; 
         color: #555 !important;
         text-align: center; 
         margin-top: 4mm; 
@@ -793,6 +795,19 @@ const AIRPORT_RUNWAYS = {
     return         { bg: 'bg-red-100 dark:bg-red-900/30',            text: 'text-red-700 dark:text-red-400',       label: '⚠ Dépassé' };
   }
 
+  // ─── Formatage court du flightId : "AF1168/08MAR" ────────────────────────
+  const MONTHS_FR = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  function formatFlightId(flightId) {
+    if (!flightId) return '–';
+    // Format attendu : AF1168-2026-03-08-A-EGCC
+    const m = flightId.match(/^([A-Z]{2}\d+)-(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return flightId;
+    const flightNum = m[1];
+    const month = parseInt(m[3], 10);
+    const day = m[4];
+    return `${flightNum}/${day}${MONTHS_FR[month - 1] ?? m[3]}`;
+  }
+
   const ALL_AF_IATA = Object.keys(AF_IATA_TO_ICAO).sort();
   let selectedIcaos = new Set([]);
   let customQfuByIcao = new Map();
@@ -935,6 +950,9 @@ const AIRPORT_RUNWAYS = {
     const fcsts = tafData?.fcsts ?? [];
     const periodsWithWind = fcsts.filter(f => f.wdir != null && f.wspd != null);
 
+    // ─── Validité du TAF : fin de la dernière période (timeTo max) ────────────
+    const tafValidTo = fcsts.reduce((max, f) => (f.timeTo != null && f.timeTo > max ? f.timeTo : max), 0);
+
     // QFU selector
     let qfuSelector = '';
     if (hasDefaultQfu) {
@@ -1006,14 +1024,24 @@ const AIRPORT_RUNWAYS = {
       }
     }
 
-    const sortedFlights = [...flights].sort((a,b) =>
-      new Date(a.estimatedTouchDownTime ?? a.scheduledArrival).getTime() -
-      new Date(b.estimatedTouchDownTime ?? b.scheduledArrival).getTime()
-    );
+    // ─── Filtrage vols : on n'affiche que ceux dont l'ETA est dans la validité du TAF ─
+    const sortedFlights = [...flights]
+      .filter(flight => {
+        const eta = flight.estimatedTouchDownTime || flight.scheduledArrival;
+        if (!eta) return false;
+        const etaEpochSec = Math.floor(new Date(eta).getTime() / 1000);
+        // Exclure si l'ETA dépasse la fin de validité du TAF (ou si pas de TAF)
+        if (tafValidTo === 0) return false;
+        return etaEpochSec <= tafValidTo;
+      })
+      .sort((a, b) =>
+        new Date(a.estimatedTouchDownTime ?? a.scheduledArrival).getTime() -
+        new Date(b.estimatedTouchDownTime ?? b.scheduledArrival).getTime()
+      );
 
     let flightRows = '';
     if (sortedFlights.length === 0) {
-      flightRows = `<tr><td colspan="5" class="px-3 py-3 text-xs text-gray-400 italic">Aucun vol AF prévu</td></tr>`;
+      flightRows = `<tr><td colspan="5" class="px-3 py-3 text-xs text-gray-400 italic">Aucun vol AF dans la validité du TAF</td></tr>`;
     } else if (activeQfu === null) {
       flightRows = `<tr><td colspan="5" class="px-3 py-3 text-xs text-orange-500 italic">⚠️ Définir un QFU pour calculer les composantes</td></tr>`;
     } else {
@@ -1070,7 +1098,7 @@ const AIRPORT_RUNWAYS = {
         }
         flightRows += `
           <tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition">
-            <td class="px-3 py-2 text-xs font-bold font-mono text-gray-800 dark:text-gray-200">${flight.flightId ?? '–'}</td>
+            <td class="px-3 py-2 text-xs font-bold font-mono text-gray-800 dark:text-gray-200">${formatFlightId(flight.flightId)}</td>
             <td class="px-3 py-2 text-xs font-mono text-blue-600 dark:text-blue-400 font-semibold">${etaStr}</td>
             <td class="px-3 py-2 text-xs font-mono text-gray-500">${flight.aircraftType ?? '–'}</td>
             ${windCell}${riskCell}

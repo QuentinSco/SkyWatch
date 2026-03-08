@@ -384,11 +384,11 @@
       parts.push(`${dir}${spd}${gst}KT`);
     }
     // Fix NSW — l'API AviationWeather renvoie wxString='NSW' comme valeur interne
-    // pour indiquer l'absence de phénomène sur un groupe de base. Ne pas afficher.
     if (fcst.wxString && fcst.wxString.trim().toUpperCase() !== 'NSW') {
       parts.push(fcst.wxString);
     }
-    if (fcst.visib != null && fcst.visib !== '9999' && fcst.visib !== '6+') {
+    // Fix visibilité — filtrer aussi 9999 numérique, pas seulement string '9999'
+    if (fcst.visib != null && fcst.visib !== '9999' && fcst.visib !== '6+' && Number(fcst.visib) !== 9999) {
       const visM = visMtoMeters(fcst.visib);
       if (visM !== null && visM !== 9999) parts.push(`VIS ${visM}m`);
     }
@@ -462,7 +462,7 @@
       const sev  = slotSev[i];
       const fcst = slotFcst[i];
       let j = i + 1;
-      while (j < nSlots && slotSev[j] === sev) j++;
+      while (j < nSlots && slotSev[j] === sev && slotFcst[j] === fcst) j++;
 
       const segStart = tStart + i * SLOT;
       const segEnd   = Math.min(tStart + j * SLOT, tEnd);
@@ -479,10 +479,11 @@
       const ci      = fcst?.changeIndicator ?? '';
       const snippet = sev !== 'none' && fcst ? buildFcstSnippet(fcst) : '';
 
-      // Fix horaires tooltip — on stocke les bornes réelles du forecast TAF
-      // (timeFrom/timeTo) plutôt que les bornes de slots basées sur nowSec.
-      const tipTimeFrom = fcst?.timeFrom ?? segStart;
-      const tipTimeTo   = fcst?.timeTo   ?? segEnd;
+      // Fix horaires tooltip — Pour segments sans menace (dégagé), utiliser segStart/segEnd
+      // pour afficher les bornes réelles du slot. Pour segments avec menace, utiliser
+      // fcst.timeFrom/timeTo (bornes du groupe TAF changeIndicator).
+      const tipTimeFrom = (sev !== 'none' && fcst) ? fcst.timeFrom : segStart;
+      const tipTimeTo   = (sev !== 'none' && fcst) ? fcst.timeTo   : segEnd;
 
       segments.push({ left, width, sev, label, ci, segStart, segEnd, snippet, tipTimeFrom, tipTimeTo });
       i = j;

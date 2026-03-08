@@ -55,11 +55,13 @@
     }) + 'Z';
   }
 
+  // Bug 1 fix — toLocaleString('fr-FR') renvoie 'HH h MM' sur certains navigateurs
+  // (Safari, Firefox selon locale). On utilise toISOString() pour un format garanti HH:MM.
   function formatHHMM(ts) {
-    return new Date(ts * 1000).toLocaleString('fr-FR', {
-      hour: '2-digit', minute: '2-digit',
-      timeZone: 'UTC',
-    }) + 'Z';
+    const d = new Date(ts * 1000);
+    const hh = String(d.getUTCHours()).padStart(2, '0');
+    const mm = String(d.getUTCMinutes()).padStart(2, '0');
+    return hh + ':' + mm + 'Z';
   }
 
   function formatIsoToLocalShort(iso) {
@@ -95,6 +97,18 @@
       day: '2-digit', month: '2-digit', year: 'numeric',
       timeZone: 'UTC',
     });
+  }
+
+  // Bug 2 fix — conversion visibilité SM → mètres (miroir de visMtoMeters dans tafParser.ts)
+  function visMtoMeters(raw) {
+    if (raw == null || raw === '') return null;
+    const s = String(raw).trim();
+    if (s === '6+' || s.toUpperCase() === 'P6SM' || s === '9999') return 9999;
+    const n = parseFloat(s);
+    if (isNaN(n)) return null;
+    if (Number.isInteger(n) && n >= 800) return n;   // déjà en mètres
+    const SM_TO_M = 1609.344;
+    return Math.round((n * SM_TO_M) / 50) * 50;      // SM → mètres, arrondi 50m
   }
 
   // ── Snippet préfixé par le changeIndicator ────────────────────────────────────────────────────
@@ -372,8 +386,10 @@
       parts.push(`${dir}${spd}${gst}KT`);
     }
     if (fcst.wxString) parts.push(fcst.wxString);
-    if (fcst.visib && fcst.visib !== '9999' && fcst.visib !== '6+') {
-      parts.push(`VIS ${fcst.visib}`);
+    // Bug 2 fix — convertir la visibilité en mètres (l'API renvoie parfois des SM décimaux)
+    if (fcst.visib != null && fcst.visib !== '9999' && fcst.visib !== '6+') {
+      const visM = visMtoMeters(fcst.visib);
+      if (visM !== null && visM !== 9999) parts.push(`VIS ${visM}m`);
     }
     const cbs = (fcst.clouds || []).filter(c => c.type === 'CB' || c.type === 'TCU');
     if (cbs.length) {
@@ -649,18 +665,18 @@
   // ── Dédoublonnage vols ────────────────────────────────────────────────────────────────────────
   function deduplicateFlights(hits) {
     const flightMap = {};
-    
+
     for (const hit of hits) {
       const etaIso = hit.flight.estimatedTouchDownTime || hit.flight.scheduledArrival;
       const dateKey = formatDate(etaIso);
       const key = `${hit.flight.flightNumber}-${dateKey}`;
-      
-      if (!flightMap[key] || 
+
+      if (!flightMap[key] ||
           SEVERITY_ORDER[hit.threat.severity] < SEVERITY_ORDER[flightMap[key].threat.severity]) {
         flightMap[key] = hit;
       }
     }
-    
+
     return Object.values(flightMap);
   }
 

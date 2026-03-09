@@ -48,7 +48,7 @@ import '../styles/global.css';
     </div>
   </aside>
 
-  <!-- ─ Contenu principal ─────────────────────────────────────────────── -->
+  <!-- ─ Contenu principal ────────────────────────────────────────────────────── -->
   <div class="flex-1 min-w-0 overflow-y-auto">
     <div class="max-w-3xl mx-auto px-4 py-6 xl:px-8">
 
@@ -242,10 +242,14 @@ import '../styles/global.css';
         const apBadges = launch.airports.map(a =>
           `<span class="bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-[10px] px-1.5 py-0.5 rounded font-mono">${a}</span>`
         ).join(' ');
+        const missionBadge = launch.missionName && launch.missionName !== 'Mission inconnue'
+          ? `<span class="bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 text-[10px] px-1.5 py-0.5 rounded font-semibold">${launch.missionName}</span>`
+          : '';
         html += `<div class="px-6 py-3 text-sm text-gray-800 dark:text-gray-200 border-b border-gray-50 dark:border-gray-800 last:border-b-0">
           <div class="flex flex-wrap items-center gap-2">
             <span class="font-bold text-gray-900 dark:text-white">${launch.provider}</span>
             <span class="text-gray-500 dark:text-gray-400">— ${launch.rocket}</span>
+            ${missionBadge}
             <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 font-mono">${launch.timeZ}</span>
           </div>
           <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">${launch.site}</div>
@@ -295,6 +299,10 @@ import '../styles/global.css';
         });
         const escaleLines = [];
         byIata.forEach((escaleEntries, iata) => {
+          // Tri par ETA ISO réel pour gérer le changement de jour (ex. 2323z < 0013z du lendemain)
+          escaleEntries.sort((a, b) =>
+            new Date(a.line.etaIso || 0).getTime() - new Date(b.line.etaIso || 0).getTime()
+          );
           const volParts = escaleEntries.map(({ line, i }) => {
             const capaEl = document.querySelector(`[data-field="capa"][data-idx="${i}"]`);
             const degEl  = document.querySelector(`[data-field="deg"][data-idx="${i}"]`);
@@ -342,9 +350,14 @@ import '../styles/global.css';
         section('Activité volcanique :', volLines);
       }
 
+      // Tirs de fusée : provider — lanceur (mission) | site | heure
       section('Tirs de fusée :',
         !d.tirsFusee.length ? ['-NIL'] :
-        d.tirsFusee.map(l => `-${l.provider} — ${l.rocket} | ${l.site} | ${l.timeZ} (${l.airports.join(', ')})`) );
+        d.tirsFusee.map(l => {
+          const mission = l.missionName && l.missionName !== 'Mission inconnue' ? ` (${l.missionName})` : '';
+          return `-${l.provider} — ${l.rocket}${mission} | ${l.site} | ${l.timeZ} (${l.airports.join(', ')})`;
+        }));
+
       const carb = document.getElementById('field-carburant')?.value?.trim();
       section('Carburant :', [carb ? `-${carb}` : '-NIL']);
       const geo = document.getElementById('field-geopolitique')?.value?.trim();

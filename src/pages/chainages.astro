@@ -49,18 +49,30 @@ import '../styles/global.css';
         display: flex !important;
         padding: 1.5mm !important; margin-bottom: 3mm; page-break-inside: avoid; font-size: 7pt;
       }
+      /* Chaque bloc airport = pas de coupure */
       #chainages-result > div {
-        page-break-inside: avoid; break-inside: avoid; margin-bottom: 3mm;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        margin-bottom: 3mm;
         box-shadow: none !important;
       }
       #chainages-result > div > div:first-child {
         padding: 1.5mm 2.5mm !important;
       }
-      .timeline-wrap { overflow: visible !important; page-break-inside: avoid; break-inside: avoid; }
-      .timeline-canvas { max-width: 100% !important; height: auto !important; page-break-inside: avoid; break-inside: avoid; }
+      /* timeline-wrap contient maintenant une <img> à l'impression */
+      .timeline-wrap {
+        overflow: visible !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      .timeline-wrap img {
+        display: block;
+        max-width: 100% !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
       #ch-age { display: inline !important; font-size: 8pt !important; }
       h1, h2, h3 { page-break-after: avoid; break-after: avoid; }
-      canvas { page-break-inside: avoid; break-inside: avoid; }
       .print-info {
         display: block !important; font-size: 8pt; text-align: center;
         margin-top: 4mm; border-top: 1px solid #cbd5e1; padding-top: 1.5mm;
@@ -317,10 +329,32 @@ import '../styles/global.css';
       }
     }
 
-    function preparePrint() { setH1PrintDate(); }
+    /**
+     * Avant l'impression : remplace chaque <canvas> par un <img> de même taille.
+     * Le navigateur sait mesurer un <img> (hauteur explicite) et respecte
+     * break-inside:avoid dessus, contrairement à <canvas>.
+     */
+    function preparePrint() {
+      setH1PrintDate();
+      document.querySelectorAll('.timeline-canvas').forEach(canvas => {
+        const img = document.createElement('img');
+        img.src = canvas.toDataURL('image/png');
+        img.width  = canvas.width  / (window.devicePixelRatio || 1);
+        img.height = canvas.height / (window.devicePixelRatio || 1);
+        img.style.width  = canvas.style.width;
+        img.style.height = canvas.style.height;
+        img.dataset.printProxy = '1';
+        canvas.style.display = 'none';
+        canvas.after(img);
+      });
+    }
+
+    /** Après l'impression : supprime les <img> proxy et réaffiche les canvas. */
     function cleanupPrint() {
       const h1 = document.querySelector('h1');
       if (h1) h1.removeAttribute('data-print-date');
+      document.querySelectorAll('img[data-print-proxy]').forEach(img => img.remove());
+      document.querySelectorAll('.timeline-canvas').forEach(c => { c.style.display = ''; });
     }
 
     document.getElementById('btn-print').addEventListener('click', () => {
@@ -536,7 +570,6 @@ import '../styles/global.css';
       canvas.addEventListener('mouseleave', () => { tooltip.style.opacity = '0'; });
     }
 
-    // Retourne le timestamp de la première arrivée d'un stop (plus petit arrMs parmi tous ses segments)
     function firstArrMs(stop) {
       const segs = stop.segments || [];
       if (segs.length === 0) return Infinity;
@@ -567,7 +600,6 @@ import '../styles/global.css';
         document.getElementById('ch-unknown-warn')?.remove();
       }
 
-      // Filtre : on exclut les matricules dont la première arrivée est dans plus de 24h
       const H24 = 24 * 60 * 60 * 1000;
       const nowMs = Date.now();
       const rawStops = data.stops || [];

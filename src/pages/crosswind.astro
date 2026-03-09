@@ -900,70 +900,48 @@ const AIRPORT_RUNWAYS = {
     }
   }
 
- function preparePrint() {
-  setH1PrintDate();
-  printProxies = [];
+  function preparePrint() {
+    setH1PrintDate();
 
-  // — Étape 1 : convertir les canvas en <img> —
-  document.querySelectorAll('.timeline-canvas').forEach(canvas => {
-    const dpr = window.devicePixelRatio || 1;
-    const img = document.createElement('img');
-    img.src    = canvas.toDataURL('image/png');
-    img.width  = Math.round(canvas.width  / dpr);
-    img.height = Math.round(canvas.height / dpr);
-    img.style.width  = canvas.style.width;
-    img.style.height = canvas.style.height;
-    img.style.display = 'block';
-    canvas.replaceWith(img);
-    printProxies.push({ canvas, img });
-  });
+    // — Pagination JS avec ratio écran→impression —
+    // A4 portrait : zone utile = 210mm - 8mm - 8mm largeur  = 194mm
+    //                            297mm - 12mm - 12mm hauteur = 273mm
+    const mmToPx  = 96 / 25.4;
+    const printW  = Math.round(194 * mmToPx);  // largeur utile A4 portrait en px CSS
+    const pageHpx = Math.round(273 * mmToPx);  // hauteur utile A4 portrait en px CSS
 
-  // — Étape 2 : pagination JS avec ratio écran→impression —
-  // A4 paysage : zone utile = 297mm - 8mm - 8mm = 281mm largeur
-  //                           210mm - 6mm - 6mm = 198mm hauteur
-  const mmToPx   = 96 / 25.4;
-  const printW   = Math.round(281 * mmToPx);   // largeur utile imprimée en px CSS
-  const pageHpx  = Math.round(198 * mmToPx);   // hauteur utile imprimée en px CSS
+    // Ratio : largeur imprimée / largeur écran du conteneur
+    const containerW = document.getElementById('crosswind-container').getBoundingClientRect().width || window.innerWidth;
+    const ratio = containerW > 0 ? printW / containerW : 1;
 
-  // Largeur réelle du conteneur à l'écran
-  const container = document.getElementById('chainages-result');
-  const screenW   = container.getBoundingClientRect().width || window.innerWidth;
+    // Hauteur du header imprimé (h1 + légende seuils) convertie en px impression
+    const headerH  = Math.round(55 * ratio);
+    const marginPx = Math.round(4 * mmToPx * ratio);
 
-  // Ratio : à l'impression les blocs seront plus larges → donc moins hauts
-  // Si screenW > printW → les blocs s'élargissent à l'impression → ratio < 1 → blocs moins hauts
-  // Si screenW < printW → ratio > 1 → blocs plus hauts
-  const ratio = screenW > 0 ? printW / screenW : 1;
+    const blocks = Array.from(document.querySelectorAll('#crosswind-container > div'));
+    blocks.forEach(b => {
+      b.style.removeProperty('break-before');
+      b.style.removeProperty('page-break-before');
+    });
 
-  // Hauteur du header imprimé (h1 + légende) estimée en px impression
-  const headerH = Math.round(40 * ratio);
+    let usedPx = headerH;
 
-  const blocks = Array.from(document.querySelectorAll('#chainages-result > div'));
-  blocks.forEach(b => {
-    b.style.removeProperty('break-before');
-    b.style.removeProperty('page-break-before');
-  });
+    blocks.forEach(block => {
+      const printedH = Math.round(block.getBoundingClientRect().height * ratio);
 
-  const marginPx = Math.round(4 * mmToPx * ratio);
-  let usedPx = headerH;
-
-  blocks.forEach(block => {
-    const screenH  = block.getBoundingClientRect().height;
-    const printedH = Math.round(screenH * ratio);
-
-    if (usedPx > headerH && usedPx + printedH > pageHpx) {
-      block.style.breakBefore = 'page';
-      block.style.pageBreakBefore = 'always';
-      usedPx = printedH + marginPx;
-    } else {
-      usedPx += printedH + marginPx;
-    }
-  });
-}
+      if (usedPx > headerH && usedPx + printedH > pageHpx) {
+        block.style.breakBefore = 'page';
+        block.style.pageBreakBefore = 'always';
+        usedPx = printedH + marginPx;
+      } else {
+        usedPx += printedH + marginPx;
+      }
+    });
+  }
 
   function cleanupPrint() {
     const h1 = document.querySelector('h1');
     if (h1) h1.removeAttribute('data-print-date');
-    // Nettoyer les break-before injectés
     document.querySelectorAll('#crosswind-container > div').forEach(b => {
       b.style.removeProperty('break-before');
       b.style.removeProperty('page-break-before');
@@ -974,12 +952,9 @@ const AIRPORT_RUNWAYS = {
     preparePrint();
     requestAnimationFrame(() => {
       window.print();
-      setTimeout(cleanupPrint, 500);
+      setTimeout(cleanupPrint, 1000);
     });
   });
-
-  window.addEventListener('beforeprint', preparePrint);
-  window.addEventListener('afterprint', cleanupPrint);
 
   // ─── Chargement données ────────────────────────────────────────────────────
   async function loadCrosswind(force = false) {

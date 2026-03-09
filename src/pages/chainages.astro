@@ -358,37 +358,40 @@ import '../styles/global.css';
         printProxies.push({ canvas, img });
       });
 
-      // — Étape 2 : pagination JS —
-      // A4 paysage à 96dpi : 297mm × 210mm
-      // Marges @page : 6mm haut + 6mm bas = 12mm consommés
-      // Hauteur utile ≈ (210 - 12) mm × (96px/25.4mm) ≈ 748px
-      const mmToPx = 96 / 25.4;
-      const pageHpx = Math.round((210 - 6 - 6) * mmToPx);
+      // — Étape 2 : pagination JS avec ratio écran→impression —
+      // A4 paysage : zone utile = 297mm - 8mm - 8mm largeur = 281mm
+      //                           210mm - 6mm - 6mm hauteur  = 198mm
+      const mmToPx  = 96 / 25.4;
+      const printW  = Math.round(281 * mmToPx);  // largeur utile A4 paysage en px CSS
+      const pageHpx = Math.round(198 * mmToPx);  // hauteur utile A4 paysage en px CSS
 
-      // Hauteur estimée du header imprimé (h1 + légende) ≈ 45px
-      const headerH = 45;
+      // Ratio : largeur imprimée / largeur écran du conteneur
+      // Corrige le fait que getBoundingClientRect() mesure des px écran,
+      // alors qu'à l'impression le contenu est redimensionné à la largeur A4.
+      const containerW = document.getElementById('chainages-result').getBoundingClientRect().width || window.innerWidth;
+      const ratio = containerW > 0 ? printW / containerW : 1;
+
+      // Hauteur du header imprimé (h1 + légende) convertie en px impression
+      const headerH  = Math.round(45 * ratio);
+      const marginPx = Math.round(4 * mmToPx * ratio);
 
       const blocks = Array.from(document.querySelectorAll('#chainages-result > div'));
-
-      // Réinitialise les breaks d'un éventuel appel précédent
       blocks.forEach(b => {
         b.style.removeProperty('break-before');
         b.style.removeProperty('page-break-before');
       });
 
       let usedPx = headerH;
-      const marginBottomPx = Math.round(4 * mmToPx); // 4mm entre blocs
 
       blocks.forEach(block => {
-        const blockH = block.getBoundingClientRect().height;
+        const printedH = Math.round(block.getBoundingClientRect().height * ratio);
 
-        if (usedPx > headerH && usedPx + blockH > pageHpx) {
-          // Ce bloc déborderait de la page courante → nouvelle page
+        if (usedPx > headerH && usedPx + printedH > pageHpx) {
           block.style.breakBefore = 'page';
           block.style.pageBreakBefore = 'always';
-          usedPx = blockH + marginBottomPx;
+          usedPx = printedH + marginPx;
         } else {
-          usedPx += blockH + marginBottomPx;
+          usedPx += printedH + marginPx;
         }
       });
     }
@@ -398,7 +401,6 @@ import '../styles/global.css';
       if (h1) h1.removeAttribute('data-print-date');
       printProxies.forEach(({ canvas, img }) => { img.replaceWith(canvas); });
       printProxies = [];
-      // Nettoyer les break-before injectés par preparePrint
       document.querySelectorAll('#chainages-result > div').forEach(b => {
         b.style.removeProperty('break-before');
         b.style.removeProperty('page-break-before');
@@ -409,12 +411,9 @@ import '../styles/global.css';
       preparePrint();
       requestAnimationFrame(() => {
         window.print();
-        setTimeout(cleanupPrint, 500);
+        setTimeout(cleanupPrint, 1000);
       });
     });
-
-    window.addEventListener('beforeprint', preparePrint);
-    window.addEventListener('afterprint', cleanupPrint);
 
     function hhmm(ms) {
       const d = new Date(ms);

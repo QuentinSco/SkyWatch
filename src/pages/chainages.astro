@@ -49,7 +49,6 @@ import '../styles/global.css';
         display: flex !important;
         padding: 1.5mm !important; margin-bottom: 3mm; page-break-inside: avoid; font-size: 7pt;
       }
-      /* Chaque bloc airport = pas de coupure */
       #chainages-result > div {
         page-break-inside: avoid !important;
         break-inside: avoid !important;
@@ -59,12 +58,12 @@ import '../styles/global.css';
       #chainages-result > div > div:first-child {
         padding: 1.5mm 2.5mm !important;
       }
-      /* timeline-wrap contient maintenant une <img> à l'impression */
       .timeline-wrap {
         overflow: visible !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
       }
+      /* à l'impression le canvas est remplacé par une <img> */
       .timeline-wrap img {
         display: block;
         max-width: 100% !important;
@@ -272,6 +271,9 @@ import '../styles/global.css';
     const timeStart = document.getElementById('time-start');
     const timeEnd = document.getElementById('time-end');
 
+    // Mémorise les paires {canvas, img} créées lors de preparePrint
+    let printProxies = [];
+
     timeRangeEnabled.addEventListener('change', () => {
       if (timeRangeEnabled.checked) {
         timeRangeInputs.classList.remove('hidden');
@@ -330,31 +332,37 @@ import '../styles/global.css';
     }
 
     /**
-     * Avant l'impression : remplace chaque <canvas> par un <img> de même taille.
-     * Le navigateur sait mesurer un <img> (hauteur explicite) et respecte
-     * break-inside:avoid dessus, contrairement à <canvas>.
+     * Remplace chaque <canvas> par une <img> PNG dans le DOM.
+     * replaceWith() retire complètement le canvas du flux — le moteur
+     * d'impression ne voit que l'<img> dont la hauteur est connue, ce
+     * qui permet à break-inside:avoid de fonctionner sur le bloc parent.
      */
     function preparePrint() {
       setH1PrintDate();
+      printProxies = [];
       document.querySelectorAll('.timeline-canvas').forEach(canvas => {
+        const dpr = window.devicePixelRatio || 1;
         const img = document.createElement('img');
-        img.src = canvas.toDataURL('image/png');
-        img.width  = canvas.width  / (window.devicePixelRatio || 1);
-        img.height = canvas.height / (window.devicePixelRatio || 1);
+        img.src    = canvas.toDataURL('image/png');
+        img.width  = Math.round(canvas.width  / dpr);
+        img.height = Math.round(canvas.height / dpr);
         img.style.width  = canvas.style.width;
         img.style.height = canvas.style.height;
-        img.dataset.printProxy = '1';
-        canvas.style.display = 'none';
-        canvas.after(img);
+        img.style.display = 'block';
+        // Remplace le canvas dans le DOM (canvas sort du flux)
+        canvas.replaceWith(img);
+        printProxies.push({ canvas, img });
       });
     }
 
-    /** Après l'impression : supprime les <img> proxy et réaffiche les canvas. */
+    /** Restaure les canvas à la place des <img> proxy. */
     function cleanupPrint() {
       const h1 = document.querySelector('h1');
       if (h1) h1.removeAttribute('data-print-date');
-      document.querySelectorAll('img[data-print-proxy]').forEach(img => img.remove());
-      document.querySelectorAll('.timeline-canvas').forEach(c => { c.style.display = ''; });
+      printProxies.forEach(({ canvas, img }) => {
+        img.replaceWith(canvas);
+      });
+      printProxies = [];
     }
 
     document.getElementById('btn-print').addEventListener('click', () => {

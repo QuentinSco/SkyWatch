@@ -15,7 +15,6 @@ import '../styles/global.css';
         margin: 12mm 8mm;
       }
 
-      /* Forcer les couleurs exactes — sans reset global agressif */
       * { 
         -webkit-print-color-adjust: exact !important; 
         print-color-adjust: exact !important;
@@ -28,7 +27,6 @@ import '../styles/global.css';
         line-height: 1.2; 
       }
 
-      /* ─ Masquage via IDs stables et classe .no-print ─ */
       aside, 
       #btn-refresh, 
       #btn-print,
@@ -37,7 +35,6 @@ import '../styles/global.css';
         display: none !important; 
       }
 
-      /* ─ Layout ─ */
       body > .flex { 
         display: block !important; 
       }
@@ -52,7 +49,6 @@ import '../styles/global.css';
         margin: 0 !important; 
       }
 
-      /* ─ En-tête ─ */
       #page-header {
         display: flex !important;
         align-items: baseline !important;
@@ -70,7 +66,6 @@ import '../styles/global.css';
         padding: 0 !important;
         background: white !important;
       }
-      /* Date seulement si l'attribut est présent */
       h1[data-print-date]::after { 
         content: " — Impression du " attr(data-print-date); 
         font-size: 10pt; 
@@ -84,7 +79,6 @@ import '../styles/global.css';
         font-size: 9pt !important; 
       }
 
-      /* ─ Légende des seuils ─ */
       #threshold-legend { 
         display: flex !important;
         flex-wrap: wrap;
@@ -99,11 +93,15 @@ import '../styles/global.css';
         font-size: 8pt !important; 
       }
 
-      /* ─ Bloc aéroport ─
-         break-inside:avoid sur chaque box pour éviter la coupure au milieu.
-         Les navigateurs modernes (Chrome/Edge ≥ 109, Firefox ≥ 116) respectent
-         cette règle pour des blocs raisonnables (< 1 page).
-         Pour des boxes plus longues, chaque ligne tbody a aussi avoid.        */
+      /*
+       * Même logique que chainages : on abandonne break-inside:avoid CSS seul
+       * (non fiable sur Chromium pour les blocs de taille variable).
+       * La pagination JS dans preparePrint() injecte break-before:page
+       * sur les blocs qui déborderaient de la page courante.
+       */
+      #crosswind-container { 
+        display: block !important;
+      }
       #crosswind-container > div { 
         margin-bottom: 4mm;
         border: 1px solid #333 !important;
@@ -114,7 +112,6 @@ import '../styles/global.css';
         page-break-inside: avoid !important;
       }
 
-      /* En-tête aéroport : ne jamais laisser seul en bas de page */
       #crosswind-container > div > div:first-child { 
         background: #eeeeee !important; 
         border-bottom: 1px solid #333 !important; 
@@ -134,7 +131,6 @@ import '../styles/global.css';
         border-radius: 2px;
       }
 
-      /* ─ Grille des tableaux : colonne unique en impression ─ */
       .grid.grid-cols-1.xl\\:grid-cols-2 { 
         display: block !important;
       }
@@ -143,7 +139,6 @@ import '../styles/global.css';
         border-top: 1px solid #ddd !important;
       }
 
-      /* En-tête de sous-section (📋 TAF / ✈️ Vols) : colle à son tableau */
       .grid.grid-cols-1.xl\\:grid-cols-2 > div > div:first-child {
         background: #f5f5f5 !important;
         border-bottom: 1px solid #bbb !important;
@@ -158,13 +153,11 @@ import '../styles/global.css';
         background: transparent !important;
       }
 
-      /* Le wrapper overflow-x-auto colle à l'en-tête qui précède */
       .grid.grid-cols-1.xl\\:grid-cols-2 > div .overflow-x-auto {
         break-before: avoid !important;
         page-break-before: avoid !important;
       }
 
-      /* ─ Tableaux ─ */
       table { 
         font-size: 8pt !important;
         width: 100% !important;
@@ -172,7 +165,6 @@ import '../styles/global.css';
         background: white !important;
       }
 
-      /* thead répété sur chaque page si le tableau s'étend */
       thead { 
         background: #eeeeee !important;
         display: table-header-group !important;
@@ -186,7 +178,6 @@ import '../styles/global.css';
         text-align: left;
       }
 
-      /* Chaque ligne est l'unité insécable — taille raisonnable, respectée */
       tbody tr { 
         border-bottom: 0.5px solid #ddd !important;
         break-inside: avoid !important;
@@ -200,11 +191,6 @@ import '../styles/global.css';
         vertical-align: top;
       }
 
-      /* ─ Badges de seuil : différenciés visuellement, pas seulement par gris ─
-         OK      → fond blanc + bordure fine         (aucune urgence)
-         Caution → fond gris clair + bordure tiretée (vigilance)
-         Limite  → fond gris moyen + bordure épaisse (attention)
-         Dépassé → fond noir + texte blanc            (alerte maximale)          */
       .bg-green-100, .dark\\:bg-green-900\\/30 { 
         background: white !important; 
         border: 1px solid #555 !important;
@@ -228,7 +214,6 @@ import '../styles/global.css';
         font-weight: bold !important;
       }
 
-      /* Couleurs texte des badges → noirs sauf rouge inversé */
       .text-green-700, .dark\\:text-green-400,
       .text-yellow-700, .dark\\:text-yellow-400,
       .text-orange-700, .dark\\:text-orange-400 { 
@@ -238,7 +223,6 @@ import '../styles/global.css';
         color: white !important;
       }
 
-      /* ─ Badges conditions météo ─ */
       .bg-blue-100, .dark\\:bg-blue-900\\/40 { 
         background: #d8d8d8 !important;
         color: #111 !important;
@@ -259,7 +243,6 @@ import '../styles/global.css';
         color: #333 !important; 
       }
 
-      /* ─ Largeurs colonnes ─ */
       thead th:nth-child(1) { width: 16%; }
       thead th:nth-child(2) { width: 10%; }
       thead th:nth-child(3) { width: 22%; }
@@ -267,8 +250,6 @@ import '../styles/global.css';
       thead th:nth-child(5) { width: 26%; }
       thead th:nth-child(6) { width: 18%; }
 
-      /* ─ Section TAF brut : masquée à l'impression ─
-         Plusieurs propriétés pour résister à d'éventuels overrides Tailwind   */
       .taf-raw-section { 
         display: none !important;
         visibility: hidden !important;
@@ -278,7 +259,6 @@ import '../styles/global.css';
         padding: 0 !important;
       }
 
-      /* ─ Footer impression ─ */
       .print-info { 
         display: block !important; 
         font-size: 8pt; 
@@ -373,8 +353,9 @@ import '../styles/global.css';
       <!-- Config panel -->
       <div id="config-panel" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-5 mb-6">
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
           <!-- Colonne gauche : ajout escale -->
-          <div class="lg:col-span-2">
+          <div class="lg:col-span-1">
             <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">Ajouter une escale (IATA ou OACI)</label>
             <div class="flex items-center gap-2 mb-4">
               <input id="airport-input" type="text" maxlength="4" placeholder="Ex : JFK ou KJFK"
@@ -387,7 +368,35 @@ import '../styles/global.css';
             </div>
             <div id="airport-selector" class="flex flex-wrap gap-2 min-h-[32px]"></div>
           </div>
-          
+
+          <!-- Colonne centrale : plage horaire -->
+          <div class="border-l border-gray-200 dark:border-gray-700 pl-5">
+            <div class="flex items-center justify-between mb-3">
+              <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Plage horaire des vols</div>
+              <label class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 cursor-pointer">
+                <input type="checkbox" id="time-range-enabled" class="rounded border-gray-300 dark:border-gray-600" />
+                <span>Personnaliser</span>
+              </label>
+            </div>
+            <div id="time-range-inputs" class="space-y-2 hidden">
+              <div>
+                <label class="block text-[11px] text-gray-500 dark:text-gray-400 mb-1">Début</label>
+                <input type="datetime-local" id="time-start"
+                  class="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5 text-xs
+                         bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100
+                         focus:outline-none focus:ring-2 focus:ring-blue-300 dark:focus:ring-blue-700" />
+              </div>
+              <div>
+                <label class="block text-[11px] text-gray-500 dark:text-gray-400 mb-1">Fin</label>
+                <input type="datetime-local" id="time-end"
+                  class="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5 text-xs
+                         bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100
+                         focus:outline-none focus:ring-2 focus:ring-blue-300 dark:focus:ring-blue-700" />
+              </div>
+            </div>
+            <div id="time-range-hint" class="text-[11px] text-gray-400 dark:text-gray-600 italic mt-2">Par défaut : validité du TAF</div>
+          </div>
+
           <!-- Colonne droite : récapitulatif limites -->
           <div class="border-l border-gray-200 dark:border-gray-700 pl-5">
             <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Limites vent de travers</div>
@@ -646,17 +655,14 @@ const AIRPORT_RUNWAYS = {
   ZSPD: { iata: 'PVG', name: 'Shanghai', qfu: [15, 33, 16, 34, 17, 35] },
 };
 
-
-  // ─── Mapping complet IATA → ICAO (191 escales AF) ─────────────────────────
+  // ─── Mapping complet IATA → ICAO ─────────────────────────────────────────
   const AF_IATA_TO_ICAO = {
-    // Afrique
     ABJ: 'DIAP', ABV: 'DNAA', BZV: 'FCBB', CKY: 'GUCY', CMN: 'GMMN', COO: 'DBBB',
     CPT: 'FACT', DLA: 'FKKD', DSS: 'GOBD', FIH: 'FZAA', JIB: 'HDAM', JNB: 'FAOR',
     JRO: 'HTKJ', LBV: 'FOOL', LFW: 'DXXX', LOS: 'DNMM', MRU: 'FIMP', NBJ: 'FNBJ',
     NBO: 'HKJK', NDJ: 'FTTJ', NKC: 'GQNN', NSI: 'FKYS', PNR: 'FCPP', RAK: 'GMMX',
     RBA: 'GMME', RUN: 'FMEE', SSG: 'FGBT', TNG: 'GMTN', TNR: 'FMMI', TUN: 'DTTA',
     ZNZ: 'HTZA', ORN: 'DAOO',
-    // Amériques
     ATL: 'KATL', BEL: 'SBBE', BOG: 'SKBO', BOS: 'KBOS', CAY: 'SOCA', CUN: 'MMUN',
     DEN: 'KDEN', DFW: 'KDFW', DTW: 'KDTW', EWR: 'KEWR', EZE: 'SAEZ', FDF: 'TFFF',
     FOR: 'SBFZ', GDL: 'MMGL', GIG: 'SBGL', GRU: 'SBGR', HAV: 'MUHA', IAD: 'KIAD',
@@ -665,14 +671,11 @@ const AIRPORT_RUNWAYS = {
     PHX: 'KPHX', PPT: 'NTAA', PTP: 'TFFR', PTY: 'MPTO', PUJ: 'MDPC', RDU: 'KRDU',
     RUH: 'OERK', SAN: 'KSAN', SCL: 'SCEL', SEA: 'KSEA', SFO: 'KSFO', SJO: 'MROC',
     SSA: 'SBSV', SXM: 'TNCM', YOW: 'CYOW', YUL: 'CYUL', YVR: 'CYVR', YYZ: 'CYYZ',
-    // Asie / Pacifique
     BKK: 'VTBS', BLR: 'VOBL', BOM: 'VABB', DEL: 'VIDP', HKG: 'VHHH', HKT: 'VTSP',
     HND: 'RJTT', ICN: 'RKSI', KIX: 'RJBB', KUL: 'WMKK', MNL: 'RPLL', PEK: 'ZBAA',
     PVG: 'ZSPD', SGN: 'VVTS', SIN: 'WSSS',
-    // Moyen-Orient
     AUH: 'OMAA', BEY: 'OLBA', DXB: 'OMDB', EVN: 'UDYZ', IST: 'LTFM', TBS: 'UGTB',
     TLV: 'LLBG',
-    // Europe
     AGP: 'LEMG', AJA: 'LFKJ', ALG: 'DAAG', AMS: 'EHAM', ARN: 'ESSA', ATH: 'LGAV',
     BCN: 'LEBL', BER: 'EDDB', BES: 'LFRB', BGO: 'ENBR', BHX: 'EGBB', BIA: 'LFKB',
     BIO: 'LEBB', BIQ: 'LFBZ', BLL: 'EKBI', BLQ: 'LIPE', BOD: 'LFBD', BRI: 'LIBD',
@@ -691,37 +694,29 @@ const AIRPORT_RUNWAYS = {
     LDE: 'LFBT',
   };
 
-  // ─── Limites vent de travers par type d'avion et code piste ─────────────────────
+  // ─── Limites vent de travers ────────────────────────────────────────────────
   const AIRCRAFT_LIMITS = {
-    // 777 et 787
     '77W': { label: '777-300ER', code6: 45, code5: 40, code4: 35 },
     '772': { label: '777-200ER', code6: 45, code5: 40, code4: 35 },
     '789': { label: '787-9',     code6: 45, code5: 40, code4: 35 },
-    // A350 et A330
     '359': { label: 'A350-900',  code6: 40, code5: 40, code4: 27 },
     '332': { label: 'A330-200',  code6: 40, code5: 40, code4: 27 },
     '333': { label: 'A330-300',  code6: 40, code5: 40, code4: 27 },
-    // A320 family
     '320': { label: 'A320',      code6: 38, code5: 38, code4: 29 },
     '321': { label: 'A321',      code6: 38, code5: 38, code4: 29 },
     '319': { label: 'A319',      code6: 38, code5: 38, code4: 29 },
     '318': { label: 'A318',      code6: 38, code5: 38, code4: 29 },
-    // A220
     '223': { label: 'A220-300',  code6: 29, code5: 29, code4: 27 },
     '220': { label: 'A220-100',  code6: 29, code5: 29, code4: 27 },
-    // E190 (conservatif)
     'E90': { label: 'E190',      code6: 29, code5: 29, code4: 27 },
   };
   const DEFAULT_LIMIT = { label: 'Inconnu', code6: 29, code5: 29, code4: 27 };
 
-  // Code 6 : piste sèche (pas de précipitations)
-  // Code 5 : piste mouillée (RA, TSRA)
-  // Code 4 : piste contaminée (SN)
-  const WET_WX_TOKENS = /\b(RA|TSRA|SHRA|DZ|DZRA)\b/;       // Mouillée = code 5
-  const CONTAMINATED_WX_TOKENS = /\b(SN|FZRA|RASN|SNRA|GR|GS|PL)\b/;  // Contaminée = code 4
+  const WET_WX_TOKENS = /\b(RA|TSRA|SHRA|DZ|DZRA)\b/;
+  const CONTAMINATED_WX_TOKENS = /\b(SN|FZRA|RASN|SNRA|GR|GS|PL)\b/;
 
   function getRunwayCode(fcsts, targetEpochSec) {
-    if (!fcsts || targetEpochSec == null) return 6; // Sèche par défaut
+    if (!fcsts || targetEpochSec == null) return 6;
     const matching = fcsts.filter(f =>
       f.timeFrom != null && f.timeTo != null &&
       targetEpochSec >= f.timeFrom && targetEpochSec < f.timeTo
@@ -795,11 +790,9 @@ const AIRPORT_RUNWAYS = {
     return         { bg: 'bg-red-100 dark:bg-red-900/30',            text: 'text-red-700 dark:text-red-400',       label: '⚠ Dépassé' };
   }
 
-  // ─── Formatage court du flightId : "AF1168/08MAR" ────────────────────────
   const MONTHS_FR = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
   function formatFlightId(flightId) {
     if (!flightId) return '–';
-    // Format attendu : AF1168-2026-03-08-A-EGCC
     const m = flightId.match(/^([A-Z]{2}\d+)-(\d{4})-(\d{2})-(\d{2})/);
     if (!m) return flightId;
     const flightNum = m[1];
@@ -813,6 +806,31 @@ const AIRPORT_RUNWAYS = {
   let customQfuByIcao = new Map();
   let cachedData = { tafs: {}, flights: {} };
 
+  // ─── Plage horaire ─────────────────────────────────────────────────────────
+  const timeRangeEnabled = document.getElementById('time-range-enabled');
+  const timeRangeInputs  = document.getElementById('time-range-inputs');
+  const timeRangeHint    = document.getElementById('time-range-hint');
+  const timeStart        = document.getElementById('time-start');
+  const timeEnd          = document.getElementById('time-end');
+
+  timeRangeEnabled.addEventListener('change', () => {
+    if (timeRangeEnabled.checked) {
+      timeRangeInputs.classList.remove('hidden');
+      timeRangeHint.classList.add('hidden');
+      const now = new Date();
+      const later = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      timeStart.value = now.toISOString().slice(0, 16);
+      timeEnd.value   = later.toISOString().slice(0, 16);
+    } else {
+      timeRangeInputs.classList.add('hidden');
+      timeRangeHint.classList.remove('hidden');
+    }
+    if (selectedIcaos.size > 0) loadCrosswind(false);
+  });
+  timeStart.addEventListener('change', () => { if (selectedIcaos.size > 0) loadCrosswind(false); });
+  timeEnd.addEventListener('change',   () => { if (selectedIcaos.size > 0) loadCrosswind(false); });
+
+  // ─── Sélecteur aéroport ────────────────────────────────────────────────────
   function renderAirportSelector() {
     const container = document.getElementById('airport-selector');
     if (!container) return;
@@ -871,11 +889,7 @@ const AIRPORT_RUNWAYS = {
   document.getElementById('btn-add-airport')?.addEventListener('click', addAirport);
   document.getElementById('airport-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') addAirport(); });
 
-  document.getElementById('btn-print')?.addEventListener('click', () => {
-    setH1PrintDate();
-    window.print();
-  });
-
+  // ─── Impression ────────────────────────────────────────────────────────────
   function setH1PrintDate() {
     const h1 = document.querySelector('h1');
     if (!h1) return;
@@ -886,14 +900,64 @@ const AIRPORT_RUNWAYS = {
     }
   }
 
-  function cleanupPrintDate() {
-    const h1 = document.querySelector('h1');
-    if (h1) h1.removeAttribute('data-print-date');
+  function preparePrint() {
+    setH1PrintDate();
+
+    // — Pagination JS : même logique que chainages.astro —
+    // A4 portrait à 96dpi : 210mm × 297mm
+    // Marges @page : 12mm haut + 12mm bas = 24mm consommés
+    // Hauteur utile ≈ (297 - 24) mm × (96/25.4 px/mm) ≈ 1032px
+    const mmToPx = 96 / 25.4;
+    const pageHpx = Math.round((297 - 12 - 12) * mmToPx);
+
+    // Hauteur estimée du header imprimé (h1 + légende seuils) ≈ 55px
+    const headerH = 55;
+
+    const blocks = Array.from(document.querySelectorAll('#crosswind-container > div'));
+
+    // Réinitialise les breaks d'un appel précédent
+    blocks.forEach(b => {
+      b.style.removeProperty('break-before');
+      b.style.removeProperty('page-break-before');
+    });
+
+    let usedPx = headerH;
+    const marginBottomPx = Math.round(4 * mmToPx); // 4mm entre blocs
+
+    blocks.forEach(block => {
+      const blockH = block.getBoundingClientRect().height;
+      if (usedPx > headerH && usedPx + blockH > pageHpx) {
+        block.style.breakBefore = 'page';
+        block.style.pageBreakBefore = 'always';
+        usedPx = blockH + marginBottomPx;
+      } else {
+        usedPx += blockH + marginBottomPx;
+      }
+    });
   }
 
-  window.addEventListener('beforeprint', setH1PrintDate);
-  window.addEventListener('afterprint', cleanupPrintDate);
+  function cleanupPrint() {
+    const h1 = document.querySelector('h1');
+    if (h1) h1.removeAttribute('data-print-date');
+    // Nettoyer les break-before injectés
+    document.querySelectorAll('#crosswind-container > div').forEach(b => {
+      b.style.removeProperty('break-before');
+      b.style.removeProperty('page-break-before');
+    });
+  }
 
+  document.getElementById('btn-print')?.addEventListener('click', () => {
+    preparePrint();
+    requestAnimationFrame(() => {
+      window.print();
+      setTimeout(cleanupPrint, 500);
+    });
+  });
+
+  window.addEventListener('beforeprint', preparePrint);
+  window.addEventListener('afterprint', cleanupPrint);
+
+  // ─── Chargement données ────────────────────────────────────────────────────
   async function loadCrosswind(force = false) {
     const container = document.getElementById('crosswind-container');
 
@@ -913,7 +977,12 @@ const AIRPORT_RUNWAYS = {
         <div class="text-center"><div class="text-2xl mb-3 animate-spin">↻</div><p class="text-sm">Récupération TAF + vols…</p></div>
       </div>`;
 
-    const qs = `icaos=${[...selectedIcaos].join(',')}${force ? '&force=1' : ''}`;
+    let qs = `icaos=${[...selectedIcaos].join(',')}${force ? '&force=1' : ''}`;
+    if (timeRangeEnabled.checked && timeStart.value && timeEnd.value) {
+      const start = new Date(timeStart.value).toISOString();
+      const end   = new Date(timeEnd.value).toISOString();
+      qs += `&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+    }
 
     try {
       const res = await fetch(`/api/crosswind.json?${qs}`);
@@ -949,9 +1018,29 @@ const AIRPORT_RUNWAYS = {
 
     const fcsts = tafData?.fcsts ?? [];
     const periodsWithWind = fcsts.filter(f => f.wdir != null && f.wspd != null);
-
-    // ─── Validité du TAF : fin de la dernière période (timeTo max) ────────────
     const tafValidTo = fcsts.reduce((max, f) => (f.timeTo != null && f.timeTo > max ? f.timeTo : max), 0);
+
+    // ─── Filtrage vols par plage horaire ──────────────────────────────────────
+    // Si plage personnalisée, on filtre par start/end ; sinon par validité TAF
+    let flightFilter;
+    if (timeRangeEnabled.checked && timeStart.value && timeEnd.value) {
+      const startMs = new Date(timeStart.value).getTime();
+      const endMs   = new Date(timeEnd.value).getTime();
+      flightFilter = flight => {
+        const eta = flight.estimatedTouchDownTime || flight.scheduledArrival;
+        if (!eta) return false;
+        const etaMs = new Date(eta).getTime();
+        return etaMs >= startMs && etaMs <= endMs;
+      };
+    } else {
+      flightFilter = flight => {
+        const eta = flight.estimatedTouchDownTime || flight.scheduledArrival;
+        if (!eta) return false;
+        const etaEpochSec = Math.floor(new Date(eta).getTime() / 1000);
+        if (tafValidTo === 0) return false;
+        return etaEpochSec <= tafValidTo;
+      };
+    }
 
     // QFU selector
     let qfuSelector = '';
@@ -994,15 +1083,12 @@ const AIRPORT_RUNWAYS = {
         const cwGust = f.wgst ? computeCrosswind(f.wdir, f.wgst, activeQfu).crosswind : null;
         const worstCw = cwGust ?? cwBase;
         const code = getRunwayCodeForFcst(f);
-        const activeLimit = code === 4 ? 27 : (code === 5 ? 38 : 38); // Limite conservatrice pour TAF générique
+        const activeLimit = code === 4 ? 27 : (code === 5 ? 38 : 38);
         const status = getCrosswindColor(worstCw, activeLimit);
-        
-        // Afficher uniquement le code météo sans le label de condition
         const wxString = f.wxString ?? '';
         const codeBadge = wxString
           ? `<span class="ml-1 px-1 py-0.5 rounded text-[9px] font-bold ${code === 6 ? 'bg-gray-100 dark:bg-gray-700 text-gray-500' : (code === 5 ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' : 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300')}">${wxString}</span>`
           : '';
-        
         const dirStr = isVrb ? 'VRB' : String(Number(f.wdir)).padStart(3, '0');
         const windStr = `${dirStr}/${String(f.wspd).padStart(2,'0')}${f.wgst ? 'G'+f.wgst : ''}KT`;
         const qfuCell = vrb
@@ -1024,16 +1110,8 @@ const AIRPORT_RUNWAYS = {
       }
     }
 
-    // ─── Filtrage vols : on n'affiche que ceux dont l'ETA est dans la validité du TAF ─
     const sortedFlights = [...flights]
-      .filter(flight => {
-        const eta = flight.estimatedTouchDownTime || flight.scheduledArrival;
-        if (!eta) return false;
-        const etaEpochSec = Math.floor(new Date(eta).getTime() / 1000);
-        // Exclure si l'ETA dépasse la fin de validité du TAF (ou si pas de TAF)
-        if (tafValidTo === 0) return false;
-        return etaEpochSec <= tafValidTo;
-      })
+      .filter(flightFilter)
       .sort((a, b) =>
         new Date(a.estimatedTouchDownTime ?? a.scheduledArrival).getTime() -
         new Date(b.estimatedTouchDownTime ?? b.scheduledArrival).getTime()
@@ -1041,7 +1119,7 @@ const AIRPORT_RUNWAYS = {
 
     let flightRows = '';
     if (sortedFlights.length === 0) {
-      flightRows = `<tr><td colspan="5" class="px-3 py-3 text-xs text-gray-400 italic">Aucun vol AF dans la validité du TAF</td></tr>`;
+      flightRows = `<tr><td colspan="5" class="px-3 py-3 text-xs text-gray-400 italic">Aucun vol AF dans la fenêtre sélectionnée</td></tr>`;
     } else if (activeQfu === null) {
       flightRows = `<tr><td colspan="5" class="px-3 py-3 text-xs text-orange-500 italic">⚠️ Définir un QFU pour calculer les composantes</td></tr>`;
     } else {
@@ -1174,7 +1252,6 @@ const AIRPORT_RUNWAYS = {
   }
 
   function formatTafForDisplay(rawTaf) {
-    // Ne pas ajouter de saut de ligne si PROB30 ou PROB40 est suivi de TEMPO
     return rawTaf
       .replace(/\s+(TEMPO|BECMG)\s+/g, '\n$1 ')
       .replace(/\s+(PROB\d{2})\s+(?!TEMPO)/g, '\n$1 ')

@@ -28,51 +28,42 @@ import '../styles/global.css';
     .dark #ch-tooltip { background: #0f172a; color: #e2e8f0; }
 
     @media print {
-      @page { size: A4 landscape; margin: 10mm 15mm; }
+      @page { size: A4 landscape; margin: 6mm 8mm; }
       * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-      body { background: white !important; color: black !important; font-size: 10pt; line-height: 1.3; }
+      body { background: white !important; font-size: 9pt; line-height: 1.3; }
       aside, #btn-refresh, #btn-print, #ch-tooltip, #airport-input-section, .no-print { display: none !important; }
-      body > .flex { display: block !important; background: white !important; }
+      body > .flex { display: block !important; }
       .flex-1.min-w-0 { width: 100% !important; max-width: 100% !important; overflow: visible !important; }
       .max-w-7xl { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
       h1 {
-        font-size: 16pt !important; font-weight: bold; color: black !important;
-        margin-bottom: 4mm !important; border-bottom: 2px solid black;
-        padding-bottom: 2mm; background: white !important;
+        font-size: 13pt !important; font-weight: bold;
+        margin-bottom: 3mm !important; border-bottom: 1.5px solid #334155;
+        padding-bottom: 1.5mm;
       }
       h1[data-print-date]::after {
         content: " — Impression du " attr(data-print-date);
-        font-size: 10pt; font-weight: normal; color: #555;
+        font-size: 9pt; font-weight: normal; opacity: .7;
       }
       h1 + p { display: none !important; }
       #ch-legend {
-        display: flex !important; border: 1px solid #333; background: #f5f5f5 !important;
-        padding: 2mm !important; margin-bottom: 4mm; page-break-inside: avoid; font-size: 8pt;
+        display: flex !important;
+        padding: 1.5mm !important; margin-bottom: 3mm; page-break-inside: avoid; font-size: 7pt;
       }
-      #ch-legend span { color: black !important; }
-      #leg-known { border: 1px solid #333 !important; background: #555 !important; }
-      #leg-unk   { border: 1px dashed #333 !important; background: #ccc !important; }
       #chainages-result > div {
-        page-break-inside: avoid; break-inside: avoid; margin-bottom: 5mm;
-        border: 1.5px solid black !important; box-shadow: none !important; background: white !important;
+        page-break-inside: avoid; break-inside: avoid; margin-bottom: 3mm;
+        box-shadow: none !important;
       }
       #chainages-result > div > div:first-child {
-        background: white !important; border-bottom: 1px solid #666 !important; padding: 2mm 3mm !important;
+        padding: 1.5mm 2.5mm !important;
       }
-      #chainages-result > div > div:first-child span { color: black !important; }
-      #chainages-result > div > div:first-child span:first-child {
-        border: 1.5px solid black !important; background: #333 !important;
-        color: white !important; font-weight: bold;
-      }
-      .timeline-wrap { overflow: visible !important; background: white !important; page-break-inside: avoid; break-inside: avoid; }
+      .timeline-wrap { overflow: visible !important; page-break-inside: avoid; break-inside: avoid; }
       .timeline-canvas { max-width: 100% !important; height: auto !important; page-break-inside: avoid; break-inside: avoid; }
-      .text-gray-400, .text-red-500 { color: #555 !important; }
-      #ch-age { display: inline !important; color: #555 !important; font-size: 9pt !important; }
+      #ch-age { display: inline !important; font-size: 8pt !important; }
       h1, h2, h3 { page-break-after: avoid; break-after: avoid; }
       canvas { page-break-inside: avoid; break-inside: avoid; }
       .print-info {
-        display: block !important; font-size: 9pt; color: #555; text-align: center;
-        margin-top: 5mm; border-top: 1px solid #ccc; padding-top: 2mm; background: white !important;
+        display: block !important; font-size: 8pt; text-align: center;
+        margin-top: 4mm; border-top: 1px solid #cbd5e1; padding-top: 1.5mm;
       }
     }
     @media screen { .print-info { display: none; } }
@@ -250,26 +241,12 @@ import '../styles/global.css';
       };
     }
 
-    function printTokens() {
-      return {
-        bg: '#ffffff', bgAlt: '#f5f5f5', grid: '#aaaaaa', sep: '#555555',
-        label: '#333333', regText: '#000000', typeText: '#555555', now: '#000000',
-      };
-    }
-
-    function redrawAllCanvases(printMode) {
-      for (const { canvas, airStops, pal, wStart, wEnd } of lastDraws) {
-        drawAirportTimeline(canvas, airStops, wStart, wEnd, pal, printMode);
-      }
-    }
-
     const ROW_H = 44, ROW_PAD = 8, BAR_H = ROW_H - ROW_PAD * 2;
     const LABEL_W = 92, CHART_PAD = 16, HEADER_H = 28;
     const FONT = '11px/1 Inter, system-ui, sans-serif';
     const FONT_BOLD = 'bold 11px/1 Inter, system-ui, sans-serif';
     const FONT_SM = 'bold 10px/1 Inter, system-ui, sans-serif';
     const W_FULL = 130, W_SPLIT = 72;
-    // Seuil en-dessous duquel on bascule en labels flottants hors barre
     const W_FLOAT = 72;
 
     const airports = new Set();
@@ -340,11 +317,10 @@ import '../styles/global.css';
       }
     }
 
-    function preparePrint() { setH1PrintDate(); redrawAllCanvases(true); }
+    function preparePrint() { setH1PrintDate(); }
     function cleanupPrint() {
       const h1 = document.querySelector('h1');
       if (h1) h1.removeAttribute('data-print-date');
-      redrawAllCanvases(false);
     }
 
     document.getElementById('btn-print').addEventListener('click', () => {
@@ -372,22 +348,19 @@ import '../styles/global.css';
       return 360 * 60_000;
     }
 
-    // Dessine un segment (barre + texte) pour un stop donné.
-    // Retourne { x1, x2, floatLabels } où floatLabels contient les labels à dessiner
-    // après tous les segments (pour éviter les chevauchements avec les barres voisines).
-    function drawSegment(ctx, seg, barY, midY, xMin, xMax, pal, printMode) {
+    function drawSegment(ctx, seg, barY, midY, xMin, xMax, pal) {
       const known = seg.depMs !== null;
       const xArr = Math.max(seg._xArr, xMin);
       const xDep = known ? Math.min(seg._xDep, xMax) : xMax;
       const barW = Math.max(xDep - xArr, 4);
 
-      ctx.fillStyle = printMode ? (known ? '#555555' : '#cccccc') : (known ? pal.bar : pal.barU);
+      ctx.fillStyle = known ? pal.bar : pal.barU;
       ctx.beginPath(); ctx.roundRect(xArr, barY, barW, BAR_H, 4); ctx.fill();
 
       if (!known) {
         ctx.save();
         ctx.beginPath(); ctx.roundRect(xArr, barY, barW, BAR_H, 4); ctx.clip();
-        ctx.strokeStyle = printMode ? '#888888' : pal.hatch;
+        ctx.strokeStyle = pal.hatch;
         ctx.lineWidth = 1.5;
         for (let xi = xArr + barW * 0.55; xi < xDep + BAR_H; xi += 6) {
           ctx.beginPath(); ctx.moveTo(xi, barY); ctx.lineTo(xi - BAR_H, barY + BAR_H); ctx.stroke();
@@ -395,19 +368,17 @@ import '../styles/global.css';
         ctx.restore();
       }
 
-      const textColor = printMode ? '#000000' : (known ? '#fff' : pal.text);
-      const floatColor = printMode ? '#000000' : pal.text;
+      const textColor = known ? '#fff' : pal.text;
+      const floatColor = pal.text;
       ctx.font = FONT_SM; ctx.textBaseline = 'middle';
       const arrLabel = '↓ ' + seg.arrFlight;
       const depLabel = seg.depFlight ? '↑ ' + seg.depFlight : null;
       const arrW = ctx.measureText(arrLabel).width;
       const depW = depLabel ? ctx.measureText(depLabel).width : 0;
 
-      // Accumulateur de labels flottants à rendre après coup
       const floatLabels = [];
 
       if (barW >= W_FULL) {
-        // Cas nominal : tout tient dans la barre
         ctx.fillStyle = textColor;
         ctx.textAlign = 'left'; ctx.fillText(arrLabel, xArr + 5, midY);
         if (depLabel) { ctx.textAlign = 'right'; ctx.fillText(depLabel, xDep - 5, midY); }
@@ -418,29 +389,24 @@ import '../styles/global.css';
           ctx.font = FONT;
           const durW = ctx.measureText(durLabel).width;
           if ((xDep - 5 - depW - 6) - (xArr + 5 + arrW + 6) > durW) {
-            ctx.fillStyle = printMode ? '#666666' : 'rgba(255,255,255,0.8)';
+            ctx.fillStyle = 'rgba(255,255,255,0.8)';
             ctx.textAlign = 'center';
             ctx.fillText(durLabel, (xArr + xDep) / 2, midY);
           }
         }
       } else if (barW >= W_SPLIT) {
-        // Barre moyenne : on tente de caser les deux labels
         ctx.fillStyle = textColor;
         if (arrW + depW + 18 <= barW) {
           ctx.textAlign = 'left'; ctx.fillText(arrLabel, xArr + 5, midY);
           if (depLabel) { ctx.textAlign = 'right'; ctx.fillText(depLabel, xDep - 5, midY); }
         } else if (arrW + 10 <= barW) {
           ctx.textAlign = 'left'; ctx.fillText(arrLabel, xArr + 5, midY);
-          // Le label de départ ne rentre pas : flottant à droite de la barre
           if (depLabel) floatLabels.push({ label: depLabel, x: xDep + 4, align: 'left', color: floatColor });
         } else {
-          // Rien ne rentre : les deux labels sont flottants
           floatLabels.push({ label: arrLabel, x: xArr - 4, align: 'right', color: floatColor });
           if (depLabel) floatLabels.push({ label: depLabel, x: xDep + 4, align: 'left', color: floatColor });
         }
       } else {
-        // Barre trop étroite (< W_FLOAT) : labels systématiquement hors barre
-        // ARR à gauche de la barre, DEP à droite
         floatLabels.push({ label: arrLabel, x: xArr - 4, align: 'right', color: floatColor });
         if (depLabel) floatLabels.push({ label: depLabel, x: xDep + 4, align: 'left', color: floatColor });
       }
@@ -448,11 +414,11 @@ import '../styles/global.css';
       return { x1: xArr, x2: xDep, floatLabels };
     }
 
-    function drawAirportTimeline(canvas, stops, wStart, wEnd, pal, printMode = false) {
-      const T = printMode ? printTokens() : themeTokens();
+    function drawAirportTimeline(canvas, stops, wStart, wEnd, pal) {
+      const T = themeTokens();
       const nowMs = Date.now();
       const span = wEnd - wStart;
-      const dpr = printMode ? 1 : (window.devicePixelRatio || 1);
+      const dpr = window.devicePixelRatio || 1;
       const wrap = canvas.parentElement;
       const availW = Math.max(wrap.getBoundingClientRect().width - LABEL_W - CHART_PAD, 200);
       const canvasW = LABEL_W + availW + CHART_PAD;
@@ -498,7 +464,6 @@ import '../styles/global.css';
         const barY = y0 + ROW_PAD;
         const midY = barY + BAR_H / 2;
 
-        // Label registration + type
         ctx.font = FONT_BOLD; ctx.fillStyle = T.regText;
         ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
         ctx.fillText(stop.registration, 6, y0 + ROW_H / 2);
@@ -508,25 +473,21 @@ import '../styles/global.css';
           ctx.fillText(stop.aircraftType, 6 + lw + 4, y0 + ROW_H / 2);
         }
 
-        // Pré-calcul des coordonnées X pour chaque segment
         const segs = (stop.segments || []).map(seg => ({
           ...seg,
           _xArr: toX(seg.arrMs),
           _xDep: seg.depMs !== null ? toX(seg.depMs) : canvasW - CHART_PAD,
         }));
 
-        // Passe 1 : dessin des barres, collecte des labels flottants
         const allFloats = [];
         for (const seg of segs) {
-          const { x1, x2, floatLabels } = drawSegment(ctx, seg, barY, midY, LABEL_W, canvasW - CHART_PAD, pal, printMode);
+          const { x1, x2, floatLabels } = drawSegment(ctx, seg, barY, midY, LABEL_W, canvasW - CHART_PAD, pal);
           hitZones.push({ x1, y1: barY, x2, y2: barY + BAR_H, seg });
           allFloats.push(...floatLabels.map(fl => ({ ...fl, midY })));
         }
 
-        // Passe 2 : dessin des labels flottants par-dessus toutes les barres de la ligne
         ctx.font = FONT_SM; ctx.textBaseline = 'middle';
         for (const fl of allFloats) {
-          // Clip à la zone du graphe pour ne pas déborder sur les labels de registration
           if (fl.align === 'right' && fl.x < LABEL_W + 2) continue;
           if (fl.align === 'left'  && fl.x > canvasW - CHART_PAD - 2) continue;
           ctx.fillStyle = fl.color;
@@ -575,6 +536,13 @@ import '../styles/global.css';
       canvas.addEventListener('mouseleave', () => { tooltip.style.opacity = '0'; });
     }
 
+    // Retourne le timestamp de la première arrivée d'un stop (plus petit arrMs parmi tous ses segments)
+    function firstArrMs(stop) {
+      const segs = stop.segments || [];
+      if (segs.length === 0) return Infinity;
+      return Math.min(...segs.map(s => s.arrMs));
+    }
+
     function renderChainages(data) {
       lastData = data;
       const container = document.getElementById('chainages-result');
@@ -599,7 +567,12 @@ import '../styles/global.css';
         document.getElementById('ch-unknown-warn')?.remove();
       }
 
-      const stops = data.stops || [];
+      // Filtre : on exclut les matricules dont la première arrivée est dans plus de 24h
+      const H24 = 24 * 60 * 60 * 1000;
+      const nowMs = Date.now();
+      const rawStops = data.stops || [];
+      const stops = rawStops.filter(s => firstArrMs(s) - nowMs <= H24);
+
       if (stops.length === 0) {
         container.innerHTML = '<div class="text-gray-400 text-sm italic text-center py-12">Aucun chaînage trouvé pour cette fenêtre.</div>';
         legend.style.display = 'none';

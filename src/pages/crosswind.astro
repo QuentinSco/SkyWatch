@@ -900,41 +900,65 @@ const AIRPORT_RUNWAYS = {
     }
   }
 
-  function preparePrint() {
-    setH1PrintDate();
+ function preparePrint() {
+  setH1PrintDate();
+  printProxies = [];
 
-    // — Pagination JS : même logique que chainages.astro —
-    // A4 portrait à 96dpi : 210mm × 297mm
-    // Marges @page : 12mm haut + 12mm bas = 24mm consommés
-    // Hauteur utile ≈ (297 - 24) mm × (96/25.4 px/mm) ≈ 1032px
-    const mmToPx = 96 / 25.4;
-    const pageHpx = Math.round((297 - 12 - 12) * mmToPx);
+  // — Étape 1 : convertir les canvas en <img> —
+  document.querySelectorAll('.timeline-canvas').forEach(canvas => {
+    const dpr = window.devicePixelRatio || 1;
+    const img = document.createElement('img');
+    img.src    = canvas.toDataURL('image/png');
+    img.width  = Math.round(canvas.width  / dpr);
+    img.height = Math.round(canvas.height / dpr);
+    img.style.width  = canvas.style.width;
+    img.style.height = canvas.style.height;
+    img.style.display = 'block';
+    canvas.replaceWith(img);
+    printProxies.push({ canvas, img });
+  });
 
-    // Hauteur estimée du header imprimé (h1 + légende seuils) ≈ 55px
-    const headerH = 55;
+  // — Étape 2 : pagination JS avec ratio écran→impression —
+  // A4 paysage : zone utile = 297mm - 8mm - 8mm = 281mm largeur
+  //                           210mm - 6mm - 6mm = 198mm hauteur
+  const mmToPx   = 96 / 25.4;
+  const printW   = Math.round(281 * mmToPx);   // largeur utile imprimée en px CSS
+  const pageHpx  = Math.round(198 * mmToPx);   // hauteur utile imprimée en px CSS
 
-    const blocks = Array.from(document.querySelectorAll('#crosswind-container > div'));
+  // Largeur réelle du conteneur à l'écran
+  const container = document.getElementById('chainages-result');
+  const screenW   = container.getBoundingClientRect().width || window.innerWidth;
 
-    // Réinitialise les breaks d'un appel précédent
-    blocks.forEach(b => {
-      b.style.removeProperty('break-before');
-      b.style.removeProperty('page-break-before');
-    });
+  // Ratio : à l'impression les blocs seront plus larges → donc moins hauts
+  // Si screenW > printW → les blocs s'élargissent à l'impression → ratio < 1 → blocs moins hauts
+  // Si screenW < printW → ratio > 1 → blocs plus hauts
+  const ratio = screenW > 0 ? printW / screenW : 1;
 
-    let usedPx = headerH;
-    const marginBottomPx = Math.round(4 * mmToPx); // 4mm entre blocs
+  // Hauteur du header imprimé (h1 + légende) estimée en px impression
+  const headerH = Math.round(40 * ratio);
 
-    blocks.forEach(block => {
-      const blockH = block.getBoundingClientRect().height;
-      if (usedPx > headerH && usedPx + blockH > pageHpx) {
-        block.style.breakBefore = 'page';
-        block.style.pageBreakBefore = 'always';
-        usedPx = blockH + marginBottomPx;
-      } else {
-        usedPx += blockH + marginBottomPx;
-      }
-    });
-  }
+  const blocks = Array.from(document.querySelectorAll('#chainages-result > div'));
+  blocks.forEach(b => {
+    b.style.removeProperty('break-before');
+    b.style.removeProperty('page-break-before');
+  });
+
+  const marginPx = Math.round(4 * mmToPx * ratio);
+  let usedPx = headerH;
+
+  blocks.forEach(block => {
+    const screenH  = block.getBoundingClientRect().height;
+    const printedH = Math.round(screenH * ratio);
+
+    if (usedPx > headerH && usedPx + printedH > pageHpx) {
+      block.style.breakBefore = 'page';
+      block.style.pageBreakBefore = 'always';
+      usedPx = printedH + marginPx;
+    } else {
+      usedPx += printedH + marginPx;
+    }
+  });
+}
 
   function cleanupPrint() {
     const h1 = document.querySelector('h1');

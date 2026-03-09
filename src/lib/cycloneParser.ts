@@ -7,6 +7,11 @@
 //   RSMC Nadi (Fiji): https://www.met.gov.fj/rsmc-nadi-cyclone-rss.xml  (fallback GDACS si mort)
 //   JTWC (suppl.)   : https://www.metoc.navy.mil/jtwc/rss/jtwc.rss
 //
+// Trajectoires J+3 :
+//   NHC GeoJSON     : https://www.nhc.noaa.gov/CurrentStorms.json  → best track 5 jours
+//   JTWC best track : https://www.metoc.navy.mil/jtwc/rss/jtwc.rss (lat/lon forecast dans description)
+//   RSMC Réunion    : parsing textuel des prévisions de position dans les items RSS
+//
 // Format de sortie : CycloneBulletin[]
 
 import { redis } from './redis';
@@ -28,27 +33,29 @@ export interface CyclonePosition {
 }
 
 export interface CycloneForecastPoint {
-  validAt: string;   // ISO
+  validAt: string;        // ISO
   lat: number;
   lon: number;
   windKt: number | null;
+  hour: number;           // +0, +12, +24, +48, +72 …
 }
 
 export interface CycloneBulletin {
-  id: string;              // identifiant unique (nom + basin)
-  name: string;            // ex. "FREDDY"
-  basin: string;           // "Atlantique", "Pacifique Est", "Océan Indien", "Pacifique Sud"
-  source: string;          // "NHC" | "RSMC-Réunion" | "RSMC-Nadi" | "JTWC"
+  id: string;
+  name: string;
+  basin: string;
+  source: string;
   category: CycloneCategory;
   severity: CycloneSeverity;
-  windKt: number;          // vent soutenu maximal en nœuds
+  windKt: number;
   position: CyclonePosition;
-  movingToward: string;    // ex. "NNE at 15 mph"
-  headline: string;        // titre court du bulletin
-  link: string;            // lien vers le bulletin officiel
-  publishedAt: string;     // ISO
-  affectedAirports: string[];  // ICAO des aéroports AF dans le cone à 72h
+  movingToward: string;
+  headline: string;
+  link: string;
+  publishedAt: string;
+  affectedAirports: string[];    // ICAO des aéroports AF dans le cône à 72h
   forecastTrack: CycloneForecastPoint[];
+  forecastAirports72h: string[]; // ICAO dans le cône 72h enrichi depuis la track
 }
 
 // ─── Aéroports AF avec leur position (lat, lon) ─────────────────────────────────────────────
@@ -188,7 +195,6 @@ const SOURCES = [
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────────────────
 
-/** Distance orthodromique en km entre deux points (lat/lon en degrés) */
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -201,9 +207,29 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
 }
 
 /**
- * Catégorie Saffir-Simpson à partir du vent soutenu en nœuds.
- * En dessous de 34 kt → TD, 34-63 kt → TS, au-dessus → C1-C5.
+ * Retourne les ICAO AF dans le cône d'incertitude autour d'une liste de points
+ * forecast. Le rayon grossit avec l'échéance :
+ *   <= 24h → 350 km   (incertitude faible)
+ *   <= 48h → 500 km
+ *   <= 72h → 700 km   (cône NHC ~5° latitude = ~550 km, on majore)
  */
+function airportsInForecastCone(
+  track: CycloneForecastPoint[],
+  maxHour = 72,
+): string[] {
+  const icaoSet = new Set<string>();
+  for (const pt of track) {
+    if (pt.hour > maxHour) continue;
+    const radius = pt.hour <= 24 ? 350 : pt.hour <= 48 ? 500 : 700;
+    for (const [icao, ap] of Object.entries(AF_AIRPORTS)) {
+      if (haversineKm(pt.lat, pt.lon, ap.lat, ap.lon) <= radius) {
+        icaoSet.add(icao);
+      }
+    }
+  }
+  return [...icaoSet];
+}
+
 function windToCategory(kt: number): CycloneCategory {
   if (kt < 34)  return 'TD';
   if (kt < 64)  return 'TS';
@@ -217,24 +243,14 @@ function windToCategory(kt: number): CycloneCategory {
 function categoryToSeverity(cat: CycloneCategory): CycloneSeverity {
   if (cat === 'TD' || cat === 'INVEST') return 'yellow';
   if (cat === 'TS' || cat === 'STS' || cat === 'TC') return 'orange';
-  return 'red'; // C1-C5, STD exclut mais rare
+  return 'red';
 }
 
-/** Extrait un nombre flottant d'une chaîne, retourne null si introuvable */
-function extractFloat(s: string): number | null {
-  const m = s.match(/[-+]?\d+(?:\.\d+)?/);
-  return m ? parseFloat(m[0]) : null;
-}
-
-// ─── Parsing RSS XML ────────────────────────────────────────────────────────────────────────
-
-/** Extrait le texte d'une balise XML (naïve mais suffisante pour RSS) */
 function xmlText(xml: string, tag: string): string {
   const m = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\/${tag}>`, 'i'));
   return m ? m[1].replace(/<[^>]+>/g, '').trim() : '';
 }
 
-/** Retourne tous les blocs <item>...</item> d'un flux RSS */
 function xmlItems(xml: string): string[] {
   const items: string[] = [];
   const re = /<item[^>]*>([\s\S]*?)<\/item>/gi;
@@ -243,14 +259,7 @@ function xmlItems(xml: string): string[] {
   return items;
 }
 
-/**
- * Tente d'extraire lat/lon depuis :
- *   - balise <geo:lat> / <geo:long>
- *   - balise <georss:point>lat lon</georss:point>
- *   - texte libre "... located near XX.XN YY.YW ..."
- */
 function extractPosition(item: string): CyclonePosition | null {
-  // geo:lat / geo:long
   const lat1 = xmlText(item, 'geo:lat');
   const lon1 = xmlText(item, 'geo:long');
   if (lat1 && lon1) {
@@ -258,13 +267,11 @@ function extractPosition(item: string): CyclonePosition | null {
     const lo = parseFloat(lon1);
     if (!isNaN(la) && !isNaN(lo)) return { lat: la, lon: lo };
   }
-  // georss:point
   const gp = xmlText(item, 'georss:point');
   if (gp) {
     const [a, b] = gp.split(/\s+/);
     if (a && b) return { lat: parseFloat(a), lon: parseFloat(b) };
   }
-  // texte libre NHC : "located near 18.5N 72.3W" ou "23.1N 85.2W"
   const desc = xmlText(item, 'description');
   const posRe = /located near\s+([\d.]+)([NS])\s+([\d.]+)([EW])/i;
   const pm = desc.match(posRe) ?? xmlText(item, 'title').match(/([\d.]+)([NS])\s+([\d.]+)([EW])/);
@@ -276,59 +283,259 @@ function extractPosition(item: string): CyclonePosition | null {
   return null;
 }
 
-/**
- * Extrait le vent max en nœuds depuis la description ou le titre.
- * Cherche "Maximum sustained winds XX mph", "XX mph", "XX kt", "XX knots".
- */
 function extractWindKt(item: string): number {
   const text = xmlText(item, 'description') + ' ' + xmlText(item, 'title');
-  // mph
   const mph = text.match(/maximum sustained winds[^\d]*(\d+)\s*mph/i)
     ?? text.match(/(\d+)\s*mph/i);
   if (mph) return Math.round(parseInt(mph[1]) / 1.151);
-  // knots
   const kt = text.match(/maximum sustained winds[^\d]*(\d+)\s*(?:kt|knots)/i)
     ?? text.match(/(\d+)\s*(?:kt|knots)/i);
   if (kt) return parseInt(kt[1]);
   return 0;
 }
 
-/** Extrait le nom du système ("TROPICAL STORM FRED", "HURRICANE IDA", etc.) */
 function extractName(title: string): string {
-  // NHC format : "Tropical Storm Fred Advisory..."
   const m = title.match(
     /(?:tropical\s+(?:storm|depression)|hurricane|typhoon|cyclone|invest)\s+([A-Z0-9-]+)/i
   );
   if (m) return m[1].toUpperCase();
-  // RSMC-Réunion : "TROPICAL CYCLONE FREDDY"
   const m2 = title.match(/(?:tropical cyclone|dépression tropicale|zone pertubée)\s+([A-Z0-9-]+)/i);
   if (m2) return m2[1].toUpperCase();
   return title.split(' ').slice(0, 3).join(' ');
 }
 
+// ─── Trajectoire J+3 : NHC GeoJSON ─────────────────────────────────────────────────────────
+//
+// CurrentStorms.json liste les storms actifs avec une URL vers le GeoJSON de track.
+// Format : { activeStorms: [ { id, name, wallet, ... } ] }
+// Track GeoJSON : https://www.nhc.noaa.gov/storm_graphics/api/{WALLET}_TRACK_latest.json
+//   → features avec geometry.type=Point + properties: { datelbl, maxWindMph, ... }
+//     ou type=LineString pour le best track.
+//
+// On préfère l'API forecast_cone GeoJSON quand disponible :
+//   https://www.nhc.noaa gov/storm_graphics/api/{WALLET}_5day_pgn.json
+// mais elle donne uniquement le polygone, pas les points.
+//
+// On utilise donc l'API track points :
+//   https://www.nhc.noaa.gov/storm_graphics/api/{WALLET}_TRACK_latest.json
+
+interface NhcStormEntry {
+  id: string;
+  name: string;
+  wallet: string;   // ex. "AL052023" → clé pour construire l'URL GeoJSON
+  classification: string;
+  atcfId: string;
+  maxWindMph?: string | number;
+  movementDir?: string | number;
+  movementSpeed?: string | number;
+  publicAdvisory?: { advNum: string; issuance: string };
+  forecastAdvisory?: { advNum: string; issuance: string };
+}
+
+async function fetchNhcForecastTrack(
+  wallet: string,
+  stormName: string,
+  basin: string,
+): Promise<CycloneForecastPoint[]> {
+  const url = `https://www.nhc.noaa.gov/storm_graphics/api/${wallet}_TRACK_latest.json`;
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'SkyWatch/1.0 dispatch-tool' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) {
+      console.warn(`[NHC track ${stormName}] HTTP ${res.status}`);
+      return [];
+    }
+    const geojson = await res.json();
+    const track: CycloneForecastPoint[] = [];
+
+    // On cherche les features de type Point avec tau (heure de prévision)
+    const features: any[] = geojson?.features ?? [];
+    for (const feat of features) {
+      if (feat.geometry?.type !== 'Point') continue;
+      const props = feat.properties ?? {};
+
+      // tau = heure d'échéance depuis le bulletin (0, 12, 24, 36, 48, 72, 96, 120)
+      const tau: number = parseInt(String(props.tau ?? props.TAU ?? props.validTime ?? '0'), 10);
+      if (isNaN(tau) || tau > 120) continue;
+
+      const coords: [number, number] = feat.geometry.coordinates; // [lon, lat]
+      const windMph: number = parseFloat(String(props.maxWindMph ?? props.MAXWIND ?? '0'));
+      const windKt: number | null = windMph > 0 ? Math.round(windMph / 1.151) : null;
+
+      // validAt = issuance + tau heures
+      let validAt: string;
+      const issuanceStr: string = props.issuance ?? props.issuanceDate ?? '';
+      if (issuanceStr) {
+        const base = new Date(issuanceStr);
+        base.setUTCHours(base.getUTCHours() + tau);
+        validAt = base.toISOString();
+      } else {
+        const now = new Date();
+        now.setUTCHours(now.getUTCHours() + tau);
+        validAt = now.toISOString();
+      }
+
+      track.push({ validAt, lat: coords[1], lon: coords[0], windKt, hour: tau });
+    }
+
+    // Trier par heure croissante
+    track.sort((a, b) => a.hour - b.hour);
+    console.log(`[NHC track ${stormName}] ${track.length} points de prévision (J+${Math.round((track[track.length - 1]?.hour ?? 0) / 24)})`);
+    return track;
+  } catch (e) {
+    console.warn(`[NHC track ${stormName}]`, e instanceof Error ? e.message : e);
+    return [];
+  }
+}
+
 /**
- * Parse un seul flux RSS et retourne les bulletins actifs.
- * On filtre les items qui semblent être des avis actifs
- * (pas les résumés de saison, pas les "no tropical cyclones" vides).
+ * Charge CurrentStorms.json pour obtenir les wallets actifs,
+ * puis va chercher la track GeoJSON de chaque storm NHC.
+ * Retourne un Map { stormName (uppercase) → CycloneForecastPoint[] }.
  */
+async function fetchAllNhcTracks(): Promise<Map<string, CycloneForecastPoint[]>> {
+  const trackMap = new Map<string, CycloneForecastPoint[]>();
+  try {
+    const res = await fetch('https://www.nhc.noaa.gov/CurrentStorms.json', {
+      headers: { 'User-Agent': 'SkyWatch/1.0 dispatch-tool', 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) {
+      console.warn('[NHC CurrentStorms] HTTP', res.status);
+      return trackMap;
+    }
+    const json = await res.json();
+    const storms: NhcStormEntry[] = json?.activeStorms ?? [];
+    console.log(`[NHC CurrentStorms] ${storms.length} storm(s) actif(s)`);
+
+    await Promise.all(
+      storms.map(async (storm) => {
+        if (!storm.wallet) return;
+        const name = (storm.name ?? storm.id ?? '').toUpperCase();
+        // Basin depuis atcfId : AL = Atlantique, EP = Pac. Est, CP = Pac. Central, WP = Pac. Ouest
+        const atcf = (storm.atcfId ?? '').toUpperCase();
+        const basin = atcf.startsWith('AL') ? 'Atlantique'
+          : atcf.startsWith('EP') ? 'Pacifique Est'
+          : atcf.startsWith('CP') ? 'Pacifique Central'
+          : 'Atlantique';
+        const track = await fetchNhcForecastTrack(storm.wallet, name, basin);
+        if (track.length > 0) trackMap.set(name, track);
+      })
+    );
+  } catch (e) {
+    console.warn('[NHC CurrentStorms]', e instanceof Error ? e.message : e);
+  }
+  return trackMap;
+}
+
+// ─── Trajectoire J+3 : JTWC (description RSS) ──────────────────────────────────────────────
+//
+// Le flux JTWC RSS contient dans <description> des blocs de prévision du type :
+//   24H: 21.5N 145.2E 65KT
+//   48H: 23.0N 148.5E 55KT
+//   72H: 25.5N 151.2E 45KT
+// On extrait ces lignes pour construire le forecast track.
+
+function parseJtwcForecastFromDescription(desc: string, pubDate: string): CycloneForecastPoint[] {
+  const track: CycloneForecastPoint[] = [];
+  // Pattern : "24H  21.5N 145.2E  MAX WIND 65KT..."
+  // ou simplement "24H: 21.5N 145.2E 65KT"
+  const lineRe = /(\d{1,3})H[:\s]+([\d.]+)([NS])\s+([\d.]+)([EW])\s+(?:MAX\s+WIND\s+)?(\d+)\s*KT/gi;
+  const baseTime = pubDate ? new Date(pubDate) : new Date();
+
+  let m;
+  while ((m = lineRe.exec(desc)) !== null) {
+    const hour = parseInt(m[1], 10);
+    if (hour > 120) continue;
+    const lat  = parseFloat(m[2]) * (m[3].toUpperCase() === 'S' ? -1 : 1);
+    const lon  = parseFloat(m[4]) * (m[5].toUpperCase() === 'W' ? -1 : 1);
+    const windKt = parseInt(m[6], 10);
+    const validAt = new Date(baseTime.getTime() + hour * 3600 * 1000).toISOString();
+    track.push({ validAt, lat, lon, windKt, hour });
+  }
+
+  // Alternative : format compact "24H 22N 147E 60KT" ou "72H 23.5N 152.1E"
+  if (track.length === 0) {
+    const compactRe = /(\d{1,3})H\s+([\d.]+)([NS])\s+([\d.]+)([EW])(?:\s+(\d+)\s*(?:KT|KNOTS))?/gi;
+    while ((m = compactRe.exec(desc)) !== null) {
+      const hour = parseInt(m[1], 10);
+      if (hour > 120) continue;
+      const lat = parseFloat(m[2]) * (m[3].toUpperCase() === 'S' ? -1 : 1);
+      const lon = parseFloat(m[4]) * (m[5].toUpperCase() === 'W' ? -1 : 1);
+      const windKt = m[6] ? parseInt(m[6], 10) : null;
+      const validAt = new Date(baseTime.getTime() + hour * 3600 * 1000).toISOString();
+      track.push({ validAt, lat, lon, windKt, hour });
+    }
+  }
+
+  track.sort((a, b) => a.hour - b.hour);
+  return track;
+}
+
+// ─── Trajectoire J+3 : RSMC La Réunion (RSS description) ───────────────────────────────────
+//
+// Les bulletins RSMC Réunion contiennent dans <description> des prévisions du type :
+//   "In 24 hours: CENTER NEAR 18.5S 72.3E, MAXIMUM WINDS 65KT"
+//   "In 48 hours: CENTER NEAR 20.0S 75.1E, MAXIMUM WINDS 55KT"
+//   "In 72 hours: CENTER NEAR 22.5S 78.5E, MAXIMUM WINDS 45KT"
+//
+// On parse ces lignes pour enrichir le forecastTrack.
+
+function parseRsmcReunionForecast(desc: string, pubDate: string): CycloneForecastPoint[] {
+  const track: CycloneForecastPoint[] = [];
+  const baseTime = pubDate ? new Date(pubDate) : new Date();
+
+  // Format anglais RSMC : "In 24 hours: CENTER NEAR 18.5S 72.3E ..."
+  const reEn = /in\s+(\d+)\s+hours?[:\s]+(?:center\s+near\s+)?([\d.]+)([NS])\s+([\d.]+)([EW])(?:[^\d]+(\d+)\s*kt)?/gi;
+  let m;
+  while ((m = reEn.exec(desc)) !== null) {
+    const hour   = parseInt(m[1], 10);
+    if (hour > 120) continue;
+    const lat    = parseFloat(m[2]) * (m[3].toUpperCase() === 'S' ? -1 : 1);
+    const lon    = parseFloat(m[4]) * (m[5].toUpperCase() === 'W' ? -1 : 1);
+    const windKt = m[6] ? parseInt(m[6], 10) : null;
+    const validAt = new Date(baseTime.getTime() + hour * 3600 * 1000).toISOString();
+    track.push({ validAt, lat, lon, windKt, hour });
+  }
+
+  // Format français RSMC : "Dans 24 heures : CENTRE VERS 18.5S 72.3E ..."
+  if (track.length === 0) {
+    const reFr = /dans\s+(\d+)\s+heures?\s*:\s*(?:centre\s+(?:vers|près de)\s+)?([\d.]+)([NS])\s+([\d.]+)([EW])(?:[^\d]+(\d+)\s*kt)?/gi;
+    while ((m = reFr.exec(desc)) !== null) {
+      const hour   = parseInt(m[1], 10);
+      if (hour > 120) continue;
+      const lat    = parseFloat(m[2]) * (m[3].toUpperCase() === 'S' ? -1 : 1);
+      const lon    = parseFloat(m[4]) * (m[5].toUpperCase() === 'W' ? -1 : 1);
+      const windKt = m[6] ? parseInt(m[6], 10) : null;
+      const validAt = new Date(baseTime.getTime() + hour * 3600 * 1000).toISOString();
+      track.push({ validAt, lat, lon, windKt, hour });
+    }
+  }
+
+  track.sort((a, b) => a.hour - b.hour);
+  return track;
+}
+
+// ─── Parsing RSS XML (commun) ────────────────────────────────────────────────────────────────────
+
 function parseRssFeed(
   xml: string,
   source: string,
   basin: string,
+  nhcTracks: Map<string, CycloneForecastPoint[]>,
 ): CycloneBulletin[] {
   const bulletins: CycloneBulletin[] = [];
   const items = xmlItems(xml);
 
   for (const item of items) {
-    const title = xmlText(item, 'title');
-    const desc  = xmlText(item, 'description');
-    const link  = xmlText(item, 'link');
+    const title   = xmlText(item, 'title');
+    const desc    = xmlText(item, 'description');
+    const link    = xmlText(item, 'link');
     const pubDate = xmlText(item, 'pubDate');
 
-    // Filtre : on veut uniquement les systèmes actifs
-    // NHC signal d’absence : "There are no tropical cyclones"
     if (/no tropical cyclone|no active|aucun système|no storm/i.test(title + desc)) continue;
-    // On ne garde que les items qui parlent d’un système nombré ou d’un INVEST
     const isActive = /tropical storm|tropical depression|hurricane|typhoon|cyclone|invest|pertub/i
       .test(title + desc);
     if (!isActive) continue;
@@ -339,11 +546,29 @@ function parseRssFeed(
     const cat  = windToCategory(wind);
     const sev  = categoryToSeverity(cat);
 
-    // Moving toward
     const movM = desc.match(/moving(?:\s+toward)?\s+(?:the\s+)?([\w\s]+)\s+at\s+([\d]+\s*(?:mph|km\/h|kt))/i);
     const movingToward = movM ? `${movM[1].trim()} at ${movM[2]}` : '';
 
-    // Aéroports AF dans le cone ~500km
+    // ── Forecast track selon la source ──────────────────────────────────────
+    let forecastTrack: CycloneForecastPoint[] = [];
+
+    if (source === 'NHC') {
+      // Priorité : track GeoJSON NHC (déjà chargée)
+      forecastTrack = nhcTracks.get(name) ?? nhcTracks.get(name.split('-')[0]) ?? [];
+    } else if (source === 'JTWC') {
+      forecastTrack = parseJtwcForecastFromDescription(desc, pubDate);
+    } else if (source === 'RSMC-Réunion') {
+      forecastTrack = parseRsmcReunionForecast(desc, pubDate);
+    }
+
+    // ── Position actuelle en point +0h si pas déjà présent ──────────────────
+    if (pos && (forecastTrack.length === 0 || forecastTrack[0].hour !== 0)) {
+      const now = pubDate ? new Date(pubDate).toISOString() : new Date().toISOString();
+      forecastTrack.unshift({ validAt: now, lat: pos.lat, lon: pos.lon, windKt: wind || null, hour: 0 });
+    }
+
+    // ── Aéroports AF touchés ─────────────────────────────────────────────────
+    // 1) Cône statique 500km depuis la position actuelle (compat. ancienne logique)
     const affectedAirports: string[] = [];
     if (pos) {
       for (const [icao, ap] of Object.entries(AF_AIRPORTS)) {
@@ -352,6 +577,8 @@ function parseRssFeed(
         }
       }
     }
+    // 2) Cône 72h enrichi depuis la track
+    const forecastAirports72h = airportsInForecastCone(forecastTrack, 72);
 
     const id = `${source}-${name}-${basin}`.toLowerCase().replace(/\s+/g, '-');
 
@@ -369,7 +596,8 @@ function parseRssFeed(
       link,
       publishedAt: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
       affectedAirports,
-      forecastTrack: [],
+      forecastTrack,
+      forecastAirports72h,
     });
   }
 
@@ -377,11 +605,10 @@ function parseRssFeed(
 }
 
 // ─── Fetch principal ─────────────────────────────────────────────────────────────────────────────
-const KV_KEY_CYCLONES  = 'cyclones_cache';
+const KV_KEY_CYCLONES  = 'cyclones_cache_v2'; // v2 : forecastTrack + forecastAirports72h
 const KV_TTL_CYCLONES  = 60 * 60; // 1h — les bulletins NHC sont publiés toutes les 3-6h
 
 export async function fetchCycloneBulletins(): Promise<CycloneBulletin[]> {
-  // Cache Redis
   if (redis) {
     try {
       const cached = await redis.get<CycloneBulletin[]>(KV_KEY_CYCLONES);
@@ -394,27 +621,40 @@ export async function fetchCycloneBulletins(): Promise<CycloneBulletin[]> {
     }
   }
 
-  const results = await Promise.allSettled(
-    SOURCES.map(src =>
+  // 1) Charger les tracks NHC GeoJSON en parallèle des flux RSS
+  const [nhcTracks, ...rssResults] = await Promise.all([
+    fetchAllNhcTracks(),
+    ...SOURCES.map(src =>
       fetch(src.url, {
-        headers: { 'User-Agent': 'SkyWatch/1.0 dispatch-tool', 'Accept': 'application/rss+xml, application/xml, text/xml' },
+        headers: {
+          'User-Agent': 'SkyWatch/1.0 dispatch-tool',
+          'Accept': 'application/rss+xml, application/xml, text/xml',
+        },
         signal: AbortSignal.timeout(12000),
       })
         .then(r => r.ok ? r.text() : Promise.reject(`HTTP ${r.status}`))
-        .then(xml => parseRssFeed(xml, src.label, src.basin))
+        .then(xml => ({ src, xml }))
         .catch(err => {
           console.warn(`[Cyclones] ${src.id} fetch error:`, err);
-          return [] as CycloneBulletin[];
+          return { src, xml: '' };
         })
-    )
-  );
+    ),
+  ]);
 
+  // 2) Parser chaque flux RSS en injectant les tracks NHC
   const all: CycloneBulletin[] = [];
-  for (const r of results) {
-    if (r.status === 'fulfilled') all.push(...r.value);
+  for (const { src, xml } of rssResults as { src: typeof SOURCES[0]; xml: string }[]) {
+    if (!xml) continue;
+    try {
+      const bulletins = parseRssFeed(xml, src.label, src.basin, nhcTracks);
+      console.log(`[Cyclones] ${src.id}: ${bulletins.length} bulletin(s) — tracks enrichies: ${bulletins.filter(b => b.forecastTrack.length > 1).length}`);
+      all.push(...bulletins);
+    } catch (e) {
+      console.warn(`[Cyclones] parse error ${src.id}:`, e);
+    }
   }
 
-  // Dédoublonner par id
+  // 3) Dédoublonner par id
   const seen = new Set<string>();
   const unique = all.filter(b => {
     if (seen.has(b.id)) return false;
@@ -422,11 +662,11 @@ export async function fetchCycloneBulletins(): Promise<CycloneBulletin[]> {
     return true;
   });
 
-  // Tri : RED d’abord, puis ORANGE, puis YELLOW
+  // 4) Tri : RED → ORANGE → YELLOW
   const order = { red: 0, orange: 1, yellow: 2 };
   unique.sort((a, b) => order[a.severity] - order[b.severity]);
 
-  console.log(`[Cyclones] ${unique.length} bulletins actifs`);
+  console.log(`[Cyclones] ${unique.length} bulletins actifs, ${unique.filter(b => b.forecastTrack.length > 1).length} avec track J+3`);
 
   if (redis && unique.length > 0) {
     try {

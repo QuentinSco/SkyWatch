@@ -358,22 +358,18 @@ import '../styles/global.css';
         printProxies.push({ canvas, img });
       });
 
-      // — Étape 2 : pagination JS avec ratio écran→impression —
-      // A4 paysage : zone utile = 297mm - 8mm - 8mm largeur = 281mm
-      //                           210mm - 6mm - 6mm hauteur  = 198mm
+      // — Étape 2 : pagination JS —
+      // A4 paysage : zone utile largeur = 297 - 8 - 8 = 281mm, hauteur = 210 - 6 - 6 = 198mm
       const mmToPx  = 96 / 25.4;
-      const printW  = Math.round(281 * mmToPx);  // largeur utile A4 paysage en px CSS
-      const pageHpx = Math.round(198 * mmToPx);  // hauteur utile A4 paysage en px CSS
+      const printW  = Math.round(281 * mmToPx);
+      const pageHpx = Math.round(198 * mmToPx);
+      const marginPx = Math.round(4 * mmToPx);
 
-      // Ratio : largeur imprimée / largeur écran du conteneur
-      // Corrige le fait que getBoundingClientRect() mesure des px écran,
-      // alors qu'à l'impression le contenu est redimensionné à la largeur A4.
-      const containerW = document.getElementById('chainages-result').getBoundingClientRect().width || window.innerWidth;
-      const ratio = containerW > 0 ? printW / containerW : 1;
-
-      // Hauteur du header imprimé (h1 + légende) convertie en px impression
-      const headerH  = Math.round(45 * ratio);
-      const marginPx = Math.round(4 * mmToPx * ratio);
+      // Forcer temporairement la largeur du conteneur à printW
+      // pour que getBoundingClientRect() retourne les vraies hauteurs imprimées
+      const containerEl = document.getElementById('chainages-result');
+      const origW = containerEl.style.width;
+      containerEl.style.width = printW + 'px';
 
       const blocks = Array.from(document.querySelectorAll('#chainages-result > div'));
       blocks.forEach(b => {
@@ -381,12 +377,12 @@ import '../styles/global.css';
         b.style.removeProperty('page-break-before');
       });
 
-      let usedPx = headerH;
+      let usedPx = 45; // hauteur header imprimé (h1 + légende) en px
 
       blocks.forEach(block => {
-        const printedH = Math.round(block.getBoundingClientRect().height * ratio);
+        const printedH = block.getBoundingClientRect().height;
 
-        if (usedPx > headerH && usedPx + printedH > pageHpx) {
+        if (usedPx > 45 && usedPx + printedH > pageHpx) {
           block.style.breakBefore = 'page';
           block.style.pageBreakBefore = 'always';
           usedPx = printedH + marginPx;
@@ -394,6 +390,9 @@ import '../styles/global.css';
           usedPx += printedH + marginPx;
         }
       });
+
+      // Restaurer la largeur d'origine
+      containerEl.style.width = origW;
     }
 
     function cleanupPrint() {
@@ -652,8 +651,12 @@ import '../styles/global.css';
 
       container.innerHTML = '';
 
+      const now24h = Date.now() + 24 * 60 * 60 * 1000;
+
       const byAirport = new Map();
       (data.stops || []).forEach(stop => {
+        // Exclure les appareils dont la première arrivée est dans plus de 24h
+        if (firstArrMs(stop) > now24h) return;
         if (!byAirport.has(stop.iata)) byAirport.set(stop.iata, []);
         byAirport.get(stop.iata).push(stop);
       });

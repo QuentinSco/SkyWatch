@@ -352,7 +352,7 @@ import '../styles/global.css';
 
       <!-- Config panel -->
       <div id="config-panel" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-5 mb-6">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div class="grid grid-cols-1 lg:grid-cols-[1fr_1fr_1.5fr] gap-5">
 
           <!-- Colonne gauche : ajout escale -->
           <div class="lg:col-span-1">
@@ -398,39 +398,39 @@ import '../styles/global.css';
           </div>
 
           <!-- Colonne droite : récapitulatif limites -->
-          <div class="border-l border-gray-200 dark:border-gray-700 pl-5">
+          <div class="border-l border-gray-200 dark:border-gray-700 pl-5 lg:col-span-1" style="min-width:0">
             <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Limites vent de travers</div>
-            <div class="grid grid-cols-4 gap-x-3 gap-y-2 text-[11px] text-gray-600 dark:text-gray-400">
+            <div class="grid grid-cols-4 gap-x-4 gap-y-2 text-[11px] text-gray-600 dark:text-gray-400">
               <div>
-                <div class="font-semibold text-gray-700 dark:text-gray-300 mb-0.5">777 / 787</div>
+                <div class="font-semibold text-gray-700 dark:text-gray-300 mb-0.5 whitespace-nowrap">777 / 787</div>
                 <div class="space-y-0.5">
-                  <div>• Sèche: <span class="font-mono font-bold">45kt</span></div>
-                  <div>• Mouillée: <span class="font-mono font-bold">40kt</span></div>
-                  <div>• Contaminée: <span class="font-mono font-bold">35kt</span></div>
+                  <div class="whitespace-nowrap">• Sèche: <span class="font-mono font-bold">45kt</span></div>
+                  <div class="whitespace-nowrap">• Mouillée: <span class="font-mono font-bold">40kt</span></div>
+                  <div class="whitespace-nowrap">• Contaminée: <span class="font-mono font-bold">35kt</span></div>
                 </div>
               </div>
               <div>
-                <div class="font-semibold text-gray-700 dark:text-gray-300 mb-0.5">A350 / A330</div>
+                <div class="font-semibold text-gray-700 dark:text-gray-300 mb-0.5 whitespace-nowrap">A350 / A330</div>
                 <div class="space-y-0.5">
-                  <div>• Sèche: <span class="font-mono font-bold">40kt</span></div>
-                  <div>• Mouillée: <span class="font-mono font-bold">40kt</span></div>
-                  <div>• Contaminée: <span class="font-mono font-bold">27kt</span></div>
+                  <div class="whitespace-nowrap">• Sèche: <span class="font-mono font-bold">40kt</span></div>
+                  <div class="whitespace-nowrap">• Mouillée: <span class="font-mono font-bold">40kt</span></div>
+                  <div class="whitespace-nowrap">• Contaminée: <span class="font-mono font-bold">27kt</span></div>
                 </div>
               </div>
               <div>
-                <div class="font-semibold text-gray-700 dark:text-gray-300 mb-0.5">A318-321</div>
+                <div class="font-semibold text-gray-700 dark:text-gray-300 mb-0.5 whitespace-nowrap">A318-321</div>
                 <div class="space-y-0.5">
-                  <div>• Sèche: <span class="font-mono font-bold">38kt</span></div>
-                  <div>• Mouillée: <span class="font-mono font-bold">38kt</span></div>
-                  <div>• Contaminée: <span class="font-mono font-bold">29kt</span></div>
+                  <div class="whitespace-nowrap">• Sèche: <span class="font-mono font-bold">38kt</span></div>
+                  <div class="whitespace-nowrap">• Mouillée: <span class="font-mono font-bold">38kt</span></div>
+                  <div class="whitespace-nowrap">• Contaminée: <span class="font-mono font-bold">29kt</span></div>
                 </div>
               </div>
               <div>
-                <div class="font-semibold text-gray-700 dark:text-gray-300 mb-0.5">A220</div>
+                <div class="font-semibold text-gray-700 dark:text-gray-300 mb-0.5 whitespace-nowrap">A220</div>
                 <div class="space-y-0.5">
-                  <div>• Sèche: <span class="font-mono font-bold">29kt</span></div>
-                  <div>• Mouillée: <span class="font-mono font-bold">29kt</span></div>
-                  <div>• Contaminée: <span class="font-mono font-bold">27kt</span></div>
+                  <div class="whitespace-nowrap">• Sèche: <span class="font-mono font-bold">29kt</span></div>
+                  <div class="whitespace-nowrap">• Mouillée: <span class="font-mono font-bold">29kt</span></div>
+                  <div class="whitespace-nowrap">• Contaminée: <span class="font-mono font-bold">27kt</span></div>
                 </div>
               </div>
             </div>

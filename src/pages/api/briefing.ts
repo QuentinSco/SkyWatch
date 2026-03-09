@@ -16,6 +16,7 @@ export interface BriefingMeteoLine {
   phenomenon:        string;
   severity:          'red' | 'orange' | 'yellow';
   etaZ:              string;
+  etaIso:            string;   // timestamp ISO complet pour tri chronologique cross-minuit
   fenetreZ:          string;
   changeIndicator:   string;
   snippet:           string;
@@ -39,7 +40,7 @@ export interface BriefingData {
   meteoHorsEurope: BriefingMeteoLine[];
   tropicale:       BriefingTropicale[];
   volcanique:      { volcanoName: string; country: string; flLevel: string; vaac: string; direction: number | null; speedKt: number | null }[];
-  tirsFusee:       { site: string; rocket: string; provider: string; timeZ: string; airports: string[] }[];
+  tirsFusee:       { site: string; rocket: string; provider: string; missionName: string; timeZ: string; airports: string[] }[];
   tailwindWatch:   {
     iata:           string;
     name:           string;
@@ -56,7 +57,7 @@ export interface BriefingData {
 }
 
 // ─── Cache Redis ───────────────────────────────────────────────────────────────
-const BRIEFING_CACHE_KEY     = 'briefing_cache_v3'; // v3 : tropicale enrichie J+3
+const BRIEFING_CACHE_KEY     = 'briefing_cache_v4'; // v4 : missionName fusée + tri ETA ISO
 const BRIEFING_CACHE_TTL_SEC = 5 * 60;
 
 // ─── Constantes ───────────────────────────────────────────────────────────────────
@@ -162,6 +163,7 @@ export const GET: APIRoute = async ({ url }) => {
             phenomenon:      PHENOMENON_LABELS[threat.type] ?? threat.type,
             severity:        threat.severity,
             etaZ:            fmtZ(etaIso),
+            etaIso:          new Date(etaIso).toISOString(),
             fenetreZ:        `${fmtZ(threat.periodStart)}/${fmtZ(threat.periodEnd)}`,
             changeIndicator: threat.changeIndicator ?? '',
             snippet:         threat.snippet ?? '',
@@ -172,9 +174,10 @@ export const GET: APIRoute = async ({ url }) => {
       }
     }
 
+    // Tri par sévérité puis par timestamp ISO réel (gère le changement de jour)
     meteoLines.sort((a, b) =>
       SEV_ORDER[a.severity] - SEV_ORDER[b.severity] ||
-      a.etaZ.localeCompare(b.etaZ)
+      new Date(a.etaIso).getTime() - new Date(b.etaIso).getTime()
     );
 
     const dedupKeys = new Set<string>();
@@ -230,7 +233,8 @@ export const GET: APIRoute = async ({ url }) => {
         const site  = parts[1] ?? 'Site inconnu';
         const rocket = parts[0]?.split('—')[1]?.trim() ?? 'Lanceur';
         const provider = parts[0]?.split('—')[0]?.replace(/🚀/g, '').trim() ?? '?';
-        return { site, rocket, provider, timeZ: fmtZ(l.validFrom), airports: l.airports };
+        const missionName = (l as any).missionName ?? 'Mission inconnue';
+        return { site, rocket, provider, missionName, timeZ: fmtZ(l.validFrom), airports: l.airports };
       });
 
     // ── Vent arrière ────────────────────────────────────────────────────────────────────

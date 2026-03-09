@@ -49,8 +49,6 @@ import '../styles/global.css';
         display: flex !important;
         padding: 1.5mm !important; margin-bottom: 3mm; page-break-inside: avoid; font-size: 7pt;
       }
-      /* Chaque bloc airport : overflow:visible indispensable pour que
-         break-inside:avoid soit honoré par le moteur d'impression Chromium */
       #chainages-result > div {
         overflow: visible !important;
         page-break-inside: avoid !important;
@@ -332,9 +330,25 @@ import '../styles/global.css';
       }
     }
 
+    /**
+     * Pour chaque section airport :
+     * 1. On mesure sa hauteur réelle (getBoundingClientRect)
+     * 2. On fixe cette valeur en min-height afin que Chromium ne puisse
+     *    pas décider de couper le bloc entre le header et la timeline.
+     * 3. On swap canvas → img (hauteur connue = taille de l'image).
+     */
     function preparePrint() {
       setH1PrintDate();
       printProxies = [];
+
+      // Étape 1 : fixer la hauteur de chaque section AVANT le swap
+      document.querySelectorAll('#chainages-result > div').forEach(section => {
+        const h = section.getBoundingClientRect().height;
+        section.style.minHeight = Math.ceil(h) + 'px';
+        printProxies.push({ type: 'section', el: section });
+      });
+
+      // Étape 2 : swap canvas → img
       document.querySelectorAll('.timeline-canvas').forEach(canvas => {
         const dpr = window.devicePixelRatio || 1;
         const img = document.createElement('img');
@@ -345,14 +359,20 @@ import '../styles/global.css';
         img.style.height = canvas.style.height;
         img.style.display = 'block';
         canvas.replaceWith(img);
-        printProxies.push({ canvas, img });
+        printProxies.push({ type: 'canvas', canvas, img });
       });
     }
 
     function cleanupPrint() {
       const h1 = document.querySelector('h1');
       if (h1) h1.removeAttribute('data-print-date');
-      printProxies.forEach(({ canvas, img }) => { img.replaceWith(canvas); });
+      printProxies.forEach(({ type, el, canvas, img }) => {
+        if (type === 'section') {
+          el.style.minHeight = '';
+        } else {
+          img.replaceWith(canvas);
+        }
+      });
       printProxies = [];
     }
 
@@ -630,8 +650,6 @@ import '../styles/global.css';
       byAirport.forEach((airStops, code) => {
         const pal = paletteFor(code);
         const section = document.createElement('div');
-        // overflow-hidden retiré : il empêche break-inside:avoid de fonctionner
-        // à l'impression (crée un BFC). Le CSS print gère overflow:visible.
         section.className = 'mb-4 rounded-xl border shadow-sm';
         section.style.cssText = `border-color:${pal.border}`;
 

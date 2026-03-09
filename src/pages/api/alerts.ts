@@ -1,20 +1,28 @@
 import type { APIRoute } from 'astro';
 import { fetchGDACS, fetchNOAA, fetchMeteoAlarm, fetchVAAC, fetchSWPC } from '../../lib/alertsServer';
 import { fetchRocketLaunches } from '../../lib/launchParser';
+import { redis } from '../../lib/redis';
 
 export const prerender = false;
 
-const CACHE_TTL = 5 * 60 * 1000;
+const CACHE_KEY = 'alerts_cache_v1';
+const CACHE_TTL_SEC = 5 * 60; // 5 min
 const TWO_HOURS = 2 * 60 * 60 * 1000;
 const SIX_HOURS = 6 * 60 * 60 * 1000;
 
-let cache: { ts: number; data: unknown; noaaOk: boolean } | null = null;
-
 export const GET: APIRoute = async () => {
-  if (cache && cache.noaaOk && Date.now() - cache.ts < CACHE_TTL) {
-    return new Response(JSON.stringify(cache.data), {
-      headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' },
-    });
+  // Lecture cache Redis (si disponible)
+  if (redis) {
+    try {
+      const cached = await redis.get<unknown[]>(CACHE_KEY);
+      if (cached) {
+        return new Response(JSON.stringify(cached), {
+          headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' },
+        });
+      }
+    } catch (e) {
+      console.warn('[alerts] KV read error:', e);
+    }
   }
 
   const [gdacs, noaa, meteoalarm, vaac, swpc, launches] = await Promise.all([
@@ -38,7 +46,14 @@ export const GET: APIRoute = async () => {
       return Date.now() - new Date(a.validTo).getTime() < TWO_HOURS;
     });
 
-  cache = { ts: Date.now(), data: all, noaaOk: noaa.length > 0 || vaac.length > 0 };
+  // Écriture cache Redis (si disponible)
+  if (redis) {
+    try {
+      await redis.set(CACHE_KEY, all, { ex: CACHE_TTL_SEC });
+    } catch (e) {
+      console.warn('[alerts] KV write error:', e);
+    }
+  }
 
   return new Response(JSON.stringify(all), {
     headers: { 'Content-Type': 'application/json', 'X-Cache': 'MISS' },

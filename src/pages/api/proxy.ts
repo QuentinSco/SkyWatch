@@ -29,10 +29,36 @@ function isAllowedUrl(urlStr: string): boolean {
   }
 }
 
+// Rate-limit simple en mémoire — 20 requêtes/minute par IP
+// Note : se réinitialise au cold-start Vercel (suffisant pour bloquer les abus ponctuels)
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_MAX = 20;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+  entry.count++;
+  return entry.count <= RATE_LIMIT_MAX;
+}
+
 export const prerender = false;
 
 export const GET: APIRoute = async ({ request }) => {
-  const reqUrl   = new URL(request.url);
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+
+  if (!checkRateLimit(ip)) {
+    return new Response('Too Many Requests', {
+      status: 429,
+      headers: { 'Retry-After': '60' },
+    });
+  }
+
+  const reqUrl    = new URL(request.url);
   const targetUrl = reqUrl.searchParams.get('url');
 
   if (!targetUrl) {

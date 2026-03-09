@@ -4,12 +4,12 @@ import type { TafRisk, TafThreat } from '../../lib/tafParser';
 import type { AfFlightArrival } from '../../lib/afFlights';
 import { fetchTafRisks, AF_AIRPORT_ICAOS } from '../../lib/tafParser';
 import { getCachedAfArrivals, getCacheFetchedAt } from '../../lib/afFlights';
-import { Redis } from '@upstash/redis';
+import { redis } from '../../lib/redis';
 
-// ✅ Mode debug — passe à true pour voir les logs détaillés dans Vercel Functions
-const DEBUG = true;
+// Mode debug — actif uniquement en développement local
+const DEBUG = import.meta.env.DEV === true;
 
-function dbg(...args: any[]) {
+function dbg(...args: unknown[]) {
   if (DEBUG) console.log('[DEBUG taf-vol-risks]', ...args);
 }
 
@@ -28,7 +28,7 @@ export interface BaseTaf {
   rawTaf: string;
   worstSeverity: TafRisk['worstSeverity'] | 'none';
   threats: TafThreat[];
-  fcsts: any[];  // périodes brutes pour la frise temporelle
+  fcsts: unknown[];  // périodes brutes pour la frise temporelle
 }
 
 export interface TafVolRisksResponse {
@@ -38,12 +38,10 @@ export interface TafVolRisksResponse {
   cacheFetchedAt?: number | null;
 }
 
-// ✅ Cache Redis partagé — remplace le cache in-memory inopérant sur Vercel (cold-start)
-const kv = new Redis({
-  url:   import.meta.env.KV_REST_API_URL,
-  token: import.meta.env.KV_REST_API_TOKEN,
-});
-const TAF_VOL_CACHE_VERSION = 'v3';  // ✅ Incrémente pour invalider l'ancien cache après ce fix
+// Cache Redis partagé — utilise l'instance sécurisée de redis.ts
+// (null si variables d'env manquantes → dégradé sans cache)
+const kv = redis;
+const TAF_VOL_CACHE_VERSION = 'v3';
 const TAF_VOL_CACHE_KEY     = `taf_vol_risks_cache_${TAF_VOL_CACHE_VERSION}`;
 const TAF_VOL_CACHE_TTL_SEC = 20 * 60; // 20 min
 
@@ -74,13 +72,13 @@ export const prerender = false;
 
 export const GET: APIRoute = async ({ url }) => {
   const force = url.searchParams.get('force') === '1';
-  
+
   if (force) {
     dbg('Force refresh demandé — bypass cache TAF+VOL');
   }
 
   // ── Cache KV — hit → retour immédiat, 0 calcul ──────────────────────────
-  if (!force) {
+  if (!force && kv) {
     try {
       const cached = await kv.get<TafVolRisksResponse>(TAF_VOL_CACHE_KEY);
       if (cached) {
@@ -211,21 +209,21 @@ export const GET: APIRoute = async ({ url }) => {
     const IATA_MAP: Record<string, string> = { LFPG: 'CDG', LFPO: 'ORY' };
     const NAME_MAP: Record<string, string> = { LFPG: 'Paris CDG', LFPO: 'Paris Orly' };
 
-    const rawBaseTafs: any[] = Array.isArray(rawBaseTafsResult) ? rawBaseTafsResult : [];
+    const rawBaseTafs: unknown[] = Array.isArray(rawBaseTafsResult) ? rawBaseTafsResult : [];
     dbg(`  TAF bruts CDG/ORY : ${rawBaseTafs.length}`);
 
     const baseTafs: BaseTaf[] = ['LFPG', 'LFPO'].map(icao => {
       const riskEntry = tafRisks.find(r => r.icao === icao);
-      const rawEntry  = rawBaseTafs.find((t: any) => (t.icaoId ?? t.stationId) === icao);
+      const rawEntry  = (rawBaseTafs as Array<Record<string, unknown>>).find(t => (t['icaoId'] ?? t['stationId']) === icao);
 
       return {
         icao,
         iata: IATA_MAP[icao],
         name: NAME_MAP[icao],
-        rawTaf:        riskEntry?.rawTaf ?? rawEntry?.rawTAF ?? '',
+        rawTaf:        riskEntry?.rawTaf ?? (rawEntry?.['rawTAF'] as string) ?? '',
         worstSeverity: riskEntry?.worstSeverity ?? 'none',
         threats:       riskEntry?.threats ?? [],
-        fcsts:         rawEntry?.fcsts ?? [],
+        fcsts:         (rawEntry?.['fcsts'] as unknown[]) ?? [],
       };
     });
 
@@ -240,18 +238,20 @@ export const GET: APIRoute = async ({ url }) => {
     sortHits(filteredHits);
     sortHits(baseHits);
 
-    const response: TafVolRisksResponse = { 
-      hits: filteredHits, 
-      baseHits, 
+    const response: TafVolRisksResponse = {
+      hits: filteredHits,
+      baseHits,
       baseTafs,
       cacheFetchedAt,
     };
 
-    try {
-      await kv.set(TAF_VOL_CACHE_KEY, response, { ex: TAF_VOL_CACHE_TTL_SEC });
-      dbg(`Cache KV MISS → stocké (TTL ${TAF_VOL_CACHE_TTL_SEC}s)`);
-    } catch (e) {
-      console.warn('[taf-vol-risks] KV write error:', e);
+    if (kv) {
+      try {
+        await kv.set(TAF_VOL_CACHE_KEY, response, { ex: TAF_VOL_CACHE_TTL_SEC });
+        dbg(`Cache KV MISS → stocké (TTL ${TAF_VOL_CACHE_TTL_SEC}s)`);
+      } catch (e) {
+        console.warn('[taf-vol-risks] KV write error:', e);
+      }
     }
 
     return new Response(JSON.stringify(response), {

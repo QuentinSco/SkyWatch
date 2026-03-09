@@ -47,28 +47,39 @@ import '../styles/global.css';
       h1 + p { display: none !important; }
       #ch-legend {
         display: flex !important;
-        padding: 1.5mm !important; margin-bottom: 3mm; page-break-inside: avoid; font-size: 7pt;
+        padding: 1.5mm !important; margin-bottom: 3mm; font-size: 7pt;
+        page-break-inside: avoid; break-inside: avoid;
       }
+
+      /* Conteneur global : block pour que les enfants soient dans le flux normal */
+      #chainages-result {
+        display: block !important;
+      }
+
+      /*
+       * Technique display:table : un élément display:table ne peut pas
+       * être coupé entre deux pages par Chromium (contrairement à
+       * break-inside:avoid qui est ignoré sur les descendants de flex).
+       * width:100% compense la perte du comportement block.
+       */
       #chainages-result > div {
+        display: table !important;
+        width: 100% !important;
         overflow: visible !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
         margin-bottom: 3mm;
         box-shadow: none !important;
       }
       #chainages-result > div > div:first-child {
         padding: 1.5mm 2.5mm !important;
+        display: table-row !important;
       }
       .timeline-wrap {
+        display: table-row !important;
         overflow: visible !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
       }
       .timeline-wrap img {
         display: block;
         max-width: 100% !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
       }
       #ch-age { display: inline !important; font-size: 8pt !important; }
       h1, h2, h3 { page-break-after: avoid; break-after: avoid; }
@@ -330,25 +341,9 @@ import '../styles/global.css';
       }
     }
 
-    /**
-     * Pour chaque section airport :
-     * 1. On mesure sa hauteur réelle (getBoundingClientRect)
-     * 2. On fixe cette valeur en min-height afin que Chromium ne puisse
-     *    pas décider de couper le bloc entre le header et la timeline.
-     * 3. On swap canvas → img (hauteur connue = taille de l'image).
-     */
     function preparePrint() {
       setH1PrintDate();
       printProxies = [];
-
-      // Étape 1 : fixer la hauteur de chaque section AVANT le swap
-      document.querySelectorAll('#chainages-result > div').forEach(section => {
-        const h = section.getBoundingClientRect().height;
-        section.style.minHeight = Math.ceil(h) + 'px';
-        printProxies.push({ type: 'section', el: section });
-      });
-
-      // Étape 2 : swap canvas → img
       document.querySelectorAll('.timeline-canvas').forEach(canvas => {
         const dpr = window.devicePixelRatio || 1;
         const img = document.createElement('img');
@@ -359,20 +354,14 @@ import '../styles/global.css';
         img.style.height = canvas.style.height;
         img.style.display = 'block';
         canvas.replaceWith(img);
-        printProxies.push({ type: 'canvas', canvas, img });
+        printProxies.push({ canvas, img });
       });
     }
 
     function cleanupPrint() {
       const h1 = document.querySelector('h1');
       if (h1) h1.removeAttribute('data-print-date');
-      printProxies.forEach(({ type, el, canvas, img }) => {
-        if (type === 'section') {
-          el.style.minHeight = '';
-        } else {
-          img.replaceWith(canvas);
-        }
-      });
+      printProxies.forEach(({ canvas, img }) => { img.replaceWith(canvas); });
       printProxies = [];
     }
 

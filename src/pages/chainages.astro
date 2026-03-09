@@ -51,30 +51,29 @@ import '../styles/global.css';
         page-break-inside: avoid; break-inside: avoid;
       }
 
-      /* Conteneur global : block pour que les enfants soient dans le flux normal */
+      /* Conteneur global en flux block normal */
       #chainages-result {
         display: block !important;
       }
 
       /*
-       * Technique display:table : un élément display:table ne peut pas
-       * être coupé entre deux pages par Chromium (contrairement à
-       * break-inside:avoid qui est ignoré sur les descendants de flex).
-       * width:100% compense la perte du comportement block.
+       * Chaque bloc aéroport : on évite la coupure CSS en fallback,
+       * mais le vrai travail est fait par la pagination JS dans preparePrint()
+       * qui injecte break-before:page sur les blocs qui déborderaient.
        */
       #chainages-result > div {
-        display: table !important;
+        display: block !important;
         width: 100% !important;
         overflow: visible !important;
-        margin-bottom: 3mm;
+        margin-bottom: 4mm;
         box-shadow: none !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
       }
       #chainages-result > div > div:first-child {
         padding: 1.5mm 2.5mm !important;
-        display: table-row !important;
       }
       .timeline-wrap {
-        display: table-row !important;
         overflow: visible !important;
       }
       .timeline-wrap img {
@@ -112,9 +111,9 @@ import '../styles/global.css';
       <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
         <div class="text-[10px] uppercase font-semibold text-gray-400 dark:text-gray-600 tracking-widest mb-2">Outils</div>
         <a href="/briefing" class="flex items-center gap-2 px-3 py-2 rounded-lg
-                                   text-gray-600 dark:text-gray-400
-                                   hover:bg-purple-50 dark:hover:bg-purple-950 hover:text-purple-700 dark:hover:text-purple-400
-                                   transition font-medium">🗒 Trame briefing</a>
+                                    text-gray-600 dark:text-gray-400
+                                    hover:bg-purple-50 dark:hover:bg-purple-950 hover:text-purple-700 dark:hover:text-purple-400
+                                    transition font-medium">🗒 Trame briefing</a>
         <a href="/chainages" class="flex items-center gap-2 px-3 py-2 rounded-lg
                                     bg-indigo-50 dark:bg-indigo-950
                                     text-indigo-700 dark:text-indigo-300 font-semibold">🔗 Chaînages</a>
@@ -126,7 +125,7 @@ import '../styles/global.css';
     </nav>
     <div class="mt-auto pt-6 border-t border-gray-100 dark:border-gray-800 text-[10px] text-gray-400 dark:text-gray-600 leading-relaxed">
       <strong class="text-gray-500 dark:text-gray-400">Horizon :</strong> 24h glissantes<br>
-      Vols AF long-courrier uniquement.
+      Rotations AF LC uniquement.<br>
     </div>
   </aside>
 
@@ -344,6 +343,8 @@ import '../styles/global.css';
     function preparePrint() {
       setH1PrintDate();
       printProxies = [];
+
+      // — Étape 1 : convertir les canvas en <img> pour l'impression —
       document.querySelectorAll('.timeline-canvas').forEach(canvas => {
         const dpr = window.devicePixelRatio || 1;
         const img = document.createElement('img');
@@ -356,6 +357,40 @@ import '../styles/global.css';
         canvas.replaceWith(img);
         printProxies.push({ canvas, img });
       });
+
+      // — Étape 2 : pagination JS —
+      // A4 paysage à 96dpi : 297mm × 210mm
+      // Marges @page : 6mm haut + 6mm bas = 12mm consommés
+      // Hauteur utile ≈ (210 - 12) mm × (96px/25.4mm) ≈ 748px
+      const mmToPx = 96 / 25.4;
+      const pageHpx = Math.round((210 - 6 - 6) * mmToPx);
+
+      // Hauteur estimée du header imprimé (h1 + légende) ≈ 45px
+      const headerH = 45;
+
+      const blocks = Array.from(document.querySelectorAll('#chainages-result > div'));
+
+      // Réinitialise les breaks d'un éventuel appel précédent
+      blocks.forEach(b => {
+        b.style.removeProperty('break-before');
+        b.style.removeProperty('page-break-before');
+      });
+
+      let usedPx = headerH;
+      const marginBottomPx = Math.round(4 * mmToPx); // 4mm entre blocs
+
+      blocks.forEach(block => {
+        const blockH = block.getBoundingClientRect().height;
+
+        if (usedPx > headerH && usedPx + blockH > pageHpx) {
+          // Ce bloc déborderait de la page courante → nouvelle page
+          block.style.breakBefore = 'page';
+          block.style.pageBreakBefore = 'always';
+          usedPx = blockH + marginBottomPx;
+        } else {
+          usedPx += blockH + marginBottomPx;
+        }
+      });
     }
 
     function cleanupPrint() {
@@ -363,6 +398,11 @@ import '../styles/global.css';
       if (h1) h1.removeAttribute('data-print-date');
       printProxies.forEach(({ canvas, img }) => { img.replaceWith(canvas); });
       printProxies = [];
+      // Nettoyer les break-before injectés par preparePrint
+      document.querySelectorAll('#chainages-result > div').forEach(b => {
+        b.style.removeProperty('break-before');
+        b.style.removeProperty('page-break-before');
+      });
     }
 
     document.getElementById('btn-print').addEventListener('click', () => {
@@ -372,6 +412,9 @@ import '../styles/global.css';
         setTimeout(cleanupPrint, 500);
       });
     });
+
+    window.addEventListener('beforeprint', preparePrint);
+    window.addEventListener('afterprint', cleanupPrint);
 
     function hhmm(ms) {
       const d = new Date(ms);
@@ -599,61 +642,54 @@ import '../styles/global.css';
         const warn = document.getElementById('ch-unknown-warn') || (() => {
           const el = document.createElement('div');
           el.id = 'ch-unknown-warn';
-          el.className = 'mb-3 text-xs text-amber-600 dark:text-amber-400';
-          container.before(el);
+          el.className = 'mb-3 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2';
+          container.parentElement.insertBefore(el, container);
           return el;
         })();
-        warn.textContent = `⚠️ Code(s) non reconnu(s) : ${data.unknownCodes.join(', ')}`;
+        warn.textContent = `⚠️ Codes inconnus ignorés : ${data.unknownCodes.join(', ')}`;
       } else {
         document.getElementById('ch-unknown-warn')?.remove();
       }
 
-      const H24 = 24 * 60 * 60 * 1000;
-      const nowMs = Date.now();
-      const rawStops = data.stops || [];
-      const stops = rawStops.filter(s => firstArrMs(s) - nowMs <= H24);
+      container.innerHTML = '';
 
-      if (stops.length === 0) {
-        container.innerHTML = '<div class="text-gray-400 text-sm italic text-center py-12">Aucun chaînage trouvé pour cette fenêtre.</div>';
+      const byAirport = new Map();
+      (data.stops || []).forEach(stop => {
+        if (!byAirport.has(stop.iata)) byAirport.set(stop.iata, []);
+        byAirport.get(stop.iata).push(stop);
+      });
+
+      if (byAirport.size === 0) {
+        container.innerHTML = '<div class="text-gray-400 dark:text-gray-600 text-sm italic text-center py-12">Aucun chaînage disponible pour la fenêtre sélectionnée.</div>';
         legend.style.display = 'none';
         return;
       }
 
       legend.style.display = 'flex';
-      const firstPal = paletteFor(Array.from(airports)[0]);
+      const firstPal = paletteFor([...byAirport.keys()][0]);
       document.getElementById('leg-known').style.background = firstPal.bar;
-      const legUnk = document.getElementById('leg-unk');
-      legUnk.style.background = firstPal.barU;
-      legUnk.style.borderColor = firstPal.hatch;
+      document.getElementById('leg-unk').style.borderColor = firstPal.bar;
 
-      const byAirport = new Map();
-      airports.forEach(code => byAirport.set(code, []));
-      stops.forEach(s => {
-        if (!byAirport.has(s.iata)) byAirport.set(s.iata, []);
-        byAirport.get(s.iata).push(s);
-      });
-
-      container.innerHTML = '';
       const pendingDraws = [];
 
       byAirport.forEach((airStops, code) => {
         const pal = paletteFor(code);
         const section = document.createElement('div');
-        section.className = 'mb-4 rounded-xl border shadow-sm';
-        section.style.cssText = `border-color:${pal.border}`;
+        section.className = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden mb-4';
 
         const header = document.createElement('div');
-        header.className = 'flex items-center gap-3 px-4 py-2.5';
-        header.style.cssText = `background:${pal.bg};border-bottom:1px solid ${pal.border}`;
+        header.className = 'flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 dark:border-gray-800';
+        header.style.background = pal.bg;
+
+        airStops.sort((a, b) => firstArrMs(a) - firstArrMs(b));
 
         if (airStops.length === 0) {
-          header.innerHTML = `
-            <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg font-bold font-mono text-xs" style="background:${pal.bar};color:#fff">${code}</span>
-            <span class="font-semibold text-sm opacity-50" style="color:${pal.text}">Aucun vol dans la fenêtre</span>`;
-          section.appendChild(header);
+          header.innerHTML = `<span class="inline-flex items-center justify-center w-7 h-7 rounded-lg font-bold font-mono text-xs" style="background:${pal.bar};color:#fff">${code}</span>
+            <span class="font-semibold text-sm" style="color:${pal.text}">Aucun appareil dans la fenêtre</span>`;
           const empty = document.createElement('div');
-          empty.className = 'px-4 py-3 text-xs italic';
-          empty.textContent = 'Aucun vol AF LC trouvé sur cet aéroport dans cette plage.';
+          empty.className = 'text-gray-400 dark:text-gray-600 text-xs italic px-4 py-3';
+          empty.textContent = 'Aucune rotation disponible.';
+          section.appendChild(header);
           section.appendChild(empty);
         } else {
           header.innerHTML = `
@@ -686,8 +722,6 @@ import '../styles/global.css';
 
     window.addEventListener('resize', () => { if (lastData) renderChainages(lastData); });
     window.addEventListener('themechange', () => { if (lastData) renderChainages(lastData); });
-    window.addEventListener('beforeprint', preparePrint);
-    window.addEventListener('afterprint', cleanupPrint);
 
     async function fetchChainages(force = false) {
       if (airports.size === 0) {

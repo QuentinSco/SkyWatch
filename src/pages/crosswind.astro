@@ -903,20 +903,10 @@ const AIRPORT_RUNWAYS = {
   function preparePrint() {
     setH1PrintDate();
 
-    // — Pagination JS avec ratio écran→impression —
-    // A4 portrait : zone utile = 210mm - 8mm - 8mm largeur  = 194mm
-    //                            297mm - 12mm - 12mm hauteur = 273mm
     const mmToPx  = 96 / 25.4;
-    const printW  = Math.round(194 * mmToPx);  // largeur utile A4 portrait en px CSS
-    const pageHpx = Math.round(273 * mmToPx);  // hauteur utile A4 portrait en px CSS
-
-    // Ratio : largeur imprimée / largeur écran du conteneur
-    const containerW = document.getElementById('crosswind-container').getBoundingClientRect().width || window.innerWidth;
-    const ratio = containerW > 0 ? printW / containerW : 1;
-
-    // Hauteur du header imprimé (h1 + légende seuils) convertie en px impression
-    const headerH  = Math.round(55 * ratio);
-    const marginPx = Math.round(4 * mmToPx * ratio);
+    // A4 portrait : zone utile largeur = 210 - 8 - 8 = 194mm, hauteur = 297 - 12 - 12 = 273mm
+    const printW  = Math.round(194 * mmToPx);
+    const pageHpx = Math.round(273 * mmToPx);
 
     const blocks = Array.from(document.querySelectorAll('#crosswind-container > div'));
     blocks.forEach(b => {
@@ -924,12 +914,31 @@ const AIRPORT_RUNWAYS = {
       b.style.removeProperty('page-break-before');
     });
 
-    let usedPx = headerH;
+    // — Forcer temporairement le layout colonne unique sur toutes les grilles —
+    // À l'impression, xl:grid-cols-2 → display:block (colonnes empilées).
+    // On reproduit ce layout le temps de mesurer les hauteurs réelles.
+    const grids = Array.from(document.querySelectorAll('#crosswind-container .grid'));
+    grids.forEach(g => {
+      g.dataset._origDisplay = g.style.display;
+      g.dataset._origWidth   = g.style.width;
+      g.style.display = 'block';
+      g.style.width   = printW + 'px';
+    });
+    // Forcer aussi la largeur du conteneur à printW pour que les mesures soient cohérentes
+    const containerEl = document.getElementById('crosswind-container');
+    const origContainerW = containerEl.style.width;
+    containerEl.style.width = printW + 'px';
+
+    // — Mesurer les hauteurs dans le layout imprimé —
+    const headerH  = Math.round(55 * mmToPx / 25.4 * 25.4); // ~55px
+    const marginPx = Math.round(4 * mmToPx);
+
+    let usedPx = 55; // header h1 + légende
 
     blocks.forEach(block => {
-      const printedH = Math.round(block.getBoundingClientRect().height * ratio);
+      const printedH = block.getBoundingClientRect().height;
 
-      if (usedPx > headerH && usedPx + printedH > pageHpx) {
+      if (usedPx > 55 && usedPx + printedH > pageHpx) {
         block.style.breakBefore = 'page';
         block.style.pageBreakBefore = 'always';
         usedPx = printedH + marginPx;
@@ -937,6 +946,15 @@ const AIRPORT_RUNWAYS = {
         usedPx += printedH + marginPx;
       }
     });
+
+    // — Restaurer le layout écran —
+    grids.forEach(g => {
+      g.style.display = g.dataset._origDisplay ?? '';
+      g.style.width   = g.dataset._origWidth   ?? '';
+      delete g.dataset._origDisplay;
+      delete g.dataset._origWidth;
+    });
+    containerEl.style.width = origContainerW;
   }
 
   function cleanupPrint() {

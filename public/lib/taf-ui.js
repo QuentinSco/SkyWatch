@@ -383,11 +383,9 @@
       const gst = fcst.wgst ? `G${String(fcst.wgst).padStart(2, '0')}` : '';
       parts.push(`${dir}${spd}${gst}KT`);
     }
-    // Fix NSW — l'API AviationWeather renvoie wxString='NSW' comme valeur interne
     if (fcst.wxString && fcst.wxString.trim().toUpperCase() !== 'NSW') {
       parts.push(fcst.wxString);
     }
-    // Fix visibilité — filtrer aussi 9999 numérique, pas seulement string '9999'
     if (fcst.visib != null && fcst.visib !== '9999' && fcst.visib !== '6+' && Number(fcst.visib) !== 9999) {
       const visM = visMtoMeters(fcst.visib);
       if (visM !== null && visM !== 9999) parts.push(`VIS ${visM}m`);
@@ -460,9 +458,10 @@
     let i = 0;
     while (i < nSlots) {
       const sev  = slotSev[i];
-      const fcst = slotFcst[i];
+      // Fusion par sévérité uniquement — ne pas comparer les références fcst
+      // (des fcsts différents peuvent couvrir des slots verts consécutifs)
       let j = i + 1;
-      while (j < nSlots && slotSev[j] === sev && slotFcst[j] === fcst) j++;
+      while (j < nSlots && slotSev[j] === sev) j++;
 
       const segStart = tStart + i * SLOT;
       const segEnd   = Math.min(tStart + j * SLOT, tEnd);
@@ -476,12 +475,12 @@
         ? 'Dégagé'
         : matchingThreats.map(t => (THREAT_ICONS[t.type] ?? '⚠️') + ' ' + t.label).join(' · ');
 
+      // Pour le tooltip : on prend le fcst du premier slot du segment
+      const fcst    = slotFcst[i];
       const ci      = fcst?.changeIndicator ?? '';
       const snippet = sev !== 'none' && fcst ? buildFcstSnippet(fcst) : '';
 
-      // Fix horaires tooltip — Pour segments sans menace (dégagé), utiliser segStart/segEnd
-      // pour afficher les bornes réelles du slot. Pour segments avec menace, utiliser
-      // fcst.timeFrom/timeTo (bornes du groupe TAF changeIndicator).
+      // Horaires tooltip : bornes réelles du segment
       const tipTimeFrom = (sev !== 'none' && fcst) ? fcst.timeFrom : segStart;
       const tipTimeTo   = (sev !== 'none' && fcst) ? fcst.timeTo   : segEnd;
 

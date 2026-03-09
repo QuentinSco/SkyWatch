@@ -49,7 +49,10 @@ import '../styles/global.css';
         display: flex !important;
         padding: 1.5mm !important; margin-bottom: 3mm; page-break-inside: avoid; font-size: 7pt;
       }
+      /* Chaque bloc airport : overflow:visible indispensable pour que
+         break-inside:avoid soit honoré par le moteur d'impression Chromium */
       #chainages-result > div {
+        overflow: visible !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
         margin-bottom: 3mm;
@@ -63,7 +66,6 @@ import '../styles/global.css';
         page-break-inside: avoid !important;
         break-inside: avoid !important;
       }
-      /* à l'impression le canvas est remplacé par une <img> */
       .timeline-wrap img {
         display: block;
         max-width: 100% !important;
@@ -271,7 +273,6 @@ import '../styles/global.css';
     const timeStart = document.getElementById('time-start');
     const timeEnd = document.getElementById('time-end');
 
-    // Mémorise les paires {canvas, img} créées lors de preparePrint
     let printProxies = [];
 
     timeRangeEnabled.addEventListener('change', () => {
@@ -331,12 +332,6 @@ import '../styles/global.css';
       }
     }
 
-    /**
-     * Remplace chaque <canvas> par une <img> PNG dans le DOM.
-     * replaceWith() retire complètement le canvas du flux — le moteur
-     * d'impression ne voit que l'<img> dont la hauteur est connue, ce
-     * qui permet à break-inside:avoid de fonctionner sur le bloc parent.
-     */
     function preparePrint() {
       setH1PrintDate();
       printProxies = [];
@@ -349,19 +344,15 @@ import '../styles/global.css';
         img.style.width  = canvas.style.width;
         img.style.height = canvas.style.height;
         img.style.display = 'block';
-        // Remplace le canvas dans le DOM (canvas sort du flux)
         canvas.replaceWith(img);
         printProxies.push({ canvas, img });
       });
     }
 
-    /** Restaure les canvas à la place des <img> proxy. */
     function cleanupPrint() {
       const h1 = document.querySelector('h1');
       if (h1) h1.removeAttribute('data-print-date');
-      printProxies.forEach(({ canvas, img }) => {
-        img.replaceWith(canvas);
-      });
+      printProxies.forEach(({ canvas, img }) => { img.replaceWith(canvas); });
       printProxies = [];
     }
 
@@ -639,7 +630,9 @@ import '../styles/global.css';
       byAirport.forEach((airStops, code) => {
         const pal = paletteFor(code);
         const section = document.createElement('div');
-        section.className = 'mb-4 rounded-xl border overflow-hidden shadow-sm';
+        // overflow-hidden retiré : il empêche break-inside:avoid de fonctionner
+        // à l'impression (crée un BFC). Le CSS print gère overflow:visible.
+        section.className = 'mb-4 rounded-xl border shadow-sm';
         section.style.cssText = `border-color:${pal.border}`;
 
         const header = document.createElement('div');

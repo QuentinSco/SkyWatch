@@ -1,156 +1,177 @@
 @import "tailwindcss";
 
 /* ================================
-   Dark Mode Variables & Base Styles
+   Charte Couleurs Air France
    ================================ */
-
 :root {
-  --bg-primary: #f8fafc;
-  --bg-secondary: #ffffff;
-  --bg-tertiary: #f1f5f9;
-  --text-primary: #0f172a;
-  --text-secondary: #64748b;
-  --text-tertiary: #94a3b8;
-  --border-color: #e2e8f0;
-  --hover-bg: #eff6ff;
-  --hover-text: #1e40af;
-  --toggle-bg: #e5e7eb;
-  --toggle-bg-hover: #d1d5db;
+  /* Bleus Air France */
+  --af-blue:    rgb(5, 16, 57);    /* Bleu AF principal */
+  --af-blue-2:  rgb(0, 49, 101);   /* Bleu 2 */
+  --af-blue-3:  rgb(20, 67, 139);  /* Bleu 3 */
+  --af-blue-4:  rgb(0, 69, 182);   /* Bleu 4 */
+
+  /* Gris Air France */
+  --af-gray-1:  rgb(208, 208, 208);
+  --af-gray-2:  rgb(179, 185, 189);
+  --af-gray-3:  rgb(118, 118, 118);
+  --af-gray-4:  rgb(100, 99, 99);
+
+  /* Rouge Air France */
+  --af-red:     rgb(255, 0, 0);
 }
 
+/* ================================
+   Light Mode Variables
+   ================================ */
+:root {
+  --bg-primary:    #f0f4f8;          /* fond page : gris bleuté très clair */
+  --bg-secondary:  #ffffff;          /* cartes / sidebar */
+  --bg-tertiary:   #e8edf3;          /* fond alterné */
+  --text-primary:  var(--af-blue);   /* textes principaux : bleu AF */
+  --text-secondary: var(--af-gray-4); /* textes secondaires */
+  --text-tertiary: var(--af-gray-3); /* textes tertiaires */
+  --border-color:  var(--af-gray-1); /* bordures */
+  --hover-bg:      rgba(0, 69, 182, 0.08); /* hover liens : bleu 4 transparent */
+  --hover-text:    var(--af-blue-4); /* texte hover */
+  --accent:        var(--af-blue-3); /* accents, liens actifs */
+  --accent-light:  rgba(20, 67, 139, 0.12);
+  --toggle-bg:     var(--af-gray-1);
+  --toggle-bg-hover: var(--af-gray-2);
+}
+
+/* ================================
+   Dark Mode Variables
+   ================================ */
 .dark {
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-tertiary: #334155;
-  --text-primary: #f1f5f9;
-  --text-secondary: #cbd5e1;
-  --text-tertiary: #94a3b8;
-  --border-color: #334155;
-  --hover-bg: #1e3a5f;
-  --hover-text: #60a5fa;
-  --toggle-bg: #475569;
-  --toggle-bg-hover: #64748b;
-}
-
-/* Hover purple pour le lien Trame briefing */
-.dark aside a[href="/briefing"]:hover {
-  background: rgba(109, 40, 217, 0.15);
-  color: #c084fc;
-}
-
-/* État actif du lien Trame briefing (briefing.astro) */
-.dark aside a[href="/briefing"].bg-blue-50 {
-  background: var(--hover-bg);
-  color: var(--hover-text);
-}
-
-/* Smooth transitions for theme switching */
-body,
-aside,
-header,
-section,
-.rounded-xl,
-button,
-h1, h2, h3, h4, h5, h6 {
-  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  --bg-primary:    #060d1f;          /* presque noir bleuté (dérivé bleu AF) */
+  --bg-secondary:  #0b1733;          /* sidebar / cartes dark */
+  --bg-tertiary:   #102050;          /* fond alterné dark */
+  --text-primary:  #e8edf5;          /* texte clair */
+  --text-secondary: var(--af-gray-1);
+  --text-tertiary: var(--af-gray-2);
+  --border-color:  #1a2d55;
+  --hover-bg:      rgba(0, 69, 182, 0.20);
+  --hover-text:    #6ea8fe;
+  --accent:        var(--af-blue-4);
+  --accent-light:  rgba(0, 69, 182, 0.25);
+  --toggle-bg:     #1a2d55;
+  --toggle-bg-hover: #233d72;
 }
 
 /* ================================
-   Dark Mode Toggle Button Styles
+   Base : fond et texte
    ================================ */
-
-#dark-mode-toggle .toggle-slider {
-  transition: transform 0.2s ease-out, background-color 0.2s ease;
-}
-
-#dark-mode-toggle:hover .toggle-slider {
-  background-color: #f9fafb;
-}
-
-.dark #dark-mode-toggle:hover .toggle-slider {
-  background-color: #e5e7eb;
-}
-
-/* Toggle background color transitions */
-#dark-mode-toggle > div > div {
-  background-color: var(--toggle-bg);
-}
-
-#dark-mode-toggle:hover > div > div {
-  background-color: var(--toggle-bg-hover);
-}
-
-.dark #dark-mode-toggle > div > div {
-  background-color: var(--toggle-bg);
-}
-
-.dark #dark-mode-toggle:hover > div > div {
-  background-color: var(--toggle-bg-hover);
-}
-
-/* ================================
-   Dark Mode Specific Styles
-   ================================ */
-
-/* Body & Main Containers */
-.dark body {
-  background: var(--bg-primary) !important;
+body {
+  background-color: var(--bg-primary);
   color: var(--text-primary);
 }
 
-/* Headings - Section Titles */
-.dark h1,
-.dark h2,
-.dark h3,
-.dark h4,
-.dark h5,
-.dark h6 {
-  color: var(--text-primary) !important;
-}
-
-/* Sidebar */
-.dark aside {
+/* ================================
+   Sidebar
+   ================================ */
+aside {
   background: var(--bg-secondary);
   border-color: var(--border-color);
 }
 
-.dark aside .text-gray-900 {
-  color: var(--text-primary);
+/* Titre SkyWatch dans la sidebar */
+aside .text-2xl {
+  color: var(--af-blue) !important;
+}
+.dark aside .text-2xl {
+  color: var(--af-blue-4) !important;
 }
 
-.dark aside .text-gray-400 {
-  color: var(--text-tertiary);
+/* Sous-titre */
+aside .text-gray-400,
+aside .text-gray-500 {
+  color: var(--text-tertiary) !important;
 }
 
-.dark aside .text-gray-500 {
-  color: var(--text-secondary);
+/* Section labels */
+aside .text-gray-400.tracking-widest,
+aside .text-gray-600.tracking-widest {
+  color: var(--af-gray-3) !important;
+}
+.dark aside .text-gray-600.tracking-widest {
+  color: var(--af-gray-2) !important;
 }
 
-.dark aside .text-gray-600 {
-  color: var(--text-secondary);
-}
-
+/* Bordures sidebar */
+aside .border-gray-100,
+aside .border-gray-200,
 .dark aside .border-gray-100,
 .dark aside .border-gray-200 {
   border-color: var(--border-color);
 }
 
-/* Sidebar Links */
-.dark .sidebar-link {
+/* ================================
+   Sidebar Links
+   ================================ */
+.sidebar-link,
+aside nav a {
   color: var(--text-secondary);
 }
 
+.sidebar-link:hover,
+aside nav a:hover {
+  background: var(--hover-bg) !important;
+  color: var(--hover-text) !important;
+}
+
+/* Lien actif (bg-blue-50 injecté par JS) */
+.sidebar-link.bg-blue-50,
+aside nav a.bg-blue-50 {
+  background: var(--accent-light) !important;
+  color: var(--accent) !important;
+  font-weight: 600;
+}
+
+/* Overrides dark mode inline Tailwind hover */
+.dark aside nav a:hover,
 .dark .sidebar-link:hover {
+  background: var(--hover-bg) !important;
+  color: var(--hover-text) !important;
+}
+
+/* Lien Trame briefing (purple → bleu AF) */
+aside a[href="/briefing"].bg-purple-50,
+aside a[href="/briefing"][class*="purple"] {
+  background: var(--accent-light) !important;
+  color: var(--accent) !important;
+}
+
+.dark aside a[href="/briefing"]:hover {
+  background: var(--hover-bg) !important;
+  color: var(--hover-text) !important;
+}
+
+.dark aside a[href="/briefing"].bg-blue-50 {
   background: var(--hover-bg);
   color: var(--hover-text);
 }
 
-.dark .sidebar-link.bg-blue-50 {
-  background: var(--hover-bg);
-  color: var(--hover-text);
+/* ================================
+   Sections & Cards
+   ================================ */
+.rounded-xl {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
 }
 
-/* Sections & Cards */
+.bg-gray-50 {
+  background: var(--bg-tertiary) !important;
+}
+
+.bg-white {
+  background: var(--bg-secondary) !important;
+}
+
+.bg-slate-50 {
+  background: var(--bg-primary) !important;
+}
+
+/* Dark mode cards */
 .dark .rounded-xl {
   background: var(--bg-secondary);
   border-color: var(--border-color);
@@ -164,194 +185,180 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--bg-secondary) !important;
 }
 
-/* Text Colors - Comprehensive Coverage */
-.dark .text-gray-900 {
+/* ================================
+   Headings
+   ================================ */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-primary);
+}
+
+.dark h1,
+.dark h2,
+.dark h3,
+.dark h4,
+.dark h5,
+.dark h6 {
   color: var(--text-primary) !important;
 }
 
-.dark .text-gray-800 {
-  color: var(--text-primary) !important;
+/* ================================
+   Text Colors
+   ================================ */
+.text-gray-900, .text-gray-800, .text-gray-700 { color: var(--text-primary) !important; }
+.text-gray-600, .text-gray-500               { color: var(--text-secondary) !important; }
+.text-gray-400                                { color: var(--text-tertiary) !important; }
+
+.text-slate-900, .text-slate-800, .text-slate-700 { color: var(--text-primary) !important; }
+.text-slate-600, .text-slate-500              { color: var(--text-secondary) !important; }
+.text-slate-400                               { color: var(--text-tertiary) !important; }
+
+/* Blues → mapped to AF blues */
+.text-blue-700  { color: var(--af-blue-3) !important; }
+.text-blue-600  { color: var(--af-blue-4) !important; }
+.text-indigo-700 { color: var(--af-blue-2) !important; }
+
+.dark .text-gray-900, .dark .text-gray-800, .dark .text-gray-700 { color: var(--text-primary) !important; }
+.dark .text-gray-600, .dark .text-gray-500 { color: var(--text-secondary) !important; }
+.dark .text-gray-400                       { color: var(--text-tertiary) !important; }
+.dark .text-slate-900, .dark .text-slate-800, .dark .text-slate-700 { color: var(--text-primary) !important; }
+.dark .text-slate-600, .dark .text-slate-500 { color: var(--text-secondary) !important; }
+.dark .text-slate-400                       { color: var(--text-tertiary) !important; }
+.dark .text-blue-700                        { color: #6ea8fe !important; }
+
+/* ================================
+   Borders
+   ================================ */
+.border-gray-100, .border-gray-200,
+.border-slate-200, .border-slate-300 {
+  border-color: var(--border-color);
+}
+.dark .border-gray-100, .dark .border-gray-200,
+.dark .border-slate-200, .dark .border-slate-300 {
+  border-color: var(--border-color);
 }
 
-.dark .text-gray-700 {
+/* ================================
+   Info Boxes (bleu → AF)
+   ================================ */
+.bg-blue-50 {
+  background: rgba(0, 69, 182, 0.07) !important;
+}
+.dark .bg-blue-50 {
+  background: rgba(0, 69, 182, 0.15) !important;
+}
+.border-blue-200 { border-color: rgba(0, 69, 182, 0.3) !important; }
+.dark .border-blue-200 { border-color: rgba(0, 69, 182, 0.35) !important; }
+
+/* Hover bleu */
+.hover\:bg-blue-50:hover  { background: var(--hover-bg) !important; }
+.dark .hover\:bg-blue-50:hover { background: var(--hover-bg) !important; }
+.hover\:bg-blue-950:hover { background: var(--hover-bg) !important; }
+.dark .hover\:bg-blue-950:hover { background: var(--hover-bg) !important; }
+.hover\:bg-indigo-50:hover { background: var(--hover-bg) !important; }
+.dark .hover\:bg-indigo-50:hover { background: var(--hover-bg) !important; }
+.hover\:bg-indigo-950:hover { background: var(--hover-bg) !important; }
+
+/* ================================
+   Alert / Warning Boxes — conservées neutres
+   ================================ */
+.dark .bg-red-50    { background: rgba(153, 27, 27, 0.2) !important; }
+.dark .text-red-500 { color: #f87171; }
+.dark .bg-orange-50 { background: rgba(194, 65, 12, 0.2) !important; }
+.dark .text-orange-700 { color: #fb923c; }
+
+/* ================================
+   Buttons (hors alertes/badges)
+   ================================ */
+button:not(#dark-mode-toggle):not(#dark-mode-toggle-mobile):not([class*="bg-red"]):not([class*="bg-green"]):not([class*="bg-yellow"]):not([class*="bg-orange"]) {
+  color: var(--text-secondary);
+}
+
+button:hover:not(#dark-mode-toggle):not(#dark-mode-toggle-mobile):not([class*="bg-red"]):not([class*="bg-green"]):not([class*="bg-yellow"]):not([class*="bg-orange"]) {
+  background: var(--hover-bg) !important;
+  color: var(--hover-text) !important;
+}
+
+/* Boutons d'action principaux (refresh, print…) */
+.btn-primary,
+button.bg-blue-600,
+button.bg-blue-700 {
+  background: var(--af-blue-4) !important;
+  color: #fff !important;
+  border: none;
+}
+button.bg-blue-600:hover,
+button.bg-blue-700:hover {
+  background: var(--af-blue-3) !important;
+}
+
+/* ================================
+   Tables
+   ================================ */
+table { color: var(--text-primary); }
+
+table th {
+  background: var(--bg-tertiary);
   color: var(--text-secondary) !important;
 }
 
-.dark .text-gray-500,
-.dark .text-gray-600 {
-  color: var(--text-secondary);
-}
-
-.dark .text-gray-400 {
-  color: var(--text-tertiary);
-}
-
-/* Text slate colors (often used for section headers) */
-.dark .text-slate-900,
-.dark .text-slate-800,
-.dark .text-slate-700 {
+table td {
   color: var(--text-primary) !important;
-}
-
-.dark .text-slate-600,
-.dark .text-slate-500 {
-  color: var(--text-secondary);
-}
-
-.dark .text-slate-400 {
-  color: var(--text-tertiary);
-}
-
-/* Borders */
-.dark .border-gray-100,
-.dark .border-gray-200 {
   border-color: var(--border-color);
 }
 
-.dark .border-slate-200,
-.dark .border-slate-300 {
-  border-color: var(--border-color);
-}
-
-/* Info Boxes */
-.dark .bg-blue-50 {
-  background: rgba(30, 64, 175, 0.1) !important;
-}
-
-.dark .border-blue-200 {
-  border-color: rgba(59, 130, 246, 0.3);
-}
-
-.dark .text-blue-700 {
-  color: #60a5fa;
-}
-
-/* Alert/Warning Boxes */
-.dark .bg-red-50 {
-  background: rgba(153, 27, 27, 0.2) !important;
-}
-
-.dark .text-red-500 {
-  color: #f87171;
-}
-
-.dark .bg-orange-50 {
-  background: rgba(194, 65, 12, 0.2) !important;
-}
-
-.dark .text-orange-700 {
-  color: #fb923c;
-}
-
-/* Leaflet Map - Dark Mode Adjustments */
-.dark .leaflet-container {
-  background: var(--bg-tertiary);
-}
-
-.dark .leaflet-popup-content-wrapper {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-}
-
-.dark .leaflet-popup-tip {
-  background: var(--bg-secondary);
-}
-
-/* Scrollbars - Dark Mode */
-.dark ::-webkit-scrollbar-track {
-  background: var(--bg-tertiary);
-}
-
-.dark ::-webkit-scrollbar-thumb {
-  background: var(--text-tertiary);
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
-}
-
-/* Tables - Dark Mode - Enhanced */
-.dark table {
-  color: var(--text-primary);
-}
+table tr:hover { background: var(--bg-tertiary); }
 
 .dark table th {
   background: var(--bg-tertiary);
   color: var(--text-secondary) !important;
 }
-
 .dark table td {
   color: var(--text-primary) !important;
   border-color: var(--border-color);
 }
+.dark table tr:hover { background: var(--bg-tertiary); }
 
-/* Table cells with specific text classes */
-.dark table td .text-gray-900,
-.dark table td .text-gray-800,
-.dark table td .text-gray-700 {
-  color: var(--text-primary) !important;
+/* ================================
+   Dark Mode Toggle
+   ================================ */
+#dark-mode-toggle .toggle-slider {
+  transition: transform 0.2s ease-out, background-color 0.2s ease;
 }
+#dark-mode-toggle:hover .toggle-slider { background-color: #f9fafb; }
+.dark #dark-mode-toggle:hover .toggle-slider { background-color: #e5e7eb; }
 
-.dark table td .text-gray-600,
-.dark table td .text-gray-500 {
-  color: var(--text-secondary) !important;
-}
+#dark-mode-toggle > div > div { background-color: var(--toggle-bg); }
+#dark-mode-toggle:hover > div > div { background-color: var(--toggle-bg-hover); }
+.dark #dark-mode-toggle > div > div { background-color: var(--toggle-bg); }
+.dark #dark-mode-toggle:hover > div > div { background-color: var(--toggle-bg-hover); }
 
-.dark table td .text-gray-400 {
-  color: var(--text-tertiary) !important;
-}
+/* ================================
+   Leaflet Map
+   ================================ */
+.dark .leaflet-container { background: var(--bg-tertiary); }
+.dark .leaflet-popup-content-wrapper { background: var(--bg-secondary); color: var(--text-primary); }
+.dark .leaflet-popup-tip { background: var(--bg-secondary); }
 
-.dark table tr:hover {
-  background: var(--bg-tertiary);
-}
+/* ================================
+   Scrollbars
+   ================================ */
+::-webkit-scrollbar-track { background: var(--bg-tertiary); }
+::-webkit-scrollbar-thumb { background: var(--af-gray-3); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--af-gray-4); }
+.dark ::-webkit-scrollbar-track { background: var(--bg-tertiary); }
+.dark ::-webkit-scrollbar-thumb { background: #1a2d55; }
+.dark ::-webkit-scrollbar-thumb:hover { background: var(--af-blue-3); }
 
-/* Badges & Counters */
-.dark .bg-red-100 {
-  background: rgba(153, 27, 27, 0.3) !important;
-}
-
-.dark .text-red-700 {
-  color: #fca5a5;
-}
-
-.dark .bg-orange-100 {
-  background: rgba(194, 65, 12, 0.3) !important;
-}
-
-.dark .text-orange-700 {
-  color: #fdba74;
-}
-
-.dark .bg-green-100 {
-  background: rgba(21, 128, 61, 0.3) !important;
-}
-
-.dark .text-green-700 {
-  color: #86efac;
-}
-
-.dark .bg-yellow-100 {
-  background: rgba(161, 98, 7, 0.3) !important;
-}
-
-.dark .text-yellow-700 {
-  color: #fde047;
-}
-
-/* Buttons */
-.dark button:not(#dark-mode-toggle):not(#dark-mode-toggle-mobile) {
-  color: var(--text-secondary);
-}
-
-.dark button:hover:not(#dark-mode-toggle):not(#dark-mode-toggle-mobile) {
-  background: var(--hover-bg);
-  color: var(--hover-text);
+/* ================================
+   Smooth Transitions
+   ================================ */
+body, aside, header, section, .rounded-xl, button, h1, h2, h3, h4, h5, h6 {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 /* ================================
-   Original Styles
+   Utilities conservées
    ================================ */
-
 .truncate-cell {
   max-width: 280px;
   overflow: hidden;
@@ -370,3 +377,15 @@ h1, h2, h3, h4, h5, h6 {
   padding: 0 !important;
   box-shadow: none !important;
 }
+
+/* ================================
+   Badges non-alerte (compteurs nav)
+   ================================ */
+.dark .bg-red-100    { background: rgba(153, 27, 27, 0.3) !important; }
+.dark .text-red-700  { color: #fca5a5; }
+.dark .bg-orange-100 { background: rgba(194, 65, 12, 0.3) !important; }
+.dark .dark\:text-orange-700 { color: #fdba74; }
+.dark .bg-green-100  { background: rgba(21, 128, 61, 0.3) !important; }
+.dark .text-green-700 { color: #86efac; }
+.dark .bg-yellow-100 { background: rgba(161, 98, 7, 0.3) !important; }
+.dark .text-yellow-700 { color: #fde047; }

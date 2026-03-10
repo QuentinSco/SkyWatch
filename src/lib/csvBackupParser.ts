@@ -1,12 +1,15 @@
 // src/lib/csvBackupParser.ts
 // Parse le CSV "onDemandExtractList" Air France (séparateur ';').
-// Produit des AfFlightArrival utilisables par taf-vol-risks.
+// Produit des AfFlightArrival (arrivées + départs, LC + MC + CC) utilisables par toutes les pages.
 
 import type { AfFlightArrival } from './afFlights';
 import { AF_IATA_TO_ICAO } from './tafParser';
+import { isLongHaulAircraft } from './afFlights';
 
-// Colonne "T.C." (col BN dans Excel) : seul "LC" (Long-Courrier) est retenu.
-// MC = Moyen-Courrier, CC = Court-Courrier, AFF = Affrètement → exclus.
+// Colonne "T.C." (col BN dans Excel) :
+// LC = Long-Courrier, MC = Moyen-Courrier, CC = Court-Courrier → inclus
+// AFF = Affrètement → exclu
+const EXCLUDED_TC = new Set(['AFF']);
 
 function parseDateHr(dateStr: string, hrStr: string): string | undefined {
   const d = dateStr?.trim();
@@ -47,6 +50,9 @@ export function parseCsvBackup(csvText: string, filename = 'upload.csv'): CsvBac
     if (h === 'AF HR') acc.push(i);
     return acc;
   }, []);
+  // Indice 0 = AF HR départ, indice 1 = AF HR arrivée
+  const afHrDepIdx   = afHrIndices.length >= 1 ? afHrIndices[0] : -1;
+  const afDateDepIdx = afHrDepIdx > 0 ? afHrDepIdx - 1 : -1;
   const afHrArrIdx   = afHrIndices.length >= 2 ? afHrIndices[1] : (afHrIndices[0] ?? -1);
   const afDateArrIdx = afHrArrIdx > 0 ? afHrArrIdx - 1 : -1;
 
@@ -60,52 +66,83 @@ export function parseCsvBackup(csvText: string, filename = 'upload.csv'): CsvBac
     if (!rawNum.startsWith('AF ')) continue;
     const flightNumber = rawNum.replace('AF ', '').trim().padStart(3, '0');
 
-    // ── Filtre T.C. : Long-Courrier uniquement ──────────────────────────────────
-    if (col(cells, 'T.C.').toUpperCase() !== 'LC') continue;
+    // ── Filtre T.C. : LC + MC + CC inclus, AFF exclu ───────────────────────────
+    const tc = col(cells, 'T.C.').toUpperCase();
+    if (!tc || EXCLUDED_TC.has(tc)) continue;
 
-    // ── Aéroport arrivée ──────────────────────────────────────────────────
-    const arrIata = col(cells, 'ARR PRV').toUpperCase();
-    if (!arrIata) continue;
-    const arrIcao = AF_IATA_TO_ICAO[arrIata];
-    if (!arrIcao) continue;
-
-    const depIata = col(cells, 'DEP PRV').toUpperCase();
-    const tyAv    = col(cells, 'TY AV');
-
-    // ── Horaires ───────────────────────────────────────────────────────────
-    const sta = parseDateHr(col(cells, 'SA DATE'), col(cells, 'SA HR'));
-    if (!sta) continue;
-
-    const afHrStr   = afHrArrIdx  >= 0 ? (cells[afHrArrIdx]  ?? '').trim() : '';
-    const afDateStr = afDateArrIdx >= 0 ? (cells[afDateArrIdx] ?? '').trim() : '';
-    const etaFromAfHr = parseDateHr(afDateStr, afHrStr);
-
-    const actualIn = parseDateHr(col(cells, 'IN DATE'), col(cells, 'IN HR'));
-
-    // Priorité : posé (IN) > estimé en vol (AF HR) > STA
-    const estimatedTouchDownTime = actualIn ?? etaFromAfHr;
-
-    const std          = parseDateHr(col(cells, 'SD DATE'), col(cells, 'SD HR'));
     const registration = col(cells, 'REGISTRATION') || undefined;
+    const tyAv         = col(cells, 'TY AV') || undefined;
+    const isLongHaul   = isLongHaulAircraft(tyAv);
 
-    flights.push({
-      flightId:              `AF${flightNumber}-CSV-A-${arrIcao}-${sta}`,
-      marketingCarrier:      'AF',
-      flightNumber,
-      movementType:          'A',
-      iata:                  arrIata,
-      icao:                  arrIcao,
-      registration,
-      aircraftType:          tyAv || undefined,
-      isLongHaul:            true, // T.C.=LC garantit long-courrier
-      scheduledArrival:      sta,
-      estimatedTouchDownTime,
-      timeToArrivalMinutes:  estimatedTouchDownTime
-        ? Math.round((new Date(estimatedTouchDownTime).getTime() - Date.now()) / 60000)
-        : undefined,
-      ...(depIata ? { departureIata: depIata } : {}),
-      ...(std     ? { scheduledDeparture: std } : {}),
-    });
+    const arrIata = col(cells, 'ARR PRV').toUpperCase();
+    const depIata = col(cells, 'DEP PRV').toUpperCase();
+
+    // ── ARRIVÉE ───────────────────────────────────────────────────────────────
+    if (arrIata) {
+      const arrIcao = AF_IATA_TO_ICAO[arrIata];
+      const sta = parseDateHr(col(cells, 'SA DATE'), col(cells, 'SA HR'));
+
+      if (arrIcao && sta) {
+        const afHrArrStr   = afHrArrIdx  >= 0 ? (cells[afHrArrIdx]  ?? '').trim() : '';
+        const afDateArrStr = afDateArrIdx >= 0 ? (cells[afDateArrIdx] ?? '').trim() : '';
+        const etaFromAfHr  = parseDateHr(afDateArrStr, afHrArrStr);
+        const actualIn     = parseDateHr(col(cells, 'IN DATE'), col(cells, 'IN HR'));
+        const estimatedTouchDownTime = actualIn ?? etaFromAfHr;
+
+        const std = parseDateHr(col(cells, 'SD DATE'), col(cells, 'SD HR'));
+
+        flights.push({
+          flightId:              `AF${flightNumber}-CSV-A-${arrIcao}-${sta}`,
+          marketingCarrier:      'AF',
+          flightNumber,
+          movementType:          'A',
+          iata:                  arrIata,
+          icao:                  arrIcao,
+          registration,
+          aircraftType:          tyAv,
+          isLongHaul,
+          scheduledArrival:      sta,
+          estimatedTouchDownTime,
+          timeToArrivalMinutes:  estimatedTouchDownTime
+            ? Math.round((new Date(estimatedTouchDownTime).getTime() - Date.now()) / 60000)
+            : undefined,
+          ...(depIata ? { departureIata: depIata } : {}),
+          ...(std     ? { scheduledDeparture: std } : {}),
+        });
+      }
+    }
+
+    // ── DÉPART ───────────────────────────────────────────────────────────────
+    if (depIata) {
+      const depIcao = AF_IATA_TO_ICAO[depIata];
+      const std = parseDateHr(col(cells, 'SD DATE'), col(cells, 'SD HR'));
+
+      if (depIcao && std) {
+        const afHrDepStr   = afHrDepIdx   >= 0 ? (cells[afHrDepIdx]   ?? '').trim() : '';
+        const afDateDepStr = afDateDepIdx >= 0 ? (cells[afDateDepIdx] ?? '').trim() : '';
+        const eobt         = parseDateHr(afDateDepStr, afHrDepStr);
+
+        flights.push({
+          flightId:              `AF${flightNumber}-CSV-D-${depIcao}-${std}`,
+          marketingCarrier:      'AF',
+          flightNumber,
+          movementType:          'D',
+          iata:                  depIata,
+          icao:                  depIcao,
+          registration,
+          aircraftType:          tyAv,
+          isLongHaul,
+          scheduledArrival:      std,  // champ réutilisé = STD pour les départs
+          estimatedTouchDownTime: eobt, // = EOBT
+          timeToArrivalMinutes:  eobt
+            ? Math.round((new Date(eobt).getTime() - Date.now()) / 60000)
+            : undefined,
+          estimatedOffBlockTime: eobt,
+          scheduledDeparture:    std,
+          ...(arrIata ? { departureIata: arrIata } : {}), // champ sémantiquement inversé mais utilisé pour info
+        });
+      }
+    }
   }
 
   return { flights, uploadedAt: Date.now(), filename, rowCount: dataLines.length };

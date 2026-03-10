@@ -258,8 +258,7 @@ async function fallbackToStaleCache(lcOnly: boolean): Promise<AfFlightArrival[]>
 
 /**
  * Retourne les vols du CSV backup si le mode backup est actif.
- * Le CSV ne contient que des arrivées LC (movementType='A', isLongHaul=true).
- * Les départs ne sont pas couverts par le backup CSV.
+ * Depuis la mise à jour du parser, le CSV contient LC + MC + CC, en arrivées ET départs.
  */
 async function getBackupFlights(): Promise<AfFlightArrival[] | null> {
   try {
@@ -370,8 +369,16 @@ export async function getCachedAfDepartures(force = false, lcOnly = true): Promi
     }
   }
 
-  // Note : le backup CSV ne contient que des arrivées (pas de départs dans l'export).
-  // On ne fait donc pas de fallback backup pour les départs.
+  // ── Fallback backup CSV pour les départs ──
+  // Le parser génère maintenant movementType='D' depuis DEP PRV + SD DATE/HR
+  if (!force) {
+    const backup = await getBackupFlights();
+    if (backup) {
+      const departures = backup.filter(f => f.movementType === 'D');
+      console.log(`[AF Flights] backup DEP — ${departures.length} départs (lcOnly=${lcOnly})`);
+      return lcOnly ? departures.filter(f => f.isLongHaul) : departures;
+    }
+  }
 
   await getCachedAfArrivals(force, false);
 

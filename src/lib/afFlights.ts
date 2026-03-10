@@ -30,6 +30,7 @@ export interface AfFlightArrival {
 export interface AfFlightsCache {
   flights: AfFlightArrival[];
   fetchedAt: number;
+  quotaExceeded?: boolean;  // true si le dernier fetch a échoué avec un 429
 }
 
 const KV_KEY          = 'af_flights_cache';
@@ -244,6 +245,27 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
   return Array.from(dedup.values());
 }
 
+/**
+ * Tente de récupérer le cache existant (même périmé) et le ré-étend pour éviter
+ * de retenter inutilement pendant KV_TTL_SEC secondes.
+ * Marque quotaExceeded=true dans le cache pour que l'UI puisse afficher un avertissement.
+ */
+async function fallbackToStaleCache(lcOnly: boolean): Promise<AfFlightArrival[]> {
+  try {
+    const stale = await kv.get<AfFlightsCache>(KV_KEY);
+    if (stale && Array.isArray(stale.flights)) {
+      // Ré-étendre le TTL pour ne pas retenter avant 2h
+      await kv.set(KV_KEY, { ...stale, quotaExceeded: true } satisfies AfFlightsCache, { ex: KV_TTL_SEC });
+      console.warn(`[AF Flights] quota dépassé — fallback cache périmé (${stale.flights.length} vols, fetchedAt=${new Date(stale.fetchedAt).toISOString()})`);
+      const arrivals = stale.flights.filter(f => !f.movementType || f.movementType === 'A');
+      return lcOnly ? arrivals.filter(f => f.isLongHaul) : arrivals;
+    }
+  } catch (e) {
+    console.warn('[AF Flights] fallback stale cache error:', e);
+  }
+  return [];
+}
+
 export async function getCachedAfArrivals(force = false, lcOnly = true): Promise<AfFlightArrival[]> {
   const now = Date.now();
 
@@ -290,10 +312,14 @@ export async function getCachedAfArrivals(force = false, lcOnly = true): Promise
   try {
     const flights = await callAfApi();
     const ttl = flights.length === 0 ? KV_EMPTY_TTL : KV_TTL_SEC;
-    await kv.set(KV_KEY, { flights, fetchedAt: Date.now() } satisfies AfFlightsCache, { ex: ttl });
+    await kv.set(KV_KEY, { flights, fetchedAt: Date.now(), quotaExceeded: false } satisfies AfFlightsCache, { ex: ttl });
     console.log(`[AF Flights] cache updated — ${flights.length} mouvements, TTL ${ttl}s`);
     const arrivals = flights.filter(f => f.movementType === 'A');
     return lcOnly ? arrivals.filter(f => f.isLongHaul) : arrivals;
+  } catch (err: any) {
+    // 429 ou erreur réseau → fallback sur le cache périmé
+    console.warn('[AF Flights] callAfApi error:', err?.message);
+    return fallbackToStaleCache(lcOnly);
   } finally {
     await kv.del(KV_LOCK_KEY);
   }
@@ -342,6 +368,19 @@ export async function getCacheFetchedAt(): Promise<number | null> {
     return cached?.fetchedAt ?? null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Retourne true si le dernier fetch a échoué avec un quota dépassé (429).
+ * Permet à l'UI d'afficher un avertissement approprié.
+ */
+export async function isQuotaExceeded(): Promise<boolean> {
+  try {
+    const cached = await kv.get<AfFlightsCache>(KV_KEY);
+    return cached?.quotaExceeded === true;
+  } catch {
+    return false;
   }
 }
 

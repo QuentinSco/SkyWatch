@@ -61,10 +61,6 @@ function minutesToArrival(etaIso: string | undefined): number | undefined {
   return Math.round((new Date(etaIso).getTime() - Date.now()) / 60000);
 }
 
-/**
- * Mappe un leg en AfFlightArrival.
- * movementType détermine si on lit departureInformation (D) ou arrivalInformation (A).
- */
 function mapLeg(operationalFlight: any, leg: any, movementType: 'A' | 'D'): AfFlightArrival | null {
   try {
     const carrier = operationalFlight.airline?.code ?? 'AF';
@@ -72,7 +68,6 @@ function mapLeg(operationalFlight: any, leg: any, movementType: 'A' | 'D'): AfFl
     const typeCode = leg.aircraft?.typeCode ?? undefined;
 
     if (movementType === 'A') {
-      // ── Arrivée : aéroport cible = arrivalInformation ──
       const arrCode = leg.arrivalInformation?.airport?.code;
       if (!arrCode) return null;
       const iata = arrCode.toUpperCase();
@@ -109,7 +104,6 @@ function mapLeg(operationalFlight: any, leg: any, movementType: 'A' | 'D'): AfFl
         ...(eobtRaw  ? { estimatedOffBlockTime: eobtRaw }       : {}),
       };
     } else {
-      // ── Départ : aéroport cible = departureInformation ──
       const depInfo  = leg.departureInformation ?? {};
       const depCode  = depInfo.airport?.code ?? depInfo.airport?.iataCode;
       if (!depCode) return null;
@@ -133,8 +127,8 @@ function mapLeg(operationalFlight: any, leg: any, movementType: 'A' | 'D'): AfFl
         aircraftType:           typeCode,
         haul:                   operationalFlight.haul ?? undefined,
         isLongHaul:             isLongHaulAircraft(typeCode),
-        scheduledArrival:       scheduled,   // STD stockée dans scheduledArrival par convention
-        estimatedTouchDownTime: eobt,        // EOBT stocké dans estimatedTouchDownTime par convention
+        scheduledArrival:       scheduled,
+        estimatedTouchDownTime: eobt,
         timeToArrivalMinutes:   minutesToArrival(eobt ?? scheduled),
       };
     }
@@ -152,10 +146,6 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
   }
 
   const now = new Date();
-  // Démarre à J-1/00:00z pour capturer les vols long-courriers partis la veille
-  // et arrivant dans les premières heures du jour courant (ex. AF174 CDG→MEX).
-  // L'API AF indexe les vols sur leur date de départ — sans ce décalage,
-  // un vol STD 09MAR/14:50z disparaît de la fenêtre dès 10MAR/00:00z.
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 0, 0, 0));
   const end   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 23, 59, 59));
 
@@ -165,14 +155,13 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
     'User-Agent': 'SkyWatch/1.0',
   };
 
-  // Pas de movementType → l'API retourne arrivées ET départs en un seul appel
   const url = new URL('https://api.airfranceklm.com/opendata/flightstatus');
   url.searchParams.set('startRange',           start.toISOString());
   url.searchParams.set('endRange',             end.toISOString());
   url.searchParams.set('timeType',             'U');
   url.searchParams.set('carrierCode',          'AF');
   url.searchParams.set('operatingAirlineCode', 'AF');
-  url.searchParams.set('pageSize',             '100');
+  url.searchParams.set('pageSize',             '500'); // ~6 pages max vs 27 avec pageSize=100
   url.searchParams.set('pageNumber',           '0');
 
   console.log('[AF Flights] → requête API AF (A+D)', start.toISOString(), '→', end.toISOString());
@@ -228,7 +217,6 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
       const aircraftType = leg.aircraft?.typeCode ?? '';
       if (!isOperationalAircraft(aircraftType)) { skippedAircraft++; continue; }
 
-      // Mapper les deux mouvements pour ce leg
       const arr = mapLeg(op, leg, 'A');
       if (arr) flights.push(arr);
 
@@ -249,16 +237,10 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
   return Array.from(dedup.values());
 }
 
-/**
- * Tente de récupérer le cache existant (même périmé) et le ré-étend pour éviter
- * de retenter inutilement pendant KV_TTL_SEC secondes.
- * Marque quotaExceeded=true dans le cache pour que l'UI puisse afficher un avertissement.
- */
 async function fallbackToStaleCache(lcOnly: boolean): Promise<AfFlightArrival[]> {
   try {
     const stale = await kv.get<AfFlightsCache>(KV_KEY);
     if (stale && Array.isArray(stale.flights)) {
-      // Ré-étendre le TTL pour ne pas retenter avant 2h
       await kv.set(KV_KEY, { ...stale, quotaExceeded: true } satisfies AfFlightsCache, { ex: KV_TTL_SEC });
       console.warn(`[AF Flights] quota dépassé — fallback cache périmé (${stale.flights.length} vols, fetchedAt=${new Date(stale.fetchedAt).toISOString()})`);
       const arrivals = stale.flights.filter(f => !f.movementType || f.movementType === 'A');
@@ -281,7 +263,6 @@ export async function getCachedAfArrivals(force = false, lcOnly = true): Promise
           const eta = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
           return eta > now - 30 * 60 * 1000;
         });
-        // Rétrocompatibilité : si movementType absent, traiter comme arrivée
         const arrivals = futureFlights.filter(f => !f.movementType || f.movementType === 'A');
         console.log(`[AF Flights] cache hit — ${arrivals.length} arrivées (lcOnly=${lcOnly})`);
         return lcOnly ? arrivals.filter(f => f.isLongHaul) : arrivals;
@@ -321,7 +302,6 @@ export async function getCachedAfArrivals(force = false, lcOnly = true): Promise
     const arrivals = flights.filter(f => f.movementType === 'A');
     return lcOnly ? arrivals.filter(f => f.isLongHaul) : arrivals;
   } catch (err: any) {
-    // 429 ou erreur réseau → fallback sur le cache périmé
     console.warn('[AF Flights] callAfApi error:', err?.message);
     return fallbackToStaleCache(lcOnly);
   } finally {
@@ -329,9 +309,6 @@ export async function getCachedAfArrivals(force = false, lcOnly = true): Promise
   }
 }
 
-/**
- * Retourne uniquement les départs (movementType === 'D') depuis le cache.
- */
 export async function getCachedAfDepartures(force = false, lcOnly = true): Promise<AfFlightArrival[]> {
   const now = Date.now();
 
@@ -352,8 +329,6 @@ export async function getCachedAfDepartures(force = false, lcOnly = true): Promi
     }
   }
 
-  // Pas de cache → déclencher un fetch complet via getCachedAfArrivals
-  // (le cache sera rempli avec A+D, on relit ensuite)
   await getCachedAfArrivals(force, false);
 
   try {
@@ -375,10 +350,6 @@ export async function getCacheFetchedAt(): Promise<number | null> {
   }
 }
 
-/**
- * Retourne true si le dernier fetch a échoué avec un quota dépassé (429).
- * Permet à l'UI d'afficher un avertissement approprié.
- */
 export async function isQuotaExceeded(): Promise<boolean> {
   try {
     const cached = await kv.get<AfFlightsCache>(KV_KEY);
@@ -388,9 +359,7 @@ export async function isQuotaExceeded(): Promise<boolean> {
   }
 }
 
-/**
- * @deprecated Alias de getCachedAfArrivals — conservé pour compatibilité.
- */
+/** @deprecated Alias de getCachedAfArrivals — conservé pour compatibilité. */
 export async function getCachedAfFlights(force = false): Promise<AfFlightArrival[]> {
   return getCachedAfArrivals(force, /* lcOnly = */ true);
 }

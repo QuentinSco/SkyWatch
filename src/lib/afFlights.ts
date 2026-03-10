@@ -39,6 +39,10 @@ const KV_TTL_SEC      = 2 * 60 * 60;
 const KV_EMPTY_TTL    = 5 * 60;
 const LOCK_TTL        = 60;
 
+// Clés backup (partagées avec backup-upload.ts)
+const KV_BACKUP_KEY      = 'af_backup_flights';
+const KV_BACKUP_MODE_KEY = 'af_backup_mode';
+
 const LC_AIRCRAFT_TYPES = new Set(['332', '77W', '772', '789', '359']);
 const MC_AIRCRAFT_TYPES = new Set(['319', '320', '321', '223', 'E90']);
 
@@ -161,7 +165,7 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
   url.searchParams.set('timeType',             'U');
   url.searchParams.set('carrierCode',          'AF');
   url.searchParams.set('operatingAirlineCode', 'AF');
-  url.searchParams.set('pageSize',             '500'); // ~6 pages max vs 27 avec pageSize=100
+  url.searchParams.set('pageSize',             '500');
   url.searchParams.set('pageNumber',           '0');
 
   console.log('[AF Flights] → requête API AF (A+D)', start.toISOString(), '→', end.toISOString());
@@ -252,13 +256,32 @@ async function fallbackToStaleCache(lcOnly: boolean): Promise<AfFlightArrival[]>
   return [];
 }
 
+/**
+ * Retourne les vols du CSV backup si le mode backup est actif.
+ * Le CSV ne contient que des arrivées LC (movementType='A', isLongHaul=true).
+ * Les départs ne sont pas couverts par le backup CSV.
+ */
+async function getBackupFlights(): Promise<AfFlightArrival[] | null> {
+  try {
+    const active = await kv.get<boolean>(KV_BACKUP_MODE_KEY);
+    if (!active) return null;
+    const cache = await kv.get<{ flights: AfFlightArrival[]; uploadedAt: number; filename: string }>(KV_BACKUP_KEY);
+    if (!cache || !Array.isArray(cache.flights) || cache.flights.length === 0) return null;
+    console.log(`[AF Flights] mode backup actif — ${cache.flights.length} vols depuis CSV (${cache.filename})`);
+    return cache.flights;
+  } catch (e) {
+    console.warn('[AF Flights] getBackupFlights error:', e);
+    return null;
+  }
+}
+
 export async function getCachedAfArrivals(force = false, lcOnly = true): Promise<AfFlightArrival[]> {
   const now = Date.now();
 
   if (!force) {
     try {
       const cached = await kv.get<AfFlightsCache>(KV_KEY);
-      if (cached && Array.isArray(cached.flights)) {
+      if (cached && Array.isArray(cached.flights) && cached.flights.length > 0) {
         const futureFlights = cached.flights.filter(f => {
           const eta = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
           return eta > now - 30 * 60 * 1000;
@@ -269,6 +292,15 @@ export async function getCachedAfArrivals(force = false, lcOnly = true): Promise
       }
     } catch (e) {
       console.warn('[AF Flights] cache read error:', e);
+    }
+  }
+
+  // ── Fallback backup CSV si mode backup actif et cache AF absent/vide ──
+  if (!force) {
+    const backup = await getBackupFlights();
+    if (backup) {
+      const arrivals = backup.filter(f => !f.movementType || f.movementType === 'A');
+      return lcOnly ? arrivals.filter(f => f.isLongHaul) : arrivals;
     }
   }
 
@@ -303,7 +335,16 @@ export async function getCachedAfArrivals(force = false, lcOnly = true): Promise
     return lcOnly ? arrivals.filter(f => f.isLongHaul) : arrivals;
   } catch (err: any) {
     console.warn('[AF Flights] callAfApi error:', err?.message);
-    return fallbackToStaleCache(lcOnly);
+    // Fallback 1 : cache périmé AF
+    const stale = await fallbackToStaleCache(lcOnly);
+    if (stale.length > 0) return stale;
+    // Fallback 2 : backup CSV
+    const backup = await getBackupFlights();
+    if (backup) {
+      const arrivals = backup.filter(f => !f.movementType || f.movementType === 'A');
+      return lcOnly ? arrivals.filter(f => f.isLongHaul) : arrivals;
+    }
+    return [];
   } finally {
     await kv.del(KV_LOCK_KEY);
   }
@@ -315,7 +356,7 @@ export async function getCachedAfDepartures(force = false, lcOnly = true): Promi
   if (!force) {
     try {
       const cached = await kv.get<AfFlightsCache>(KV_KEY);
-      if (cached && Array.isArray(cached.flights)) {
+      if (cached && Array.isArray(cached.flights) && cached.flights.length > 0) {
         const futureFlights = cached.flights.filter(f => {
           const t = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
           return t > now - 30 * 60 * 1000;
@@ -328,6 +369,9 @@ export async function getCachedAfDepartures(force = false, lcOnly = true): Promi
       console.warn('[AF Flights] cache read error (dep):', e);
     }
   }
+
+  // Note : le backup CSV ne contient que des arrivées (pas de départs dans l'export).
+  // On ne fait donc pas de fallback backup pour les départs.
 
   await getCachedAfArrivals(force, false);
 

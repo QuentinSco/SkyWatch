@@ -219,9 +219,13 @@ import '../styles/global.css';
             </div>
           </section>
 
-          <footer class="pt-6 border-t border-gray-200 dark:border-gray-800 text-xs text-gray-400 dark:text-gray-600 flex flex-wrap gap-4 justify-between">
-            <span>Sources : GDACS (UN/CE) · NOAA/NWS · MeteoAlarm (EUMETNET) · AviationWeather.gov (TAF) · NHC (NOAA) · RSMC La Réunion (Météo-France) · JTWC</span>
-            <span>SkyWatch POC v0.1 — Open source uniquement</span>
+          <footer class="pt-4 border-t border-gray-200 dark:border-gray-800">
+            <!-- Widget backup : discret, en bas de page -->
+            <div id="backup-widget" class="mb-3"></div>
+            <div class="text-xs text-gray-400 dark:text-gray-600 flex flex-wrap gap-4 justify-between">
+              <span>Sources : GDACS (UN/CE) · NOAA/NWS · MeteoAlarm (EUMETNET) · AviationWeather.gov (TAF) · NHC (NOAA) · RSMC La Réunion (Météo-France) · JTWC</span>
+              <span>SkyWatch POC v0.1 — Open source uniquement</span>
+            </div>
           </footer>
 
         </div>
@@ -231,6 +235,7 @@ import '../styles/global.css';
 
   <script is:inline src="/lib/main.js"></script>
   <script is:inline src="/lib/taf-ui.js"></script>
+  <script is:inline src="/lib/backup-ui.js"></script>
   <script is:inline src="/lib/lazy-load.js"></script>
 
   <script is:inline>

@@ -164,8 +164,12 @@ export const GET: APIRoute = async ({ url }) => {
     const now = Date.now();
     const cleanedFlights = allFlights.filter(f => {
       if (f.aircraftType === 'BUS') return false;
-      // Exclure les vols à destination de CDG ou ORY
-      // (ils sont affichés dans la section base via baseHits)
+      // Exclure les vols au départ (movementType D) : pas d'ETA d'arrivée pertinent
+      // En mode backup, le CSV génère une entrée 'D' par vol (ex: AF159 DFW→CDG
+      // produit un départ DFW avec f.iata='DFW', f.icao='KDFW'), qui passerait
+      // le filtre CDG/ORY ci-dessous et polluerait la section "Vols LC impactés".
+      if (f.movementType === 'D') return false;
+      // Exclure les arrivées à CDG ou ORY (affichées dans la section base)
       if (f.iata === 'CDG' || f.iata === 'ORY') return false;
       const etaIso = f.estimatedTouchDownTime ?? f.scheduledArrival;
       if (etaIso) {

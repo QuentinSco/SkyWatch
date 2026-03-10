@@ -2,7 +2,7 @@
 import type { APIRoute } from 'astro';
 import type { TafRisk, TafThreat } from '../../lib/tafParser';
 import type { AfFlightArrival } from '../../lib/afFlights';
-import { fetchTafRisks, AF_AIRPORT_ICAOS } from '../../lib/tafParser';
+import { fetchTafRisks, parseTafToRisks, AF_AIRPORT_ICAOS } from '../../lib/tafParser';
 import { getCachedAfArrivals, getCacheFetchedAt } from '../../lib/afFlights';
 import { redis } from '../../lib/redis';
 import { KV_BACKUP_KEY, KV_BACKUP_MODE_KEY } from './backup-upload';
@@ -112,7 +112,6 @@ export const GET: APIRoute = async ({ url }) => {
   // ── Cache KV — hit → retour immédiat (seulement si pas mode backup) ─────────────
   if (!force && kv) {
     try {
-      // Si le backup est actif on by-passe le cache pour refléter les vols CSV
       const backupActive = await shouldUseBackup();
       if (!backupActive) {
         const cached = await kv.get<TafVolRisksResponse>(TAF_VOL_CACHE_KEY);
@@ -137,7 +136,7 @@ export const GET: APIRoute = async ({ url }) => {
     if (usingBackup) {
       dbg('Mode backup actif — lecture vols depuis CSV KV (LC uniquement)');
       const { flights, info } = await getBackupFlights();
-      allFlights = flights; // déjà filtré LC dans getBackupFlights()
+      allFlights = flights;
       backupInfo = info;
       console.log(`[taf-vol-risks] backup: ${allFlights.length} vols LC chargés`);
     } else {
@@ -145,6 +144,7 @@ export const GET: APIRoute = async ({ url }) => {
       dbg(`Vols chargés API AF : ${allFlights.length}`);
     }
 
+    // ── TAF réseau AF + TAF bases CDG/ORY (fetch dédié, indépendant du cache) ────
     const [tafRisks, rawBaseTafsResult] = await Promise.all([
       fetchTafRisks(force, false),
       fetch(
@@ -158,16 +158,23 @@ export const GET: APIRoute = async ({ url }) => {
 
     const cacheFetchedAt = usingBackup ? null : await getCacheFetchedAt();
 
-    dbg(`TAF risques : ${tafRisks.length} aéroports`);
+    // Parser les threats CDG/ORY directement depuis le TAF brut dédié
+    // → indépendant du cache fetchTafRisks qui peut ne pas contenir LFPG/LFPO
+    //   si ceux-ci n'avaient aucune menace lors du dernier remplissage du cache.
+    const rawBaseTafs: any[] = Array.isArray(rawBaseTafsResult) ? rawBaseTafsResult : [];
+    const baseParsedRisks = parseTafToRisks(rawBaseTafs); // inclut yellow
+
+    const IATA_MAP: Record<string, string> = { LFPG: 'CDG', LFPO: 'ORY' };
+    const NAME_MAP: Record<string, string> = { LFPG: 'Paris CDG', LFPO: 'Paris Orly' };
+
+    dbg(`TAF risques réseau : ${tafRisks.length} aéroports`);
+    dbg(`TAF bases parsés : ${baseParsedRisks.length} aéroports`);
     dbg(`Vols chargés total : ${allFlights.length}`);
 
     const now = Date.now();
     const cleanedFlights = allFlights.filter(f => {
       if (f.aircraftType === 'BUS') return false;
       // Exclure les vols au départ (movementType D) : pas d'ETA d'arrivée pertinent
-      // En mode backup, le CSV génère une entrée 'D' par vol (ex: AF159 DFW→CDG
-      // produit un départ DFW avec f.iata='DFW', f.icao='KDFW'), qui passerait
-      // le filtre CDG/ORY ci-dessous et polluerait la section "Vols LC impactés".
       if (f.movementType === 'D') return false;
       // Exclure les arrivées à CDG ou ORY (affichées dans la section base)
       if (f.iata === 'CDG' || f.iata === 'ORY') return false;
@@ -205,22 +212,18 @@ export const GET: APIRoute = async ({ url }) => {
     const filteredHits = hits.filter(h => !HOME_BASES.has(h.taf.icao));
     const baseHits     = hits.filter(h =>  HOME_BASES.has(h.taf.icao));
 
-    const IATA_MAP: Record<string, string> = { LFPG: 'CDG', LFPO: 'ORY' };
-    const NAME_MAP: Record<string, string> = { LFPG: 'Paris CDG', LFPO: 'Paris Orly' };
-
-    const rawBaseTafs: unknown[] = Array.isArray(rawBaseTafsResult) ? rawBaseTafsResult : [];
-
+    // ── Construction baseTafs — threats depuis le parser dédié (toujours à jour) ──
     const baseTafs: BaseTaf[] = ['LFPG', 'LFPO'].map(icao => {
-      const riskEntry = tafRisks.find(r => r.icao === icao);
-      const rawEntry  = (rawBaseTafs as Array<Record<string, unknown>>).find(t => (t['icaoId'] ?? t['stationId']) === icao);
+      const parsedEntry = baseParsedRisks.find(r => r.icao === icao);
+      const rawEntry    = rawBaseTafs.find((t: any) => (t.icaoId ?? t.stationId) === icao);
       return {
         icao,
         iata: IATA_MAP[icao],
         name: NAME_MAP[icao],
-        rawTaf:        riskEntry?.rawTaf ?? (rawEntry?.['rawTAF'] as string) ?? '',
-        worstSeverity: riskEntry?.worstSeverity ?? 'none',
-        threats:       riskEntry?.threats ?? [],
-        fcsts:         (rawEntry?.['fcsts'] as unknown[]) ?? [],
+        rawTaf:        parsedEntry?.rawTaf ?? (rawEntry?.rawTAF as string) ?? '',
+        worstSeverity: parsedEntry?.worstSeverity ?? 'none',
+        threats:       parsedEntry?.threats ?? [],
+        fcsts:         (rawEntry?.fcsts as unknown[]) ?? [],
       };
     });
 

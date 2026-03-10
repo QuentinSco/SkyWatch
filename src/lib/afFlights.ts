@@ -152,7 +152,11 @@ async function callAfApi(): Promise<AfFlightArrival[]> {
   }
 
   const now = new Date();
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
+  // Démarre à J-1/00:00z pour capturer les vols long-courriers partis la veille
+  // et arrivant dans les premières heures du jour courant (ex. AF174 CDG→MEX).
+  // L'API AF indexe les vols sur leur date de départ — sans ce décalage,
+  // un vol STD 09MAR/14:50z disparaît de la fenêtre dès 10MAR/00:00z.
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 0, 0, 0));
   const end   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 23, 59, 59));
 
   const headers: Record<string, string> = {

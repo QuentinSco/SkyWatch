@@ -4,12 +4,9 @@
 
 import type { AfFlightArrival } from './afFlights';
 import { AF_IATA_TO_ICAO } from './tafParser';
-import { isLongHaulAircraft } from './afFlights';
 
-// ── Types de créneau retenus pour la section "Vols LC impactés" ─────────────────
-// Colonne TC : LC = Long-Courrier, AFF = Affrètement LC
-// MC = Moyen-Courrier, CC = Court-Courrier → exclus du tableau Vols LC
-const LC_TC_TYPES = new Set(['LC', 'AFF']);
+// Colonne TC : seul "LC" (Long-Courrier) est retenu.
+// MC = Moyen-Courrier, CC = Court-Courrier, AFF = Affrètement → exclus.
 
 function parseDateHr(dateStr: string, hrStr: string): string | undefined {
   const d = dateStr?.trim();
@@ -50,8 +47,7 @@ export function parseCsvBackup(csvText: string, filename = 'upload.csv'): CsvBac
     if (h === 'AF HR') acc.push(i);
     return acc;
   }, []);
-  // 2ème occurrence = ETA arrivée
-  const afHrArrIdx  = afHrIndices.length >= 2 ? afHrIndices[1] : (afHrIndices[0] ?? -1);
+  const afHrArrIdx   = afHrIndices.length >= 2 ? afHrIndices[1] : (afHrIndices[0] ?? -1);
   const afDateArrIdx = afHrArrIdx > 0 ? afHrArrIdx - 1 : -1;
 
   const flights: AfFlightArrival[] = [];
@@ -64,11 +60,10 @@ export function parseCsvBackup(csvText: string, filename = 'upload.csv'): CsvBac
     if (!rawNum.startsWith('AF ')) continue;
     const flightNumber = rawNum.replace('AF ', '').trim().padStart(3, '0');
 
-    // ── Filtre TC : LC et AFF uniquement ────────────────────────────────────────
-    const tc = col(cells, 'TC').toUpperCase();
-    if (!LC_TC_TYPES.has(tc)) continue;
+    // ── Filtre TC : Long-Courrier uniquement ─────────────────────────────────────
+    if (col(cells, 'TC').toUpperCase() !== 'LC') continue;
 
-    // ── Aéroport arrivée ──────────────────────────────────────────────────
+    // ── Aéroport arrivée ─────────────────────────────────────────────────────
     const arrIata = col(cells, 'ARR PRV').toUpperCase();
     if (!arrIata) continue;
     const arrIcao = AF_IATA_TO_ICAO[arrIata];
@@ -77,22 +72,20 @@ export function parseCsvBackup(csvText: string, filename = 'upload.csv'): CsvBac
     const depIata = col(cells, 'DEP PRV').toUpperCase();
     const tyAv    = col(cells, 'TY AV');
 
-    // ── Horaires ─────────────────────────────────────────────────────────────
+    // ── Horaires ───────────────────────────────────────────────────────────
     const sta = parseDateHr(col(cells, 'SA DATE'), col(cells, 'SA HR'));
     if (!sta) continue;
 
-    // AF HR (2ème occurrence) = ETA si en vol
     const afHrStr   = afHrArrIdx  >= 0 ? (cells[afHrArrIdx]  ?? '').trim() : '';
     const afDateStr = afDateArrIdx >= 0 ? (cells[afDateArrIdx] ?? '').trim() : '';
     const etaFromAfHr = parseDateHr(afDateStr, afHrStr);
 
-    // IN DATE / IN HR = arrivée réelle (posé)
     const actualIn = parseDateHr(col(cells, 'IN DATE'), col(cells, 'IN HR'));
 
     // Priorité : posé (IN) > estimé en vol (AF HR) > STA
     const estimatedTouchDownTime = actualIn ?? etaFromAfHr;
 
-    const std = parseDateHr(col(cells, 'SD DATE'), col(cells, 'SD HR'));
+    const std          = parseDateHr(col(cells, 'SD DATE'), col(cells, 'SD HR'));
     const registration = col(cells, 'REGISTRATION') || undefined;
 
     flights.push({
@@ -104,7 +97,7 @@ export function parseCsvBackup(csvText: string, filename = 'upload.csv'): CsvBac
       icao:                  arrIcao,
       registration,
       aircraftType:          tyAv || undefined,
-      isLongHaul:            true, // filtré sur TC=LC/AFF donc forcément LC
+      isLongHaul:            true, // TC=LC garantit long-courrier
       scheduledArrival:      sta,
       estimatedTouchDownTime,
       timeToArrivalMinutes:  estimatedTouchDownTime

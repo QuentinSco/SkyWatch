@@ -14,61 +14,53 @@
     }) + 'Z';
   }
 
-  // ── File input partagé ───────────────────────────────────────────────────────
-  // Un seul <input type=file> dans le DOM, jamais recréé → pas de double déclenchement
+  // ── File input partagé ─────────────────────────────────────────────────────
   const _fileInput = document.createElement('input');
   _fileInput.type   = 'file';
   _fileInput.accept = '.csv,text/csv,text/plain';
   _fileInput.style.display = 'none';
   _fileInput.addEventListener('change', function () {
     const file = _fileInput.files?.[0];
-    _fileInput.value = ''; // reset pour permettre de recharger le même fichier
+    _fileInput.value = '';
     if (file) uploadFile(file);
   });
   document.body.appendChild(_fileInput);
 
   function openPicker() { _fileInput.click(); }
 
-  // ── Rendu du widget footer ───────────────────────────────────────────────────
+  // ── Rendu widget footer ───────────────────────────────────────────────────
   function render() {
     const el = document.getElementById('backup-widget');
     if (!el) return;
-
     if (!_backupActive) {
       el.innerHTML = `
         <div class="flex items-center gap-2 flex-wrap">
-          <span class="text-gray-300 dark:text-gray-700 text-[10px] select-none">⚡ Mode backup :</span>
-          <button
-            class="text-[10px] text-gray-400 dark:text-gray-600 hover:text-blue-500 dark:hover:text-blue-400 underline cursor-pointer transition bg-transparent border-none p-0"
-            id="backup-open-btn"
-          >${_uploading ? '\u23f3 Chargement\u2026' : 'Charger un CSV'}</button>
+          <span class="text-gray-300 dark:text-gray-700 text-[10px] select-none">\u26a1 Mode backup\u00a0:</span>
+          <button class="text-[10px] text-gray-400 dark:text-gray-600 hover:text-blue-500 dark:hover:text-blue-400 underline cursor-pointer transition bg-transparent border-none p-0" id="backup-open-btn">
+            ${_uploading ? '\u23f3 Chargement\u2026' : 'Charger un CSV'}
+          </button>
         </div>`;
     } else {
       const info = _backupInfo;
       el.innerHTML = `
         <div class="flex items-center gap-2 flex-wrap">
-          <span class="bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-700">
-            \u26a0\ufe0f Mode backup CSV actif
-          </span>
+          <span class="bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-700">\u26a0\ufe0f Mode backup CSV actif</span>
           ${info ? `<span class="text-[10px] text-gray-500 dark:text-gray-400">${info.flightCount}\u00a0vols \u2014 ${info.filename} \u2014 charg\u00e9 ${fmtTime(info.uploadedAt)}</span>` : ''}
-          <button
-            class="text-[10px] text-blue-500 dark:text-blue-400 hover:text-blue-700 underline cursor-pointer transition bg-transparent border-none p-0"
-            id="backup-open-btn"
-          >Remplacer</button>
-          <button
-            class="text-[10px] text-red-400 hover:text-red-600 underline transition bg-transparent border-none p-0"
-            id="backup-disable-btn"
-          >D\u00e9sactiver</button>
+          <button class="text-[10px] text-blue-500 dark:text-blue-400 hover:text-blue-700 underline cursor-pointer transition bg-transparent border-none p-0" id="backup-open-btn">Remplacer</button>
+          <button class="text-[10px] text-red-400 hover:text-red-600 underline transition bg-transparent border-none p-0" id="backup-disable-btn">D\u00e9sactiver</button>
         </div>`;
       document.getElementById('backup-disable-btn')?.addEventListener('click', onDisable);
     }
     document.getElementById('backup-open-btn')?.addEventListener('click', openPicker);
   }
 
-  // ── Banner dans la section Vols ──────────────────────────────────────────────
+  // ── Banner section Vols ────────────────────────────────────────────────────
   function updateBackupBanner(active, info) {
     const existing = document.getElementById('backup-mode-banner');
-    if (!active) { if (existing) existing.remove(); return; }
+    if (!active) {
+      if (existing) existing.remove();
+      return;
+    }
     const container = document.getElementById('taf-vol-main');
     if (!container) return;
     const html = `
@@ -83,7 +75,11 @@
     else { container.insertAdjacentHTML('afterbegin', html); }
   }
 
-  window.backupUI = { updateBackupBanner };
+  // Exposé globalement — isActive() utilisé par taf-ui.js pour override état KV
+  window.backupUI = {
+    updateBackupBanner,
+    isActive: () => _backupActive,
+  };
 
   // ── Upload ─────────────────────────────────────────────────────────────────────
   async function uploadFile(file) {
@@ -99,9 +95,8 @@
       const rawText = await res.text();
       let json;
       try { json = JSON.parse(rawText); }
-      catch { throw new Error('Réponse serveur invalide : ' + rawText.slice(0, 120)); }
+      catch { throw new Error('Réponse serveur invalide\u00a0: ' + rawText.slice(0, 120)); }
       if (!json.ok) throw new Error(json.error ?? 'Erreur upload');
-
       _backupActive = true;
       _backupInfo   = { uploadedAt: json.uploadedAt, filename: json.filename, flightCount: json.flightCount };
       render();
@@ -116,11 +111,15 @@
   }
 
   async function onDisable() {
-    try { await fetch('/api/backup-upload', { method: 'DELETE' }); } catch { /* silencieux */ }
+    // 1. Mettre à jour l'état local immédiatement
     _backupActive = false;
     _backupInfo   = null;
     render();
     updateBackupBanner(false, null);
+    // 2. Envoyer le DELETE (fire & forget, mais await pour s'assurer que le KV
+    //    est vidé avant que loadTafVolRisks() interroge l'API)
+    try { await fetch('/api/backup-upload', { method: 'DELETE' }); } catch { /* silencieux */ }
+    // 3. Recharger la section vols — l'API retournera maintenant backupMode:false
     if (typeof window.loadTafVolRisks === 'function') window.loadTafVolRisks();
   }
 

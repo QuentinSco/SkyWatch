@@ -46,7 +46,7 @@
     none:   '#22c55e',
   };
 
-  // ── Helpers ────────────────────────────────────────────────────────────────────────────────────
+  // ── Helpers ─────────────────────────────────────────────────────────────────────
   function formatUTC(ts) {
     return new Date(ts * 1000).toLocaleString('fr-FR', {
       day: '2-digit', month: '2-digit',
@@ -128,7 +128,7 @@
       ?.addEventListener('click', loadTafVolRisks);
   }
 
-  // ── TAF : badge menace ──────────────────────────────────────────────────────────────────────
+  // ── TAF : badge menace ──────────────────────────────────────────────────────────────
   function renderThreatBadge(threat) {
     const icon   = THREAT_ICONS[threat.type] ?? '\u26a0\ufe0f';
     const badge  = SEVERITY_BADGE[threat.severity];
@@ -147,7 +147,7 @@
       </div>`;
   }
 
-  // ── TAF : ligne tableau ────────────────────────────────────────────────────────────────────
+  // ── TAF : ligne tableau ───────────────────────────────────────────────────────────
   function renderTafRiskCard(risk) {
     const badgeCls    = SEVERITY_TEXT[risk.worstSeverity];
     const threatsHtml = risk.threats.map(t =>
@@ -188,7 +188,7 @@
       </tr>`;
   }
 
-  // ── TAF : chargement section ──────────────────────────────────────────────────────────────────
+  // ── TAF : chargement section ────────────────────────────────────────────────────────
   async function loadTafRisks() {
     const container  = document.getElementById('taf-main');
     const countersEl = document.getElementById('taf-counters');
@@ -256,7 +256,7 @@
     }
   }
 
-  // ── Vols AF : rendu ligne ───────────────────────────────────────────────────────────────────────
+  // ── Vols AF : rendu ligne ───────────────────────────────────────────────────────────────
   let _rowIdx = 0;
 
   function renderTafVolRow(hit) {
@@ -286,18 +286,14 @@
     return `
       <tr class="border-b border-gray-100 hover:bg-blue-50/70 transition cursor-pointer"
           onclick="document.getElementById('${rowId}').classList.toggle('hidden')">
-        <td class="py-2 px-3 text-lg">
-          <span title="${threat.severity}">${SEVERITY_LABEL[threat.severity]}</span>
-        </td>
+        <td class="py-2 px-3 text-lg"><span title="${threat.severity}">${SEVERITY_LABEL[threat.severity]}</span></td>
         <td class="py-2 px-3 font-mono font-semibold text-gray-800">AF${flight.flightNumber}</td>
         <td class="py-2 px-3 text-xs text-gray-500">
           ${flight.registration ?? '\u2014'}
           <span class="ml-1 text-gray-400">${flight.aircraftType ?? ''}</span>
         </td>
         <td class="py-2 px-3 text-sm text-gray-800">${taf.iata} (${taf.icao}) \u2014 ${taf.name}</td>
-        <td class="py-2 px-3 text-xs text-gray-700">
-          <span>${icon} ${threat.label}</span>
-        </td>
+        <td class="py-2 px-3 text-xs text-gray-700"><span>${icon} ${threat.label}</span></td>
         <td class="py-2 px-3 text-xs font-mono text-gray-700 whitespace-nowrap">
           <div class="font-semibold text-gray-800">${windowStr}</div>
         </td>
@@ -324,29 +320,15 @@
             <div>
               <button
                 class="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1"
-                onclick="(function(btn){
-                  var el = btn.closest('.flex.flex-col').querySelector('.other-threats-block');
-                  el.classList.toggle('hidden');
-                  btn.textContent = el.classList.contains('hidden')
-                    ? '\u25b6 Autres menaces sur ${taf.iata} (${otherThreats.length})'
-                    : '\u25bc Masquer les autres menaces';
-                })(this); event.stopPropagation();">
+                onclick="(function(btn){ var el = btn.closest('.flex.flex-col').querySelector('.other-threats-block'); el.classList.toggle('hidden'); btn.textContent = el.classList.contains('hidden') ? '\u25b6 Autres menaces sur ${taf.iata} (${otherThreats.length})' : '\u25bc Masquer les autres menaces'; })(this); event.stopPropagation();">
                 \u25b6 Autres menaces sur ${taf.iata} (${otherThreats.length})
               </button>
-              <div class="other-threats-block hidden mt-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
-                ${otherThreatsHtml}
-              </div>
+              <div class="other-threats-block hidden mt-2 bg-white border border-gray-200 rounded-lg px-3 py-2">${otherThreatsHtml}</div>
             </div>
             <div>
               <button
                 class="text-xs text-gray-500 hover:text-gray-700 font-semibold flex items-center gap-1"
-                onclick="(function(btn){
-                  var el = btn.closest('.flex.flex-col').querySelector('.taf-raw-block');
-                  el.classList.toggle('hidden');
-                  btn.textContent = el.classList.contains('hidden')
-                    ? '\u25b6 Afficher TAF complet'
-                    : '\u25bc Masquer TAF complet';
-                })(this); event.stopPropagation();">
+                onclick="(function(btn){ var el = btn.closest('.flex.flex-col').querySelector('.taf-raw-block'); el.classList.toggle('hidden'); btn.textContent = el.classList.contains('hidden') ? '\u25b6 Afficher TAF complet' : '\u25bc Masquer TAF complet'; })(this); event.stopPropagation();">
                 \u25b6 Afficher TAF complet
               </button>
               <div class="taf-raw-block hidden mt-2 font-mono bg-white border border-gray-200 rounded-lg px-2 py-1 text-gray-600 text-[11px]" style="white-space:pre-wrap;word-break:break-word">${formatTafRaw(taf.rawTaf)}</div>
@@ -364,9 +346,7 @@
     for (const t of threats) {
       const overlap = t.periodStart < slotEnd && t.periodEnd > slotStart;
       if (!overlap) continue;
-      if (best === 'none' || SEVERITY_ORDER[t.severity] < SEVERITY_ORDER[best]) {
-        best = t.severity;
-      }
+      if (best === 'none' || SEVERITY_ORDER[t.severity] < SEVERITY_ORDER[best]) best = t.severity;
     }
     return best;
   }
@@ -381,9 +361,7 @@
       const gst = fcst.wgst ? 'G' + String(fcst.wgst).padStart(2, '0') : '';
       parts.push(dir + spd + gst + 'KT');
     }
-    if (fcst.wxString && fcst.wxString.trim().toUpperCase() !== 'NSW') {
-      parts.push(fcst.wxString);
-    }
+    if (fcst.wxString && fcst.wxString.trim().toUpperCase() !== 'NSW') parts.push(fcst.wxString);
     if (fcst.visib != null && fcst.visib !== '9999' && fcst.visib !== '6+' && Number(fcst.visib) !== 9999) {
       const visM = visMtoMeters(fcst.visib);
       if (visM !== null && visM !== 9999) parts.push('VIS ' + visM + 'm');
@@ -403,151 +381,84 @@
     const threats   = baseTaf.threats || [];
     const nowSec    = Math.floor(Date.now() / 1000);
     const windowSec = 24 * 3600;
-
     const tStart = nowSec;
     const tEnd   = fcsts.length > 0
       ? Math.min(tStart + windowSec, Math.max(...fcsts.map(f => f.timeTo ?? f.timeFrom)))
       : tStart + windowSec;
-
-    if (fcsts.length === 0 || tEnd <= tStart) {
-      return '<div class="text-xs text-gray-400 italic">TAF non disponible</div>';
-    }
-
+    if (fcsts.length === 0 || tEnd <= tStart) return '<div class="text-xs text-gray-400 italic">TAF non disponible</div>';
     const totalSec = tEnd - tStart;
-
     const SLOT = 30 * 60;
     const nSlots = Math.ceil((tEnd - tStart) / SLOT);
     const slotSev   = new Array(nSlots).fill('none');
     const slotFcst  = new Array(nSlots).fill(null);
-
     const CI_PRIORITY = { TEMPO: 3, 'PROB30 TEMPO': 3, 'PROB40 TEMPO': 3, BECMG: 2, PROB30: 1, PROB40: 1 };
-    const sortedFcsts = [...fcsts].sort((a, b) =>
-      (CI_PRIORITY[a.changeIndicator] ?? 0) - (CI_PRIORITY[b.changeIndicator] ?? 0)
-    );
-
+    const sortedFcsts = [...fcsts].sort((a, b) => (CI_PRIORITY[a.changeIndicator] ?? 0) - (CI_PRIORITY[b.changeIndicator] ?? 0));
     for (const f of sortedFcsts) {
       const fStart = Math.max(f.timeFrom ?? tStart, tStart);
       const fEnd   = Math.min(f.timeTo   ?? tEnd,   tEnd);
       if (fEnd <= fStart) continue;
-
       const iSlot = Math.floor((fStart - tStart) / SLOT);
       const eSlot = Math.ceil( (fEnd   - tStart) / SLOT);
-
       for (let s = iSlot; s < eSlot && s < nSlots; s++) {
         const slotStart = tStart + s * SLOT;
         const slotEnd   = tStart + (s + 1) * SLOT;
         const overlap = fStart < slotEnd && fEnd > slotStart;
         if (!overlap) continue;
-
         const sev = periodSeverity(slotStart, slotEnd, threats);
-
         const curPriority = slotFcst[s] ? (CI_PRIORITY[slotFcst[s].changeIndicator] ?? 0) : -1;
         const newPriority = CI_PRIORITY[f.changeIndicator] ?? 0;
         if (newPriority >= curPriority) {
-          if (slotSev[s] === 'none' || SEVERITY_ORDER[sev] < SEVERITY_ORDER[slotSev[s]]) {
-            slotSev[s] = sev;
-          }
+          if (slotSev[s] === 'none' || SEVERITY_ORDER[sev] < SEVERITY_ORDER[slotSev[s]]) slotSev[s] = sev;
           slotFcst[s] = f;
         }
       }
     }
-
     const segments = [];
     let i = 0;
     while (i < nSlots) {
       const sev  = slotSev[i];
       let j = i + 1;
       while (j < nSlots && slotSev[j] === sev) j++;
-
       const segStart = tStart + i * SLOT;
       const segEnd   = Math.min(tStart + j * SLOT, tEnd);
       const left  = ((segStart - tStart) / totalSec) * 100;
       const width = ((segEnd   - segStart) / totalSec) * 100;
-
-      const matchingThreats = threats.filter(t =>
-        t.periodStart < segEnd && t.periodEnd > segStart
-      );
-      const label = matchingThreats.length === 0
-        ? 'D\u00e9gag\u00e9'
-        : matchingThreats.map(t => (THREAT_ICONS[t.type] ?? '\u26a0\ufe0f') + ' ' + t.label).join(' \u00b7 ');
-
+      const matchingThreats = threats.filter(t => t.periodStart < segEnd && t.periodEnd > segStart);
+      const label = matchingThreats.length === 0 ? 'D\u00e9gag\u00e9' : matchingThreats.map(t => (THREAT_ICONS[t.type] ?? '\u26a0\ufe0f') + ' ' + t.label).join(' \u00b7 ');
       const fcst    = slotFcst[i];
       const ci      = fcst?.changeIndicator ?? '';
       const snippet = sev !== 'none' && fcst ? buildFcstSnippet(fcst) : '';
-
       const tipTimeFrom = (sev !== 'none' && fcst) ? fcst.timeFrom : segStart;
       const tipTimeTo   = (sev !== 'none' && fcst) ? fcst.timeTo   : segEnd;
-
       segments.push({ left, width, sev, label, ci, segStart, segEnd, snippet, tipTimeFrom, tipTimeTo });
       i = j;
     }
-
     const ticks = [];
     const firstTickSec = tStart + (3600 - (tStart % 3600)) % 3600;
     for (let t = firstTickSec; t < tEnd; t += 3 * 3600) {
-      const pct   = ((t - tStart) / totalSec) * 100;
-      const lbl   = new Date(t * 1000).toLocaleString('fr-FR', {
-        hour: '2-digit', minute: '2-digit', timeZone: 'UTC',
-      }) + 'Z';
+      const pct = ((t - tStart) / totalSec) * 100;
+      const lbl = new Date(t * 1000).toLocaleString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + 'Z';
       ticks.push({ pct, label: lbl });
     }
-
     const groupId = 'taf-grp-' + baseTaf.icao;
-
     const barsHtml = segments.map((s, idx) => {
       const color  = PERIOD_BG[s.sev] ?? '#22c55e';
       const textCl = s.sev === 'yellow' ? 'text-black' : 'text-white';
       const tipId  = 'taf-seg-' + baseTaf.icao + '-' + idx;
-      return `
-        <div
-          class="absolute top-0 h-full rounded transition-opacity hover:opacity-80 cursor-pointer"
-          style="left:${s.left.toFixed(2)}%;width:${s.width.toFixed(2)}%;background:${color}"
-          onclick="(function(){
-            var g=document.querySelectorAll('[data-taf-group=&quot;${groupId}&quot;]');
-            g.forEach(function(el){ if(el.id!=='${tipId}') el.classList.add('hidden'); });
-            var tip=document.getElementById('${tipId}');
-            if(tip) tip.classList.toggle('hidden');
-          })(); event.stopPropagation();"
-        >${s.width > 12 ? '<span class="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-[10px] font-semibold ' + textCl + ' truncate px-1 pointer-events-none leading-tight">' + s.label + '</span>' : ''}</div>`;
+      return `<div class="absolute top-0 h-full rounded transition-opacity hover:opacity-80 cursor-pointer" style="left:${s.left.toFixed(2)}%;width:${s.width.toFixed(2)}%;background:${color}" onclick="(function(){ var g=document.querySelectorAll('[data-taf-group=&quot;${groupId}&quot;]'); g.forEach(function(el){ if(el.id!=='${tipId}') el.classList.add('hidden'); }); var tip=document.getElementById('${tipId}'); if(tip) tip.classList.toggle('hidden'); })(); event.stopPropagation();">${s.width > 12 ? '<span class="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-[10px] font-semibold ' + textCl + ' truncate px-1 pointer-events-none leading-tight">' + s.label + '</span>' : ''}</div>`;
     }).join('');
-
     const tipsHtml = segments.map((s, idx) => {
       const tipId  = 'taf-seg-' + baseTaf.icao + '-' + idx;
       const center = s.left + s.width / 2;
-      const posStyle = center > 50
-        ? 'right:' + (100 - s.left - s.width).toFixed(2) + '%;left:auto;'
-        : 'left:' + s.left.toFixed(2) + '%;right:auto;';
-      return `
-        <div id="${tipId}" data-taf-group="${groupId}"
-             class="hidden absolute z-30 bg-white border border-gray-200 rounded-xl shadow-xl p-3 text-xs w-56 pointer-events-none"
-             style="${posStyle}top:calc(100% + 6px)">
-          <div class="font-semibold text-gray-700 mb-1">${formatHHMM(s.tipTimeFrom)} \u2192 ${formatHHMM(s.tipTimeTo)}</div>
-          <div class="mb-1">${s.label}</div>
-          ${s.ci ? '<div class="text-gray-400 text-[10px]">' + s.ci + '</div>' : ''}
-          ${s.snippet ? '<div class="font-mono text-gray-600 mt-1 bg-gray-50 rounded px-1 py-0.5">' + s.snippet + '</div>' : ''}
-        </div>`;
+      const posStyle = center > 50 ? 'right:' + (100 - s.left - s.width).toFixed(2) + '%;left:auto;' : 'left:' + s.left.toFixed(2) + '%;right:auto;';
+      return `<div id="${tipId}" data-taf-group="${groupId}" class="hidden absolute z-30 bg-white border border-gray-200 rounded-xl shadow-xl p-3 text-xs w-56 pointer-events-none" style="${posStyle}top:calc(100% + 6px)"><div class="font-semibold text-gray-700 mb-1">${formatHHMM(s.tipTimeFrom)} \u2192 ${formatHHMM(s.tipTimeTo)}</div><div class="mb-1">${s.label}</div>${s.ci ? '<div class="text-gray-400 text-[10px]">' + s.ci + '</div>' : ''}${s.snippet ? '<div class="font-mono text-gray-600 mt-1 bg-gray-50 rounded px-1 py-0.5">' + s.snippet + '</div>' : ''}</div>`;
     }).join('');
-
-    const ticksHtml = ticks.map(t => `
-      <div class="absolute top-0 h-full border-l border-white/40 pointer-events-none"
-           style="left:${t.pct.toFixed(2)}%">
-        <span class="absolute -bottom-5 text-[9px] text-gray-400 -translate-x-1/2 whitespace-nowrap">${t.label}</span>
-      </div>`
-    ).join('');
-
-    const nowHtml = `
-      <div class="absolute top-0 h-full border-l-2 border-blue-500 pointer-events-none z-10"
-           style="left:0%">
-        <span class="absolute -top-5 text-[10px] text-blue-600 font-semibold -translate-x-1/2">NOW</span>
-      </div>`;
-
+    const ticksHtml = ticks.map(t => `<div class="absolute top-0 h-full border-l border-white/40 pointer-events-none" style="left:${t.pct.toFixed(2)}%"><span class="absolute -bottom-5 text-[9px] text-gray-400 -translate-x-1/2 whitespace-nowrap">${t.label}</span></div>`).join('');
+    const nowHtml = `<div class="absolute top-0 h-full border-l-2 border-blue-500 pointer-events-none z-10" style="left:0%"><span class="absolute -top-5 text-[10px] text-blue-600 font-semibold -translate-x-1/2">NOW</span></div>`;
     return `
       <div class="relative mt-8 mb-6 select-none" onclick="void(0)">
         <div class="relative h-8 rounded-lg bg-gray-100 border border-gray-200" style="overflow:visible">
-          ${barsHtml}
-          ${tipsHtml}
-          ${ticksHtml}
-          ${nowHtml}
+          ${barsHtml}${tipsHtml}${ticksHtml}${nowHtml}
         </div>
         <div class="relative h-5"></div>
         <div class="flex gap-3 mt-2 flex-wrap text-xs">
@@ -559,7 +470,7 @@
       </div>`;
   }
 
-  // ── Section CDG/ORY ────────────────────────────────────────────────────────────────────────
+  // ── Section CDG/ORY ───────────────────────────────────────────────────────────────────
   function renderBaseSection(baseHits, baseTafs, hideHeader) {
     const tafsToRender = (baseTafs && baseTafs.length > 0)
       ? baseTafs
@@ -567,41 +478,24 @@
         ? Object.values(baseHits.reduce((acc, h) => {
             const key = h.taf.icao;
             if (!acc[key]) acc[key] = { ...h.taf, threats: [], fcsts: [] };
-            const dup = acc[key].threats.some(t =>
-              t.type === h.threat.type && t.periodStart === h.threat.periodStart);
+            const dup = acc[key].threats.some(t => t.type === h.threat.type && t.periodStart === h.threat.periodStart);
             if (!dup) acc[key].threats.push(h.threat);
             return acc;
           }, {}))
         : [];
 
     if (tafsToRender.length === 0) {
-      return hideHeader ? `
-        <div class="text-center py-8 text-gray-400">
-          <div class="text-3xl mb-2">\u23f3</div>
-          <div class="text-sm">TAF en cours de chargement\u2026</div>
-        </div>` : `
-        <section class="mt-8 pt-6 border-t border-gray-200">
-          <h2 class="text-xl font-bold text-gray-900 mb-1">\uD83C\uDFE0 \u00c9tat base CDG / ORY</h2>
-          <p class="text-gray-500 text-sm mb-4">TAF actifs sur CDG/ORY.</p>
-          <div class="text-center py-8 text-gray-400">
-            <div class="text-3xl mb-2">\u23f3</div>
-            <div class="text-sm">TAF en cours de chargement\u2026</div>
-          </div>
-        </section>`;
+      return hideHeader ? `<div class="text-center py-8 text-gray-400"><div class="text-3xl mb-2">\u23f3</div><div class="text-sm">TAF en cours de chargement\u2026</div></div>` :
+        `<section class="mt-8 pt-6 border-t border-gray-200"><h2 class="text-xl font-bold text-gray-900 mb-1">\uD83C\uDFE0 \u00c9tat base CDG / ORY</h2><p class="text-gray-500 text-sm mb-4">TAF actifs sur CDG/ORY.</p><div class="text-center py-8 text-gray-400"><div class="text-3xl mb-2">\u23f3</div><div class="text-sm">TAF en cours de chargement\u2026</div></div></section>`;
     }
 
     const cards = tafsToRender.map(taf => {
       const sev   = taf.worstSeverity ?? 'none';
       const label = SEVERITY_LABEL[sev];
-
       const threatsList = taf.threats.length > 0
-        ? taf.threats.map(t =>
-          '<div class="mb-2 pb-2 border-b border-gray-100 last:border-0">' + renderThreatBadge(t) + '</div>'
-          ).join('')
+        ? taf.threats.map(t => '<div class="mb-2 pb-2 border-b border-gray-100 last:border-0">' + renderThreatBadge(t) + '</div>').join('')
         : '<div class="text-xs text-green-600 font-medium py-1">\u2705 Aucun ph\u00e9nom\u00e8ne significatif sur ce TAF</div>';
-
       const tafId = 'base-taf-raw-' + taf.icao;
-
       return `
         <div class="bg-white border ${sev === 'none' ? 'border-green-200' : sev === 'red' ? 'border-red-300' : 'border-orange-200'} rounded-xl p-4 shadow-sm">
           <div class="flex items-center gap-3 mb-2 flex-wrap">
@@ -613,15 +507,8 @@
           ${renderTafTimeline(taf)}
           <div class="mt-2">${threatsList}</div>
           <div class="mt-3">
-            <button
-              class="text-xs text-gray-400 hover:text-gray-600 font-semibold flex items-center gap-1"
-              onclick="(function(btn){
-                var el = document.getElementById('${tafId}');
-                el.classList.toggle('hidden');
-                btn.innerHTML = el.classList.contains('hidden')
-                  ? '\u25b6 Afficher TAF brut'
-                  : '\u25bc Masquer TAF brut';
-              })(this)">
+            <button class="text-xs text-gray-400 hover:text-gray-600 font-semibold flex items-center gap-1"
+              onclick="(function(btn){ var el = document.getElementById('${tafId}'); el.classList.toggle('hidden'); btn.innerHTML = el.classList.contains('hidden') ? '\u25b6 Afficher TAF brut' : '\u25bc Masquer TAF brut'; })(this)">
               \u25b6 Afficher TAF brut
             </button>
             <div id="${tafId}" class="hidden mt-2 font-mono text-[11px] bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-600" style="white-space:pre-wrap;word-break:break-word">${formatTafRaw(taf.rawTaf)}</div>
@@ -632,7 +519,6 @@
     const allThreats  = tafsToRender.flatMap(t => t.threats);
     const redCount    = allThreats.filter(t => t.severity === 'red').length;
     const orangeCount = allThreats.filter(t => t.severity === 'orange').length;
-
     const badgesHtml = `
       <div class="flex gap-2 text-xs mb-3">
         ${redCount    ? '<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full font-semibold">\uD83D\uDD34 ' + redCount + ' menace' + (redCount > 1 ? 's' : '') + '</span>' : ''}
@@ -641,14 +527,8 @@
       </div>`;
 
     if (hideHeader) {
-      return `
-        <div class="px-4 py-3">
-          ${badgesHtml}
-          <p class="text-gray-500 text-xs mb-3">TAF actifs sur notre base \u2014 frise 24h. Hors croisement vols LC.</p>
-          <div class="grid grid-cols-2 gap-3">${cards}</div>
-        </div>`;
+      return `<div class="px-4 py-3">${badgesHtml}<p class="text-gray-500 text-xs mb-3">TAF actifs sur notre base \u2014 frise 24h. Hors croisement vols LC.</p><div class="grid grid-cols-2 gap-3">${cards}</div></div>`;
     }
-
     return `
       <section class="mt-8 pt-6 border-t border-gray-200">
         <div class="flex items-center justify-between mb-3 flex-wrap gap-4">
@@ -662,25 +542,21 @@
       </section>`;
   }
 
-  // ── Dédoublonnage vols ───────────────────────────────────────────────────────────────────────────────────
+  // ── Dédoublonnage vols ───────────────────────────────────────────────────────────────────
   function deduplicateFlights(hits) {
     const flightMap = {};
-
     for (const hit of hits) {
       const etaIso = hit.flight.estimatedTouchDownTime || hit.flight.scheduledArrival;
       const dateKey = formatDate(etaIso);
       const key = hit.flight.flightNumber + '-' + dateKey;
-
-      if (!flightMap[key] ||
-          SEVERITY_ORDER[hit.threat.severity] < SEVERITY_ORDER[flightMap[key].threat.severity]) {
+      if (!flightMap[key] || SEVERITY_ORDER[hit.threat.severity] < SEVERITY_ORDER[flightMap[key].threat.severity]) {
         flightMap[key] = hit;
       }
     }
-
     return Object.values(flightMap);
   }
 
-  // ── Vols AF : chargement section ──────────────────────────────────────────────────────────────────────
+  // ── Vols AF : chargement section ───────────────────────────────────────────────────────
   async function loadTafVolRisks() {
     _rowIdx = 0;
     const container  = document.getElementById('taf-vol-main');
@@ -705,13 +581,16 @@
 
       const { hits, baseHits, baseTafs, backupMode, backupInfo } = await res.json();
 
-      // ── Banner backup mode ─────────────────────────────────────────────────────
+      // ── Banner backup
+      // On utilise l'état local (backupUI.isActive) en priorité :
+      // si l'utilisateur vient de désactiver, on ne réaffiche pas le banner
+      // même si le KV n'est pas encore vidé.
+      const localActive = window.backupUI?.isActive?.() ?? backupMode;
       if (window.backupUI) {
-        window.backupUI.updateBackupBanner(backupMode, backupInfo);
+        window.backupUI.updateBackupBanner(localActive, localActive ? (backupInfo ?? null) : null);
       }
 
       const uniqueHits = deduplicateFlights(hits);
-
       const red    = uniqueHits.filter(h => h.threat.severity === 'red').length;
       const orange = uniqueHits.filter(h => h.threat.severity === 'orange').length;
       if (countersEl) {
@@ -724,10 +603,7 @@
 
       let mainHtml;
       if (uniqueHits.length === 0) {
-        mainHtml = `
-          <div class="text-gray-400 text-sm py-4">
-            Aucun vol AF LC actuellement dans une fen\u00eatre de menace TAF significative (rouge ou orange).
-          </div>`;
+        mainHtml = `<div class="text-gray-400 text-sm py-4">Aucun vol AF LC actuellement dans une fen\u00eatre de menace TAF significative (rouge ou orange).</div>`;
       } else {
         mainHtml = `
           <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
@@ -760,9 +636,9 @@
       }
       bindRefreshBtn();
 
-      // Réinjecter le banner backup après le re-render du container
-      if (backupMode && window.backupUI) {
-        window.backupUI.updateBackupBanner(backupMode, backupInfo);
+      // Réinjecter le banner après le re-render (container.innerHTML a écrasé le DOM)
+      if (window.backupUI) {
+        window.backupUI.updateBackupBanner(localActive, localActive ? (backupInfo ?? null) : null);
       }
 
     } catch (e) {
@@ -776,10 +652,9 @@
     }
   }
 
-  // Exposé globalement pour backup-ui.js
   window.loadTafVolRisks = loadTafVolRisks;
 
-  // ── Init ────────────────────────────────────────────────────────────────────────────────────
+  // ── Init ─────────────────────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
     loadTafRisks();
     loadTafVolRisks();

@@ -1,8 +1,8 @@
 // src/pages/api/crosswind.json.ts
 //
 // Endpoint dédié à la page crosswind.
-// Contrairement aux autres endpoints, il retourne LC + MC (lcOnly = false).
-// Les consommateurs historiques (briefing, taf-vol-risks) restent sur lcOnly = true.
+// Retourne LC + MC + CC (lcOnly = false) — pas de filtre métier ici.
+// Le filtre LC est géré côté taf-vol-risks (page d'accueil).
 
 import type { APIRoute } from 'astro';
 import { getCachedAfArrivals }             from '../../lib/afFlights';
@@ -24,10 +24,8 @@ export const GET: APIRoute = async ({ url }) => {
     : null; // null = tous
 
   try {
-    // ── Vols AF : LC uniquement (lcOnly = true) ──────────────────────────────
-    // En mode API, l'endpoint AF retourne déjà uniquement les LC.
-    // En mode backup CSV, le fichier contient LC+MC+CC — on filtre isLongHaul.
-    const allFlights = await getCachedAfArrivals(force, /* lcOnly = */ true);
+    // ── Vols AF : LC + MC (lcOnly = false) ───────────────────────────────────
+    const allFlights = await getCachedAfArrivals(force, /* lcOnly = */ false);
 
     const now = Date.now();
     const flights = allFlights.filter(f => {

@@ -69,18 +69,20 @@ function overlapsThreatWindow(
   return { ok, minutesBefore };
 }
 
-// ── Lecture des vols backup depuis le KV ─────────────────────────────────────
+// ── Lecture des vols backup depuis le KV ────────────────────────────────────────────
 async function getBackupFlights(): Promise<{ flights: AfFlightArrival[]; info: { uploadedAt: number; filename: string; flightCount: number } | null }> {
   if (!kv) return { flights: [], info: null };
   try {
     const cache = await kv.get<CsvBackupCache>(KV_BACKUP_KEY);
     if (!cache || !Array.isArray(cache.flights)) return { flights: [], info: null };
+    // Filtre LC uniquement en mode backup (le CSV contient LC+MC+CC)
+    const lcFlights = cache.flights.filter((f: AfFlightArrival) => f.isLongHaul !== false);
     return {
-      flights: cache.flights,
+      flights: lcFlights,
       info: {
         uploadedAt:  cache.uploadedAt,
         filename:    cache.filename,
-        flightCount: cache.flights.length,
+        flightCount: lcFlights.length,
       },
     };
   } catch (e) {
@@ -89,7 +91,7 @@ async function getBackupFlights(): Promise<{ flights: AfFlightArrival[]; info: {
   }
 }
 
-// ── Détecte si le mode backup doit être utilisé ──────────────────────────────
+// ── Détecte si le mode backup doit être utilisé ──────────────────────────────────
 async function shouldUseBackup(): Promise<boolean> {
   if (!kv) return false;
   try {
@@ -107,7 +109,7 @@ export const GET: APIRoute = async ({ url }) => {
 
   if (force) dbg('Force refresh demandé — bypass cache TAF+VOL');
 
-  // ── Cache KV — hit → retour immédiat (seulement si pas mode backup) ───────
+  // ── Cache KV — hit → retour immédiat (seulement si pas mode backup) ─────────────
   if (!force && kv) {
     try {
       // Si le backup est actif on by-passe le cache pour refléter les vols CSV
@@ -127,17 +129,17 @@ export const GET: APIRoute = async ({ url }) => {
   }
 
   try {
-    // ── Vols : API AF ou backup CSV ───────────────────────────────────────────
+    // ── Vols : API AF ou backup CSV ───────────────────────────────────────────────
     const usingBackup = await shouldUseBackup();
     let allFlights: AfFlightArrival[] = [];
     let backupInfo: TafVolRisksResponse['backupInfo'] = null;
 
     if (usingBackup) {
-      dbg('Mode backup actif — lecture vols depuis CSV KV');
+      dbg('Mode backup actif — lecture vols depuis CSV KV (LC uniquement)');
       const { flights, info } = await getBackupFlights();
-      allFlights = flights;
+      allFlights = flights; // déjà filtré LC dans getBackupFlights()
       backupInfo = info;
-      console.log(`[taf-vol-risks] backup: ${allFlights.length} vols chargés`);
+      console.log(`[taf-vol-risks] backup: ${allFlights.length} vols LC chargés`);
     } else {
       allFlights = await getCachedAfArrivals(force);
       dbg(`Vols chargés API AF : ${allFlights.length}`);

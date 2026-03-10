@@ -3,22 +3,18 @@
 // Produit des AfFlightArrival utilisables par taf-vol-risks.
 
 import type { AfFlightArrival } from './afFlights';
-import { isLongHaulAircraft, isOperationalAircraft } from './afFlights';
 import { AF_IATA_TO_ICAO } from './tafParser';
+import { isLongHaulAircraft } from './afFlights';
 
-// ── Colonnes utiles ────────────────────────────────────────────────────────
-// FLIGHT NUM | DEP PRV | TER PRV | ARR PRV | TER PRV |
-// SD DATE    | SD HR   | SA DATE | SA HR   |
-// AF DEP DT  | AF HR   (heure estimée départ / ETA si en vol)
-// IN DATE    | IN HR   (arrivée réelle)
-// REGISTRATION | TY AV | OWN
+// ── Types de créneau retenus pour la section "Vols LC impactés" ─────────────────
+// Colonne TC : LC = Long-Courrier, AFF = Affrètement LC
+// MC = Moyen-Courrier, CC = Court-Courrier → exclus du tableau Vols LC
+const LC_TC_TYPES = new Set(['LC', 'AFF']);
 
 function parseDateHr(dateStr: string, hrStr: string): string | undefined {
-  // Format CSV : DD/MM/YYYY et HH:MM (UTC)
   const d = dateStr?.trim();
   const h = hrStr?.trim();
-  if (!d || !h || d === '' || h === '') return undefined;
-  // DD/MM/YYYY → YYYY-MM-DD
+  if (!d || !h) return undefined;
   const parts = d.split('/');
   if (parts.length !== 3) return undefined;
   const iso = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}T${h.padStart(5,'0')}:00Z`;
@@ -35,11 +31,8 @@ export interface CsvBackupCache {
 export function parseCsvBackup(csvText: string, filename = 'upload.csv'): CsvBackupCache {
   const lines = csvText.replace(/\r/g, '').split('\n');
 
-  // Cherche la ligne d'en-tête (commence par "FLIGHT NUM")
   const headerIdx = lines.findIndex(l => l.trimStart().startsWith('FLIGHT NUM'));
-  if (headerIdx === -1) {
-    throw new Error('En-tête "FLIGHT NUM" introuvable dans le CSV.');
-  }
+  if (headerIdx === -1) throw new Error('En-tête "FLIGHT NUM" introuvable dans le CSV.');
 
   const headers = lines[headerIdx].split(';').map(h => h.trim());
   const dataLines = lines.slice(headerIdx + 1).filter(l => {
@@ -52,64 +45,58 @@ export function parseCsvBackup(csvText: string, filename = 'upload.csv'): CsvBac
     return idx >= 0 ? (cells[idx] ?? '').trim() : '';
   }
 
+  // Pré-calculer les indices des colonnes "AF HR" (apparaissent 2 fois : départ + arrivée)
+  const afHrIndices = headers.reduce<number[]>((acc, h, i) => {
+    if (h === 'AF HR') acc.push(i);
+    return acc;
+  }, []);
+  // 2ème occurrence = ETA arrivée
+  const afHrArrIdx  = afHrIndices.length >= 2 ? afHrIndices[1] : (afHrIndices[0] ?? -1);
+  const afDateArrIdx = afHrArrIdx > 0 ? afHrArrIdx - 1 : -1;
+
   const flights: AfFlightArrival[] = [];
 
   for (const line of dataLines) {
     const cells = line.split(';');
-    if (cells.length < headers.length - 5) continue; // ligne tronquée
+    if (cells.length < headers.length - 5) continue;
 
-    const rawNum = col(cells, 'FLIGHT NUM'); // ex : "AF 702"
+    const rawNum = col(cells, 'FLIGHT NUM');
     if (!rawNum.startsWith('AF ')) continue;
     const flightNumber = rawNum.replace('AF ', '').trim().padStart(3, '0');
 
-    const tyAv = col(cells, 'TY AV');
-    if (!isOperationalAircraft(tyAv)) continue;
+    // ── Filtre TC : LC et AFF uniquement ────────────────────────────────────────
+    const tc = col(cells, 'TC').toUpperCase();
+    if (!LC_TC_TYPES.has(tc)) continue;
 
-    // ── Aéroport arrivée ─────────────────────────────────────────────────
-    const arrIata = col(cells, 'ARR PRV').trim().toUpperCase();
+    // ── Aéroport arrivée ──────────────────────────────────────────────────
+    const arrIata = col(cells, 'ARR PRV').toUpperCase();
     if (!arrIata) continue;
     const arrIcao = AF_IATA_TO_ICAO[arrIata];
     if (!arrIcao) continue;
 
-    // ── Aéroport départ ──────────────────────────────────────────────────
-    const depIata = col(cells, 'DEP PRV').trim().toUpperCase();
+    const depIata = col(cells, 'DEP PRV').toUpperCase();
+    const tyAv    = col(cells, 'TY AV');
 
-    // ── Horaires ─────────────────────────────────────────────────────────
-    // SA DATE / SA HR = heure d'arrivée schedulée
+    // ── Horaires ─────────────────────────────────────────────────────────────
     const sta = parseDateHr(col(cells, 'SA DATE'), col(cells, 'SA HR'));
     if (!sta) continue;
 
-    // AF HR = heure estimée (ETA si en vol) — colonne juste après AF DEP DT
-    // Dans le CSV l'en-tête est "AF HR" et apparaît deux fois (départ et arrivée).
-    // On prend la DEUXIÈME occurrence (index le plus élevé) = arrivée estimée.
-    const afHrIndices = headers.reduce<number[]>((acc, h, i) => {
-      if (h === 'AF HR') acc.push(i);
-      return acc;
-    }, []);
-    const afHrArrIdx = afHrIndices.length >= 2 ? afHrIndices[1] : afHrIndices[0];
-    const afDateArrIdx = afHrArrIdx !== undefined ? afHrArrIdx - 1 : -1;
+    // AF HR (2ème occurrence) = ETA si en vol
+    const afHrStr   = afHrArrIdx  >= 0 ? (cells[afHrArrIdx]  ?? '').trim() : '';
     const afDateStr = afDateArrIdx >= 0 ? (cells[afDateArrIdx] ?? '').trim() : '';
-    const afHrStr   = afHrArrIdx  !== undefined ? (cells[afHrArrIdx]  ?? '').trim() : '';
     const etaFromAfHr = parseDateHr(afDateStr, afHrStr);
 
-    // IN DATE / IN HR = arrivée réelle (avion déjà posé)
-    const inDate = col(cells, 'IN DATE');
-    const inHr   = col(cells, 'IN HR');
-    const actualIn = parseDateHr(inDate, inHr);
+    // IN DATE / IN HR = arrivée réelle (posé)
+    const actualIn = parseDateHr(col(cells, 'IN DATE'), col(cells, 'IN HR'));
 
-    // ETA finale : IN (posé) > AF HR (estimée en vol) > STA
+    // Priorité : posé (IN) > estimé en vol (AF HR) > STA
     const estimatedTouchDownTime = actualIn ?? etaFromAfHr;
 
-    // SD DATE / SD HR = départ schedulé
     const std = parseDateHr(col(cells, 'SD DATE'), col(cells, 'SD HR'));
-
     const registration = col(cells, 'REGISTRATION') || undefined;
-    const isLongHaul   = isLongHaulAircraft(tyAv);
 
-    // ── Vol arrivée ───────────────────────────────────────────────────────
-    const flightId = `AF${flightNumber}-CSV-A-${arrIcao}-${sta}`;
     flights.push({
-      flightId,
+      flightId:              `AF${flightNumber}-CSV-A-${arrIcao}-${sta}`,
       marketingCarrier:      'AF',
       flightNumber,
       movementType:          'A',
@@ -117,7 +104,7 @@ export function parseCsvBackup(csvText: string, filename = 'upload.csv'): CsvBac
       icao:                  arrIcao,
       registration,
       aircraftType:          tyAv || undefined,
-      isLongHaul,
+      isLongHaul:            true, // filtré sur TC=LC/AFF donc forcément LC
       scheduledArrival:      sta,
       estimatedTouchDownTime,
       timeToArrivalMinutes:  estimatedTouchDownTime
@@ -128,10 +115,5 @@ export function parseCsvBackup(csvText: string, filename = 'upload.csv'): CsvBac
     });
   }
 
-  return {
-    flights,
-    uploadedAt: Date.now(),
-    filename,
-    rowCount: dataLines.length,
-  };
+  return { flights, uploadedAt: Date.now(), filename, rowCount: dataLines.length };
 }

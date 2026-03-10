@@ -51,6 +51,9 @@ const TAF_VOL_CACHE_TTL_SEC = 20 * 60; // 20 min
 // Bases home — exclues de la section "Vols LC impactés", affichées dans leur propre section
 const HOME_BASES = new Set(['LFPG', 'LFPO']); // CDG, ORY
 
+// Départs valides pour la section "Vols LC impactés" — CDG et ORY uniquement
+const HOME_DEPARTURE_IATA = new Set(['CDG', 'ORY']);
+
 function overlapsThreatWindow(
   etaMs: number,
   threat: TafThreat,
@@ -164,12 +167,14 @@ export const GET: APIRoute = async ({ url }) => {
     const now = Date.now();
     const cleanedFlights = allFlights.filter(f => {
       if (f.aircraftType === 'BUS') return false;
+      // Exclure les vols à destination de CDG ou ORY
+      // (ils sont affichés dans la section base, pas dans "Vols LC impactés")
+      if (f.iata === 'CDG' || f.iata === 'ORY') return false;
+      // Conserver uniquement les vols au départ de CDG ou ORY
+      if (!f.departureIata || !HOME_DEPARTURE_IATA.has(f.departureIata)) return false;
       const etaIso = f.estimatedTouchDownTime ?? f.scheduledArrival;
-      // En mode backup, on garde les vols sans ETA connu (avion pas encore parti)
-      // mais on exclut ceux dont l'arrivée réelle est déjà passée (IN DATE renseignée)
       if (etaIso) {
         const etaMs = new Date(etaIso).getTime();
-        // Exclure seulement si arrivée réelle passée de plus de 30 min
         if (etaMs < now - 30 * 60 * 1000) return false;
       }
       return true;

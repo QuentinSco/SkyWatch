@@ -24,8 +24,10 @@ export const GET: APIRoute = async ({ url }) => {
     : null; // null = tous
 
   try {
-    // ── Vols AF : LC + MC (lcOnly = false) ──────────────────────────────────
-    const allFlights = await getCachedAfArrivals(force, /* lcOnly = */ false);
+    // ── Vols AF : LC uniquement (lcOnly = true) ──────────────────────────────
+    // En mode API, l'endpoint AF retourne déjà uniquement les LC.
+    // En mode backup CSV, le fichier contient LC+MC+CC — on filtre isLongHaul.
+    const allFlights = await getCachedAfArrivals(force, /* lcOnly = */ true);
 
     const now = Date.now();
     const flights = allFlights.filter(f => {

@@ -130,8 +130,11 @@ export const GET: APIRoute = async ({ url }) => {
 
     const now = Date.now();
     const cleanedFlights = allFlights.filter(f => {
+      // Exclure les bus/équipements non opérationnels
       if (f.aircraftType === 'BUS') return false;
-      if (!f.registration?.trim()) return false;
+      // Ne pas filtrer sur registration : un vol LC en route peut avoir
+      // une registration nulle dans l'API AF pour les legs en cours,
+      // ce qui l'exclurait silencieusement malgré une menace active.
       const etaIso = f.estimatedTouchDownTime ?? f.scheduledArrival;
       if (etaIso && new Date(etaIso).getTime() < now) return false;
       return true;

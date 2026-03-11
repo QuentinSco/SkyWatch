@@ -80,12 +80,15 @@ const AF_AIRPORTS = [
   { icao: 'KPDX', lat: 45.5898,  lon:-122.5951, iso3: 'USA', name: 'Portland' },
   { icao: 'KBWI', lat: 39.1754,  lon: -76.6683, iso3: 'USA', name: 'Baltimore' },
   { icao: 'KDEN', lat: 39.8561,  lon:-104.6737, iso3: 'USA', name: 'Denver' },
+  { icao: 'PHOG', lat: 20.8986,  lon:-156.4305, iso3: 'USA', name: 'Maui (Kahului)' },
+  { icao: 'PHNL', lat: 21.3187,  lon:-157.9224, iso3: 'USA', name: 'Honolulu' },
   { icao: 'SBGR', lat: -23.4356, lon: -46.4731, iso3: 'BRA', name: 'São Paulo' },
   { icao: 'SCEL', lat: -33.3930, lon: -70.7858, iso3: 'CHL', name: 'Santiago' },
   { icao: 'MMMX', lat: 19.4363,  lon: -99.0721, iso3: 'MEX', name: 'Mexico' },
   { icao: 'TFFR', lat: 16.2653,  lon: -61.5272, iso3: 'GLP', name: 'Pointe-à-Pitre' },
   { icao: 'TFFF', lat: 14.5910,  lon: -61.0032, iso3: 'MTQ', name: 'Fort-de-France' },
   { icao: 'SOCA', lat:  4.8221,  lon: -52.3676, iso3: 'GUF', name: 'Cayenne' },
+  { icao: 'NTAA', lat: -17.5534, lon:-149.6066, iso3: 'PYF', name: 'Papeete Tahiti' },
   { icao: 'FMEE', lat: -20.8871, lon:  55.5116, iso3: 'REU', name: 'La Réunion' },
   { icao: 'FMCH', lat: -11.5337, lon:  43.2719, iso3: 'COM', name: 'Moroni' },
   { icao: 'FMMI', lat: -18.7969, lon:  47.4788, iso3: 'MDG', name: 'Antananarivo' },
@@ -110,6 +113,35 @@ const AF_AIRPORTS = [
   { icao: 'VABB', lat: 19.0896,  lon:  72.8656, iso3: 'IND', name: 'Mumbai' },
   { icao: 'VIDP', lat: 28.5562,  lon:  77.1000, iso3: 'IND', name: 'Delhi' },
 ];
+
+// ─── Volcans Hawaii → NTAA (Papeete) ─────────────────────────────────────────────────────────
+// Les volcans de Hawaii (Big Island, ~19°N 155°W) sont à ~4 200 km de Tahiti.
+// Aucun rayon de proximité ne peut relier les deux ; on force le mapping explicitement.
+// Liste non exhaustive — couvre les volcans actifs gérés par le VAAC Washington.
+const HAWAII_VOLCANO_NAMES = new Set([
+  'KILAUEA', 'MAUNA LOA', 'MAUNA KEA', 'HUALALAI', 'LOIHI',
+  'KILAUEA VOLCANO', 'MAUNA LOA VOLCANO',
+]);
+
+/** Retourne true si le nom de volcan correspond à Hawaii. */
+function isHawaiiVolcano(name: string | null | undefined): boolean {
+  if (!name) return false;
+  return HAWAII_VOLCANO_NAMES.has(name.toUpperCase().trim());
+}
+
+/**
+ * Retourne les aéroports proches des coordonnées, en ajoutant NTAA
+ * si les coordonnées correspondent à la zone Hawaii (volcanisme actif).
+ * Hawaii : lat ∈ [18, 23], lon ∈ [-161, -154]
+ */
+function getAirportsNearCoordsWithOverride(lat: number, lon: number, radiusKm: number, volcanoName?: string | null): string[] {
+  const base = getAirportsNearCoords(lat, lon, radiusKm);
+  const isHawaii = (lat >= 18 && lat <= 23 && lon >= -161 && lon <= -154) || isHawaiiVolcano(volcanoName);
+  if (isHawaii && !base.includes('NTAA')) {
+    return [...base, 'NTAA'];
+  }
+  return base;
+}
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
@@ -474,7 +506,10 @@ export async function fetchGDACS(): Promise<Alert[]> {
       const eventId = gdacsGetTag(item, 'gdacs:eventid') || `${eventType}-${lat}-${lon}`;
 
       const radius = GDACS_IMPACT_RADIUS[eventType] ?? 400;
-      const airports = getAirportsNearCoords(lat, lon, radius);
+      // Pour les volcans GDACS, on utilise le override Hawaii → NTAA
+      const airports = eventType === 'VO'
+        ? getAirportsNearCoordsWithOverride(lat, lon, radius, eventName)
+        : getAirportsNearCoords(lat, lon, radius);
       const region = regionFromCoords(lat, lon);
       const basin = eventType === 'TC' ? basinFromCoords(lat, lon) : undefined;
 
@@ -608,6 +643,10 @@ function parseVaaTextBlock(block: string, sourceName: string, region: string, so
     }
 
     const volcanoDisplay = volcano ?? 'Volcan';
+    const airports = (lat != null && lon != null)
+      ? getAirportsNearCoordsWithOverride(lat, lon, 800, volcano)
+      : [];
+
     return {
       id:         `VAAC-${sourceName}-${volcanoDisplay.replace(/\s+/g, '_')}-${dtg || Date.now()}`,
       source:     'VAAC',
@@ -615,7 +654,7 @@ function parseVaaTextBlock(block: string, sourceName: string, region: string, so
       severity,
       phenomenon: 'Cendres volcaniques',
       country:    get('AREA') || sourceName,
-      airports:   (lat != null && lon != null) ? getAirportsNearCoords(lat, lon, 800) : [],
+      airports,
       ...(lat != null && lon != null ? { lat, lon } : {}),
       validFrom:  new Date().toISOString(),
       validTo:    null,
@@ -649,6 +688,10 @@ function parseVAACRssItem(item: string, sourceName: string, region: string): Ale
       || null;
     const volcano = volcanoRaw && volcanoRaw !== 'Inconnu' ? volcanoRaw : null;
 
+    const airports = coords
+      ? getAirportsNearCoordsWithOverride(coords.lat, coords.lon, 800, volcano)
+      : [];
+
     return {
       id:         `VAAC-${sourceName}-${(volcano ?? 'unknown').replace(/\s+/g, '_')}-${pubDate}`,
       source:     'VAAC',
@@ -656,7 +699,7 @@ function parseVAACRssItem(item: string, sourceName: string, region: string): Ale
       severity,
       phenomenon: 'Cendres volcaniques',
       country:    vaacGetTag(item, 'dc:subject') || sourceName,
-      airports:   coords ? getAirportsNearCoords(coords.lat, coords.lon, 800) : [],
+      airports,
       ...(coords ? { lat: coords.lat, lon: coords.lon } : {}),
       validFrom:  pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
       validTo:    null,
@@ -833,6 +876,10 @@ async function fetchVAACWashington(): Promise<Alert[]> {
       const flStr    = flLevel ? ` — Cendres ${flLevel}` : '';
       const motionStr = direction !== null && speedKt !== null ? ` | ${direction}° / ${speedKt} kt` : '';
 
+      // Mapping explicite Hawaii → NTAA : les volcans hawaïens (~19°N, 155°W)
+      // sont à ~4 200 km de Tahiti, hors de tout rayon de proximité standard.
+      const airports = getAirportsNearCoordsWithOverride(lat, lon, 600, volcanoName);
+
       alerts.push({
         id:          `vaac-washington-${volcanoDisplay.replace(/\s/g, '')}-${issueTimeRaw}`,
         source:      'VAAC',
@@ -840,7 +887,7 @@ async function fetchVAACWashington(): Promise<Alert[]> {
         severity:    vaacSeverity(flLevel),
         phenomenon:  'Cendres volcaniques',
         country:     stateOrRegion || 'Amérique centrale',
-        airports:    getAirportsNearCoords(lat, lon, 600),
+        airports,
         lat, lon,
         validFrom:   issueTimeRaw,
         validTo:     nextAdvisoryTimeStr,

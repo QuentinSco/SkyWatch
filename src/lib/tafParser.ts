@@ -194,7 +194,22 @@ const AIRPORT_NAMES: Record<string, string> = {
   LDZA: 'Zagreb',             LSZH: 'Zurich',
   LDDU: 'Dubrovnik',          LFPO: 'Paris Orly',
   LFBT: 'Lourdes-Tarbes',
+  // ── Volcans Hawaii (surveillance ETOPS LAX-PPT) ────────────────────────────
+  PHTO: 'Hilo (Hawaii — volcan)',
+  PHNL: 'Honolulu (Hawaii — volcan)',
 };
+
+// ─── Stations volcaniques Hawaii → impact NTAA (ETOPS LAX-PPT) ──────────────
+// Ces aéroports ne sont pas des escales AF, mais leurs cendres volcaniques
+// peuvent impacter la route ETOPS LAX-PPT. Les menaces détectées sur ces
+// stations sont ré-émises comme risques sur NTAA (Papeete).
+const VOLCANO_ETOPS_IMPACTS: Record<string, string> = {
+  PHTO: 'NTAA', // Hilo → Papeete
+  PHNL: 'NTAA', // Honolulu → Papeete
+};
+
+// ICAOs Hawaii à surveiller (TAF fetch inclus)
+const HAWAII_VOLCANO_ICAOS = Object.keys(VOLCANO_ETOPS_IMPACTS);
 
 const SEVERITY_ORDER: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
 
@@ -373,7 +388,14 @@ function parseThreatsFromForecast(
     threats.push({ type: 'SNOW', label: heavy ? 'Neige forte / Tempête' : 'Neige', value: wxString,
       severity: sev(heavy ? 'red' : 'orange'), periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
   }
-  if (wxString && /\bFZRA\b|\bFZDZ\b|\bFZFG\b/.test(wxString) && ok('FZ')) {
+  // ── Précipitations verglaçantes ─────────────────────────────────────────────
+  // FZRA (pluie verglaçante) → alerte rouge comme TSRA, sauf PROB30 TEMPO (→ yellow via cappedSeverity).
+  // FZDZ (bruine verglaçante) et FZFG (brouillard givrant) restent orange.
+  if (wxString && /\bFZRA\b/.test(wxString) && ok('FZRA')) {
+    threats.push({ type: 'FREEZING_RAIN', label: 'Pluie verglaçante (FZRA)', value: wxString,
+      severity: sev('red'), periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
+  }
+  if (wxString && /\bFZDZ\b|\bFZFG\b/.test(wxString) && ok('FZ')) {
     threats.push({ type: 'FREEZING', label: 'Précip. verglaçantes', value: wxString,
       severity: sev('orange'), periodStart: timeFrom, periodEnd: timeTo, changeIndicator: ci, snippet });
   }
@@ -431,6 +453,10 @@ function parseThreatsFromForecast(
 
 export function parseTafToRisks(tafData: any[]): TafRisk[] {
   const risks: TafRisk[] = [];
+
+  // Collecte d'abord tous les risques Hawaii (volcans) pour injection dans NTAA
+  const volcanoThreatsForNtaa: TafThreat[] = [];
+
   for (const taf of tafData) {
     const icao: string = taf.icaoId ?? taf.stationId ?? '';
     if (!icao) continue;
@@ -446,6 +472,22 @@ export function parseTafToRisks(tafData: any[]): TafRisk[] {
       const segment = entry?.segment ?? '';
       allThreats.push(...parseThreatsFromForecast(fcst, ci, segment));
     }
+
+    // ── Volcans Hawaii : ré-émettre comme risque NTAA (ETOPS LAX-PPT) ────────
+    const impactedIcao = VOLCANO_ETOPS_IMPACTS[icao.toUpperCase()];
+    if (impactedIcao) {
+      // On filtre uniquement les menaces de cendres volcaniques (VA) ou toute
+      // menace significative sur ces stations ; on les ré-étiquette pour NTAA.
+      const reTagged = allThreats.map(t => ({
+        ...t,
+        label: `${t.label} [Hawaii ${icao} — ETOPS]`,
+        type:  t.type,
+      }));
+      volcanoThreatsForNtaa.push(...reTagged);
+      // On ne crée PAS de TafRisk indépendant pour PHTO/PHNL
+      continue;
+    }
+
     if (allThreats.length === 0) continue;
     const worstSeverity = allThreats.reduce<ThreatSeverity>((worst, t) =>
       SEVERITY_ORDER[t.severity] < SEVERITY_ORDER[worst] ? t.severity : worst, 'yellow');
@@ -456,11 +498,32 @@ export function parseTafToRisks(tafData: any[]): TafRisk[] {
       threats: allThreats.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]),
     });
   }
+
+  // Injecter les menaces Hawaii dans le risque NTAA existant (ou créer une entrée)
+  if (volcanoThreatsForNtaa.length > 0) {
+    const ntaaRisk = risks.find(r => r.icao === 'NTAA');
+    if (ntaaRisk) {
+      ntaaRisk.threats.push(...volcanoThreatsForNtaa);
+      ntaaRisk.threats.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+      ntaaRisk.worstSeverity = ntaaRisk.threats.reduce<ThreatSeverity>((worst, t) =>
+        SEVERITY_ORDER[t.severity] < SEVERITY_ORDER[worst] ? t.severity : worst, 'yellow');
+    } else {
+      const worstSeverity = volcanoThreatsForNtaa.reduce<ThreatSeverity>((worst, t) =>
+        SEVERITY_ORDER[t.severity] < SEVERITY_ORDER[worst] ? t.severity : worst, 'yellow');
+      risks.push({
+        icao: 'NTAA', iata: 'PPT', name: 'Papeete',
+        rawTaf: '',
+        worstSeverity,
+        threats: volcanoThreatsForNtaa.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]),
+      });
+    }
+  }
+
   return risks.sort((a, b) => SEVERITY_ORDER[a.worstSeverity] - SEVERITY_ORDER[b.worstSeverity]);
 }
 
 // ─── Cache Redis ─────────────────────────────────────────────────────────────
-const KV_KEY_TAF     = 'taf_risks_cache_v4'; // v4 : filtre héritage BECMG/FM
+const KV_KEY_TAF     = 'taf_risks_cache_v5'; // v5 : FZRA→red, volcans Hawaii→NTAA
 const KV_TTL_TAF_SEC = 30 * 60;
 
 export async function fetchTafRisks(force = false, lcOnly = true): Promise<TafRisk[]> {
@@ -476,10 +539,13 @@ export async function fetchTafRisks(force = false, lcOnly = true): Promise<TafRi
     }
   }
 
+  // Inclure les ICAOs Hawaii pour surveillance ETOPS
+  const allIcaos = [...new Set([...AF_AIRPORT_ICAOS, ...HAWAII_VOLCANO_ICAOS])];
+
   const CHUNK_SIZE = 20;
   const chunks: string[][] = [];
-  for (let i = 0; i < AF_AIRPORT_ICAOS.length; i += CHUNK_SIZE) {
-    chunks.push(AF_AIRPORT_ICAOS.slice(i, i + CHUNK_SIZE));
+  for (let i = 0; i < allIcaos.length; i += CHUNK_SIZE) {
+    chunks.push(allIcaos.slice(i, i + CHUNK_SIZE));
   }
 
   const results = await Promise.allSettled(

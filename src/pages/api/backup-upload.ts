@@ -9,6 +9,9 @@ export const KV_BACKUP_KEY      = 'af_backup_flights';
 export const KV_BACKUP_MODE_KEY = 'af_backup_mode';
 const KV_BACKUP_TTL_SEC         = 30 * 60 * 60; // 30 h
 
+// Clé du cache taf-vol-risks — doit correspondre à TAF_VOL_CACHE_KEY dans taf-vol-risks.ts
+const TAF_VOL_CACHE_KEY = 'taf_vol_risks_cache_v3';
+
 const kv = redis;
 
 // CORS permissif pour cet endpoint interne
@@ -18,11 +21,11 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-// ── OPTIONS (preflight) ───────────────────────────────────────────────────────
+// ── OPTIONS (preflight) ────────────────────────────────────────────────
 export const OPTIONS: APIRoute = () =>
   new Response(null, { status: 204, headers: CORS_HEADERS });
 
-// ── GET : statut du mode backup ───────────────────────────────────────────
+// ── GET : statut du mode backup ──────────────────────────────────────
 export const GET: APIRoute = async () => {
   const headers = { 'Content-Type': 'application/json', ...CORS_HEADERS };
   if (!kv) {
@@ -45,9 +48,7 @@ export const GET: APIRoute = async () => {
   }
 };
 
-// ── POST : upload CSV en JSON body { csv: string, filename: string } ───────────────
-// Le client lit le fichier en JS (FileReader) et envoie le texte brut en JSON.
-// Cela évite le multipart/form-data bloqué par Vercel (protection cross-site).
+// ── POST : upload CSV en JSON body { csv: string, filename: string } ────────────
 export const POST: APIRoute = async ({ request }) => {
   const headers = { 'Content-Type': 'application/json', ...CORS_HEADERS };
 
@@ -75,6 +76,8 @@ export const POST: APIRoute = async ({ request }) => {
     await Promise.all([
       kv.set(KV_BACKUP_KEY,      cache, { ex: KV_BACKUP_TTL_SEC }),
       kv.set(KV_BACKUP_MODE_KEY, true,  { ex: KV_BACKUP_TTL_SEC }),
+      // Invalider le cache taf-vol-risks pour forcer un rechargement avec les nouveaux vols
+      kv.del(TAF_VOL_CACHE_KEY),
     ]);
 
     console.log(`[backup-upload] ${cache.flights.length} vols stockés (source: ${filename})`);
@@ -94,12 +97,18 @@ export const POST: APIRoute = async ({ request }) => {
   }
 };
 
-// ── DELETE : désactiver le mode backup ────────────────────────────────────
+// ── DELETE : désactiver le mode backup ────────────────────────────────
 export const DELETE: APIRoute = async () => {
   const headers = { 'Content-Type': 'application/json', ...CORS_HEADERS };
   if (!kv) return new Response(JSON.stringify({ ok: false }), { headers });
   try {
-    await kv.del(KV_BACKUP_MODE_KEY);
+    await Promise.all([
+      kv.del(KV_BACKUP_MODE_KEY),
+      // Invalider le cache taf-vol-risks qui contient backupMode:true
+      // Sans ça, le cache (TTL 20min) continuerait à renvoyer backupMode:true
+      // après désactivation, jusqu'à son expiration naturelle.
+      kv.del(TAF_VOL_CACHE_KEY),
+    ]);
     return new Response(JSON.stringify({ ok: true }), { headers });
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 500, headers });

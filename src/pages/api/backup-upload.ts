@@ -17,7 +17,7 @@ const kv = redis;
 // CORS permissif pour cet endpoint interne
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
@@ -48,7 +48,7 @@ export const GET: APIRoute = async () => {
   }
 };
 
-// ── POST : upload CSV en JSON body { csv: string, filename: string } ────────────
+// ── POST : upload CSV { csv, filename } ou désactivation { action: 'disable' } ──
 export const POST: APIRoute = async ({ request }) => {
   const headers = { 'Content-Type': 'application/json', ...CORS_HEADERS };
 
@@ -57,13 +57,27 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   try {
-    let body: { csv?: string; filename?: string };
+    let body: { action?: string; csv?: string; filename?: string };
     try {
       body = await request.json();
     } catch {
       return new Response(JSON.stringify({ ok: false, error: 'Body JSON invalide' }), { status: 400, headers });
     }
 
+    // ── Désactivation du mode backup ────────────────────────────────────────
+    if (body?.action === 'disable') {
+      await Promise.all([
+        kv.del(KV_BACKUP_MODE_KEY),
+        // Invalider le cache taf-vol-risks qui contient backupMode:true
+        // Sans ça, le cache (TTL 20min) continuerait à renvoyer backupMode:true
+        // après désactivation, jusqu'à son expiration naturelle.
+        kv.del(TAF_VOL_CACHE_KEY),
+      ]);
+      console.log('[backup-upload] Mode backup désactivé');
+      return new Response(JSON.stringify({ ok: true }), { headers });
+    }
+
+    // ── Upload CSV ───────────────────────────────────────────────────────────
     const csvText = body?.csv ?? '';
     const filename = body?.filename ?? 'upload.csv';
 
@@ -94,23 +108,5 @@ export const POST: APIRoute = async ({ request }) => {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[backup-upload] Erreur parse:', msg);
     return new Response(JSON.stringify({ ok: false, error: msg }), { status: 400, headers });
-  }
-};
-
-// ── DELETE : désactiver le mode backup ────────────────────────────────
-export const DELETE: APIRoute = async () => {
-  const headers = { 'Content-Type': 'application/json', ...CORS_HEADERS };
-  if (!kv) return new Response(JSON.stringify({ ok: false }), { headers });
-  try {
-    await Promise.all([
-      kv.del(KV_BACKUP_MODE_KEY),
-      // Invalider le cache taf-vol-risks qui contient backupMode:true
-      // Sans ça, le cache (TTL 20min) continuerait à renvoyer backupMode:true
-      // après désactivation, jusqu'à son expiration naturelle.
-      kv.del(TAF_VOL_CACHE_KEY),
-    ]);
-    return new Response(JSON.stringify({ ok: true }), { headers });
-  } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 500, headers });
   }
 };

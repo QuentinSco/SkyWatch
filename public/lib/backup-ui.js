@@ -95,7 +95,7 @@
       const rawText = await res.text();
       let json;
       try { json = JSON.parse(rawText); }
-      catch { throw new Error('Réponse serveur invalide\u00a0: ' + rawText.slice(0, 120)); }
+      catch { throw new Error('R\u00e9ponse serveur invalide\u00a0: ' + rawText.slice(0, 120)); }
       if (!json.ok) throw new Error(json.error ?? 'Erreur upload');
       _backupActive = true;
       _backupInfo   = { uploadedAt: json.uploadedAt, filename: json.filename, flightCount: json.flightCount };
@@ -116,9 +116,14 @@
     _backupInfo   = null;
     render();
     updateBackupBanner(false, null);
-    // 2. Envoyer le DELETE (fire & forget, mais await pour s'assurer que le KV
-    //    est vidé avant que loadTafVolRisks() interroge l'API)
-    try { await fetch('/api/backup-upload', { method: 'DELETE' }); } catch { /* silencieux */ }
+    // 2. POST avec action=disable (Vercel bloque les requêtes DELETE cross-site)
+    try {
+      await fetch('/api/backup-upload', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ action: 'disable' }),
+      });
+    } catch { /* silencieux */ }
     // 3. Recharger la section vols — l'API retournera maintenant backupMode:false
     if (typeof window.loadTafVolRisks === 'function') window.loadTafVolRisks();
   }

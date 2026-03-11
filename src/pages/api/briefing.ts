@@ -1,5 +1,5 @@
 // src/pages/api/briefing.ts
-// ─── API Trame Briefing CCO ─────────────────────────────────────────────────────────
+// ─── API Trame Briefing CCO ───────────────────────────────────────────────────────────────
 import type { APIRoute } from 'astro';
 import { fetchTafRisks }                              from '../../lib/tafParser';
 import { getCachedAfArrivals, getCachedAfDepartures } from '../../lib/afFlights';
@@ -60,19 +60,20 @@ export interface BriefingData {
 const BRIEFING_CACHE_KEY     = 'briefing_cache_v4'; // v4 : missionName fusée + tri ETA ISO
 const BRIEFING_CACHE_TTL_SEC = 5 * 60;
 
-// ─── Constantes ───────────────────────────────────────────────────────────────────
+// ─── Constantes ───────────────────────────────────────────────────────────────────────
 const EUROPEAN_IATAS = new Set(['CDG', 'ORY', 'NCE', 'LDE', 'DUB', 'PIK']);
 
 const PHENOMENON_LABELS: Record<string, string> = {
-  THUNDERSTORM: 'Orages',
-  FUNNEL_CLOUD: 'Trombe',
-  SNOW:         'Neige',
-  FREEZING:     'Précip. verglaçantes',
-  HAIL:         'Grêle',
-  WIND:         'Vent fort',
-  LOW_VIS:      'Visibilité réduite',
-  CB_TCU:       'CB/TCU',
-  LOW_CEILING:  'Plafond bas',
+  THUNDERSTORM:  'Orages',
+  FUNNEL_CLOUD:  'Trombe',
+  SNOW:          'Neige',
+  FREEZING_RAIN: 'Pluies verglaçantes',
+  FREEZING:      'Précip. verglaçantes',
+  HAIL:          'Grêle',
+  WIND:          'Vent fort',
+  LOW_VIS:       'Visibilité réduite',
+  CB_TCU:        'CB/TCU',
+  LOW_CEILING:   'Plafond bas',
 };
 
 const SEV_ORDER: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
@@ -93,7 +94,7 @@ function parseVaacMotion(description: string): { direction: number | null; speed
   };
 }
 
-// ─── Route GET ──────────────────────────────────────────────────────────────────
+// ─── Route GET ────────────────────────────────────────────────────────────────────
 export const prerender = false;
 
 export const GET: APIRoute = async ({ url }) => {
@@ -126,7 +127,7 @@ export const GET: APIRoute = async ({ url }) => {
       fetchRocketLaunches(),
     ]);
 
-    // ── Météo hors Europe ──────────────────────────────────────────────────────────────
+    // ── Météo hors Europe ──────────────────────────────────────────────────────────────────
     const meteoLines: BriefingMeteoLine[] = [];
     const seen = new Set<string>();
 
@@ -207,7 +208,7 @@ export const GET: APIRoute = async ({ url }) => {
         };
       });
 
-    // ── Volcanique ─────────────────────────────────────────────────────────────────────
+    // ── Volcanique ──────────────────────────────────────────────────────────────────────────
     const volcanique = (vaacAlerts as any[])
       .filter(a => Array.isArray(a.airports) && a.airports.length > 0)
       .map(a => {
@@ -222,7 +223,7 @@ export const GET: APIRoute = async ({ url }) => {
         };
       });
 
-    // ── Tirs de fusée ─────────────────────────────────────────────────────────────────────
+    // ── Tirs de fusée ────────────────────────────────────────────────────────────────────────
     const tirsFusee = launches
       .filter(l => {
         const start = new Date(l.validFrom).getTime();
@@ -237,7 +238,7 @@ export const GET: APIRoute = async ({ url }) => {
         return { site, rocket, provider, missionName, timeZ: fmtZ(l.validFrom), airports: l.airports };
       });
 
-    // ── Vent arrière ────────────────────────────────────────────────────────────────────
+    // ── Vent arrière ───────────────────────────────────────────────────────────────────────
     const TAILWIND_ICAOS = new Set(['TNCM', 'MROC']);
     const operatedIcaos = new Set(
       allDepartures

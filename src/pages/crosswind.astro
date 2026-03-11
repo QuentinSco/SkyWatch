@@ -462,197 +462,234 @@ import '../styles/global.css';
 
   <script is:inline>
   // ─── CONFIG : pistes & QFU par aéroport ───────────────────────────────────
+// decl = déclinaison magnétique en degrés (est positif, ouest négatif)
+// Source : NOAA World Magnetic Model 2025 — arrondi à l'entier le plus proche
+// Formule : vent_magnétique = vent_vrai (TAF) − déclinaison
 const AIRPORT_RUNWAYS = {
-  CYOW: { iata: 'YOW', name: 'Ottawa', qfu: [7, 25, 14, 32] },
-  CYUL: { iata: 'YUL', name: 'Montreal', qfu: [6, 24] },
-  CYVR: { iata: 'YVR', name: 'Vancouver', qfu: [8, 26, 13, 31] },
-  CYYZ: { iata: 'YYZ', name: 'Toronto', qfu: [5, 23, 6, 24, 15, 33] },
-  DAAG: { iata: 'ALG', name: 'Alger', qfu: [5, 23, 9, 27] },
-  DAOO: { iata: 'ORN', name: 'Oran', qfu: [7, 25] },
-  DBBB: { iata: 'COO', name: 'Cotonou', qfu: [6, 24] },
-  DIAP: { iata: 'ABJ', name: 'Abidjan', qfu: [3, 21] },
-  DNAA: { iata: 'ABV', name: 'Abuja', qfu: [4, 22] },
-  DNMM: { iata: 'LOS', name: 'Lagos', qfu: [18, 36] },
-  DTTA: { iata: 'TUN', name: 'Tunis', qfu: [1, 19, 11, 29] },
-  DXXX: { iata: 'LFW', name: 'Lome', qfu: [4, 22] },
-  EDDB: { iata: 'BER', name: 'Berlin', qfu: [6, 24] },
-  EDDF: { iata: 'FRA', name: 'Francfort', qfu: [7, 25, 18, 36] },
-  EDDH: { iata: 'HAM', name: 'Hambourg', qfu: [5, 23, 15, 33] },
-  EDDL: { iata: 'DUS', name: 'Dusseldorf', qfu: [5, 23] },
-  EDDM: { iata: 'MUC', name: 'Munich', qfu: [8, 26] },
-  EDDN: { iata: 'NUE', name: 'Nuremberg', qfu: [10, 28] },
-  EDDS: { iata: 'STR', name: 'Stuttgart', qfu: [7, 25] },
-  EDDV: { iata: 'HAJ', name: 'Hanovre', qfu: [9, 27] },
-  EFHK: { iata: 'HEL', name: 'Helsinki', qfu: [4, 22, 15, 33] },
-  EFKT: { iata: 'KTT', name: 'Kittila', qfu: [16, 34] },
-  EFRO: { iata: 'RVN', name: 'Rovaniemi', qfu: [3, 21] },
-  EGBB: { iata: 'BHX', name: 'Birmingham', qfu: [15, 33] },
-  EGCC: { iata: 'MAN', name: 'Manchester', qfu: [5, 23] },
-  EGKK: { iata: 'LGW', name: 'Londres Gatwick', qfu: [8, 26] },
-  EGLL: { iata: 'LHR', name: 'Londres Heathrow', qfu: [9, 27] },
-  EGNT: { iata: 'NCL', name: 'Newcastle', qfu: [7, 25] },
-  EGPH: { iata: 'EDI', name: 'Edimbourg', qfu: [6, 24] },
-  EGPK: { iata: 'PIK', name: 'Glasgow Prestwick', qfu: [2, 20, 12, 30] },
-  EHAM: { iata: 'AMS', name: 'Amsterdam', qfu: [4, 22, 6, 24, 9, 27, 18, 36] },
-  EICK: { iata: 'ORK', name: 'Cork', qfu: [16, 34] },
-  EIDW: { iata: 'DUB', name: 'Dublin', qfu: [10, 28, 16, 34] },
-  EKBI: { iata: 'BLL', name: 'Billund', qfu: [9, 27] },
-  EKCH: { iata: 'CPH', name: 'Copenhague', qfu: [4, 22, 12, 30] },
-  ENBR: { iata: 'BGO', name: 'Bergen', qfu: [17, 35] },
-  ENGM: { iata: 'OSL', name: 'Oslo', qfu: [1, 19] },
-  ENTC: { iata: 'TOS', name: 'Tromso', qfu: [18, 36] },
-  EPKK: { iata: 'KRK', name: 'Cracovie', qfu: [7, 25] },
-  EPWA: { iata: 'WAW', name: 'Varsovie', qfu: [11, 29, 15, 33] },
-  ESGG: { iata: 'GOT', name: 'Goteborg', qfu: [3, 21] },
-  ESSA: { iata: 'ARN', name: 'Stockholm', qfu: [1, 19, 8, 26] },
-  FACT: { iata: 'CPT', name: 'Le Cap', qfu: [1, 19, 16, 34] },
-  FAOR: { iata: 'JNB', name: 'Johannesburg', qfu: [3, 21] },
-  FCBB: { iata: 'BZV', name: 'Brazzaville', qfu: [5, 23] },
-  FCPP: { iata: 'PNR', name: 'Pointe-Noire', qfu: [17, 35] },
-  FGBT: { iata: 'SSG', name: 'Malabo', qfu: [3, 21] },
-  FIMP: { iata: 'MRU', name: 'Maurice', qfu: [14, 32] },
-  FKKD: { iata: 'DLA', name: 'Douala', qfu: [12, 30] },
-  FKYS: { iata: 'NSI', name: 'Yaounde', qfu: [1, 19] },
-  FMEE: { iata: 'RUN', name: 'La Reunion', qfu: [12, 30, 14, 32] },
-  FMMI: { iata: 'TNR', name: 'Antananarivo', qfu: [11, 29] },
-  FNBJ: { iata: 'NBJ', name: 'Luanda', qfu: [6, 24] },
-  FOOL: { iata: 'LBV', name: 'Libreville', qfu: [16, 34] },
-  FTTJ: { iata: 'NDJ', name: 'NDjamena', qfu: [5, 23] },
-  FZAA: { iata: 'FIH', name: 'Kinshasa', qfu: [6, 24] },
-  GMME: { iata: 'RBA', name: 'Rabat', qfu: [3, 21] },
-  GMMN: { iata: 'CMN', name: 'Casablanca', qfu: [17, 35] },
-  GMMX: { iata: 'RAK', name: 'Marrakech', qfu: [10, 28] },
-  GOBD: { iata: 'DSS', name: 'Dakar', qfu: [1, 19] },
-  GUCY: { iata: 'CKY', name: 'Conakry', qfu: [6, 24] },
-  HDAM: { iata: 'JIB', name: 'Djibouti', qfu: [9, 27] },
-  HECA: { iata: 'CAI', name: 'Le Caire', qfu: [5, 23] },
-  HKJK: { iata: 'NBO', name: 'Nairobi', qfu: [6, 24] },
-  HTKJ: { iata: 'JRO', name: 'Kilimandjaro', qfu: [9, 27] },
-  HTZA: { iata: 'ZNZ', name: 'Zanzibar', qfu: [18, 36] },
-  KATL: { iata: 'ATL', name: 'Atlanta', qfu: [8, 26, 9, 27, 10, 28] },
-  KBOS: { iata: 'BOS', name: 'Boston', qfu: [4, 22, 9, 27, 15, 33] },
-  KDEN: { iata: 'DEN', name: 'Denver', qfu: [7, 25, 8, 26, 16, 34, 17, 35] },
-  KDFW: { iata: 'DFW', name: 'Dallas/FW', qfu: [13, 31, 17, 35, 18, 36] },
-  KDTW: { iata: 'DTW', name: 'Detroit', qfu: [3, 21, 4, 22, 9, 27] },
-  KEWR: { iata: 'EWR', name: 'Newark', qfu: [4, 22, 11, 29] },
-  KIAD: { iata: 'IAD', name: 'Washington IAD', qfu: [1, 19, 12, 30] },
-  KIAH: { iata: 'IAH', name: 'Houston', qfu: [8, 26, 9, 27, 15, 33] },
-  KJFK: { iata: 'JFK', name: 'New York JFK', qfu: [4, 22, 13, 31] },
-  KLAS: { iata: 'LAS', name: 'Las Vegas', qfu: [1, 19, 8, 26] },
-  KLAX: { iata: 'LAX', name: 'Los Angeles', qfu: [6, 24, 7, 25] },
-  KMCO: { iata: 'MCO', name: 'Orlando', qfu: [17, 35, 18, 36] },
-  KMIA: { iata: 'MIA', name: 'Miami', qfu: [8, 26, 9, 27, 12, 30] },
-  KMSP: { iata: 'MSP', name: 'Minneapolis', qfu: [4, 22, 12, 30, 17, 35] },
-  KORD: { iata: 'ORD', name: 'Chicago', qfu: [4, 22, 9, 27, 10, 28] },
-  KPHX: { iata: 'PHX', name: 'Phoenix', qfu: [7, 25, 8, 26] },
-  KRDU: { iata: 'RDU', name: 'Raleigh-Durham', qfu: [5, 23] },
-  KSAN: { iata: 'SAN', name: 'San Diego', qfu: [9, 27] },
-  KSEA: { iata: 'SEA', name: 'Seattle', qfu: [16, 34] },
-  KSFO: { iata: 'SFO', name: 'San Francisco', qfu: [1, 19, 10, 28] },
-  LDDU: { iata: 'DBV', name: 'Dubrovnik', qfu: [11, 29] },
-  LDZA: { iata: 'ZAG', name: 'Zagreb', qfu: [4, 22] },
-  LEBB: { iata: 'BIO', name: 'Bilbao', qfu: [10, 28, 12, 30] },
-  LEBL: { iata: 'BCN', name: 'Barcelone', qfu: [2, 20, 6, 24] },
-  LEIB: { iata: 'IBZ', name: 'Ibiza', qfu: [6, 24] },
-  LEMD: { iata: 'MAD', name: 'Madrid', qfu: [14, 32, 18, 36] },
-  LEMG: { iata: 'AGP', name: 'Malaga', qfu: [12, 30, 13, 31] },
-  LEPA: { iata: 'PMI', name: 'Palma', qfu: [6, 24] },
-  LEVC: { iata: 'VLC', name: 'Valence', qfu: [12, 30] },
-  LEZL: { iata: 'SVQ', name: 'Seville', qfu: [9, 27] },
-  LFBD: { iata: 'BOD', name: 'Bordeaux', qfu: [5, 23, 11, 29] },
-  LFBO: { iata: 'TLS', name: 'Toulouse', qfu: [14, 32] },
-  LFBP: { iata: 'PUF', name: 'Pau', qfu: [13, 31] },
-  LFBT: { iata: 'LDE', name: 'Lourdes-Tarbes', qfu: [2, 20] },
-  LFBZ: { iata: 'BIQ', name: 'Biarritz', qfu: [9, 27] },
-  LFKB: { iata: 'BIA', name: 'Bastia', qfu: [16, 34] },
-  LFKC: { iata: 'CLY', name: 'Calvi', qfu: [18, 36] },
-  LFKJ: { iata: 'AJA', name: 'Ajaccio', qfu: [2, 20] },
-  LFKS: { iata: 'FSC', name: 'Figari', qfu: [18, 36] },
-  LFLC: { iata: 'CFE', name: 'Clermont-Ferrand', qfu: [8, 26] },
-  LFLL: { iata: 'LYS', name: 'Lyon', qfu: [17, 35] },
-  LFML: { iata: 'MRS', name: 'Marseille', qfu: [13, 31] },
-  LFMN: { iata: 'NCE', name: 'Nice', qfu: [4, 22] },
-  LFMT: { iata: 'MPL', name: 'Montpellier', qfu: [12, 30] },
-  LFPG: { iata: 'CDG', name: 'Paris CDG', qfu: [8, 26, 9, 27] },
-  LFPO: { iata: 'ORY', name: 'Paris ORY', qfu: [2, 20, 6, 24, 7, 25] },
-  LFQQ: { iata: 'LIL', name: 'Lille', qfu: [1, 19, 8, 26] },
-  LFRB: { iata: 'BES', name: 'Brest', qfu: [7, 25] },
-  LFRD: { iata: 'DNR', name: 'Dinard', qfu: [17, 35] },
-  LFRK: { iata: 'CFR', name: 'Caen', qfu: [13, 31] },
-  LFRN: { iata: 'RNS', name: 'Rennes', qfu: [10, 28] },
-  LFRS: { iata: 'NTE', name: 'Nantes', qfu: [3, 21] },
-  LFSB: { iata: 'BSL', name: 'Bale-Mulhouse', qfu: [7, 25, 15, 33] },
-  LGAV: { iata: 'ATH', name: 'Athenes', qfu: [3, 21] },
-  LGIR: { iata: 'HER', name: 'Heraklion', qfu: [9, 27] },
-  LGMK: { iata: 'JMK', name: 'Mykonos', qfu: [16, 34] },
-  LHBP: { iata: 'BUD', name: 'Budapest', qfu: [13, 31] },
-  LIBD: { iata: 'BRI', name: 'Bari', qfu: [7, 25] },
-  LICC: { iata: 'CTA', name: 'Catane', qfu: [8, 26] },
-  LICJ: { iata: 'PMO', name: 'Palerme', qfu: [2, 20, 7, 25] },
-  LIEO: { iata: 'OLB', name: 'Olbia', qfu: [5, 23] },
-  LIMC: { iata: 'MXP', name: 'Milan Malpensa', qfu: [17, 35] },
-  LIMF: { iata: 'TRN', name: 'Turin', qfu: [18, 36] },
-  LIML: { iata: 'LIN', name: 'Milan Linate', qfu: [17, 35] },
-  LIPE: { iata: 'BLQ', name: 'Bologne', qfu: [12, 30] },
-  LIPX: { iata: 'VRN', name: 'Verone', qfu: [4, 22] },
-  LIPZ: { iata: 'VCE', name: 'Venise', qfu: [4, 22] },
-  LIRF: { iata: 'FCO', name: 'Rome FCO', qfu: [7, 25, 16, 34] },
-  LIRN: { iata: 'NAP', name: 'Naples', qfu: [6, 24] },
-  LIRQ: { iata: 'FLR', name: 'Florence', qfu: [5, 23] },
-  LJLJ: { iata: 'LJU', name: 'Ljubljana', qfu: [12, 30] },
-  LKPR: { iata: 'PRG', name: 'Prague', qfu: [6, 24, 12, 30] },
-  LLBG: { iata: 'TLV', name: 'Tel Aviv', qfu: [3, 21, 8, 26, 12, 30] },
-  LMML: { iata: 'MLA', name: 'Malte', qfu: [5, 23, 13, 31] },
-  LOWW: { iata: 'VIE', name: 'Vienne', qfu: [11, 29, 16, 34] },
-  LPPR: { iata: 'OPO', name: 'Porto', qfu: [17, 35] },
-  LPPT: { iata: 'LIS', name: 'Lisbonne', qfu: [2, 20] },
-  LROP: { iata: 'OTP', name: 'Bucarest', qfu: [8, 26] },
-  LSGG: { iata: 'GVA', name: 'Geneve', qfu: [4, 22] },
-  LSZH: { iata: 'ZRH', name: 'Zurich', qfu: [10, 28, 14, 32, 16, 34] },
-  LTFM: { iata: 'IST', name: 'Istanbul', qfu: [16, 34, 17, 35, 18, 36] },
-  MDPC: { iata: 'PUJ', name: 'Punta Cana', qfu: [8, 26, 9, 27] },
-  MMGL: { iata: 'GDL', name: 'Guadalajara', qfu: [11, 29] },
-  MMMX: { iata: 'MEX', name: 'Mexico City', qfu: [5, 23] },
-  MMSM: { iata: 'NLU', name: 'Mexico NLU', qfu: [4, 22] },
-  MMUN: { iata: 'CUN', name: 'Cancun', qfu: [12, 30] },
-  MPTO: { iata: 'PTY', name: 'Panama City', qfu: [3, 21] },
-  MROC: { iata: 'SJO', name: 'San Jose CR', qfu: [7, 25] },
-  MUHA: { iata: 'HAV', name: 'La Havane', qfu: [6, 24] },
-  MYNN: { iata: 'NAS', name: 'Nassau', qfu: [10, 28, 14, 32] },
-  NTAA: { iata: 'PPT', name: 'Papeete', qfu: [4, 22] },
-  OERK: { iata: 'RUH', name: 'Riyad', qfu: [15, 33] },
-  OLBA: { iata: 'BEY', name: 'Beyrouth', qfu: [3, 21, 16, 34, 17, 35] },
-  OMAA: { iata: 'AUH', name: 'Abu Dhabi', qfu: [13, 31] },
-  OMDB: { iata: 'DXB', name: 'Dubai', qfu: [12, 30] },
-  RJBB: { iata: 'KIX', name: 'Osaka KIX', qfu: [6, 24] },
-  RJTT: { iata: 'HND', name: 'Tokyo Haneda', qfu: [4, 22, 5, 23, 16, 34] },
-  RKSI: { iata: 'ICN', name: 'Seoul ICN', qfu: [15, 33, 16, 34] },
-  RPLL: { iata: 'MNL', name: 'Manille', qfu: [6, 24, 13, 31] },
-  SAEZ: { iata: 'EZE', name: 'Buenos Aires', qfu: [11, 29, 17, 35] },
-  SBFZ: { iata: 'FOR', name: 'Fortaleza', qfu: [13, 31] },
-  SBGL: { iata: 'GIG', name: 'Rio de Janeiro', qfu: [10, 28, 15, 33] },
-  SBGR: { iata: 'GRU', name: 'Sao Paulo', qfu: [10, 28] },
-  SBSV: { iata: 'SSA', name: 'Salvador de Bahia', qfu: [10, 28] },
-  SCEL: { iata: 'SCL', name: 'Santiago', qfu: [17, 35] },
-  SKBO: { iata: 'BOG', name: 'Bogota', qfu: [14, 32] },
-  SOCA: { iata: 'CAY', name: 'Cayenne', qfu: [8, 26] },
-  SPIM: { iata: 'LIM', name: 'Lima', qfu: [16, 34] },
-  TFFF: { iata: 'FDF', name: 'Fort-de-France', qfu: [10, 28] },
-  TFFR: { iata: 'PTP', name: 'Pointe-a-Pitre', qfu: [12, 30] },
-  TNCM: { iata: 'SXM', name: 'Sint Maarten', qfu: [10, 28] },
-  UDYZ: { iata: 'EVN', name: 'Erevan', qfu: [8, 26] },
-  UGTB: { iata: 'TBS', name: 'Tbilissi', qfu: [13, 31] },
-  VABB: { iata: 'BOM', name: 'Mumbai', qfu: [9, 27, 14, 32] },
-  VHHH: { iata: 'HKG', name: 'Hong Kong', qfu: [7, 25] },
-  VIDP: { iata: 'DEL', name: 'Delhi', qfu: [9, 27, 10, 28, 11, 29] },
-  VOBL: { iata: 'BLR', name: 'Bengaluru', qfu: [9, 27] },
-  VTBS: { iata: 'BKK', name: 'Bangkok', qfu: [1, 19, 2, 20] },
-  VTSP: { iata: 'HKT', name: 'Phuket', qfu: [9, 27] },
-  VVTS: { iata: 'SGN', name: 'Ho Chi Minh', qfu: [7, 25] },
-  WMKK: { iata: 'KUL', name: 'Kuala Lumpur', qfu: [14, 32, 15, 33] },
-  WSSS: { iata: 'SIN', name: 'Singapour', qfu: [2, 20] },
-  ZBAA: { iata: 'PEK', name: 'Pekin', qfu: [1, 19, 18, 36] },
-  ZSPD: { iata: 'PVG', name: 'Shanghai', qfu: [15, 33, 16, 34, 17, 35] },
+  // ── Canada ──────────────────────────────────────────────────────────────────
+  CYOW: { iata: 'YOW', name: 'Ottawa',    qfu: [7, 25, 14, 32], decl: -13 },
+  CYUL: { iata: 'YUL', name: 'Montreal',  qfu: [6, 24],          decl: -14 },
+  CYVR: { iata: 'YVR', name: 'Vancouver', qfu: [8, 26, 13, 31],  decl: +18 },
+  CYYZ: { iata: 'YYZ', name: 'Toronto',   qfu: [5, 23, 6, 24, 15, 33], decl: -10 },
+  // ── Afrique du Nord / Moyen-Orient ──────────────────────────────────────────
+  DAAG: { iata: 'ALG', name: 'Alger',     qfu: [5, 23, 9, 27],   decl: +1 },
+  DAOO: { iata: 'ORN', name: 'Oran',      qfu: [7, 25],           decl: +1 },
+  // ── Afrique sub-saharienne / Ouest ──────────────────────────────────────────
+  DBBB: { iata: 'COO', name: 'Cotonou',            qfu: [6, 24],         decl: -1 },
+  DIAP: { iata: 'ABJ', name: 'Abidjan',            qfu: [3, 21],         decl: -6 },
+  DNAA: { iata: 'ABV', name: 'Abuja',              qfu: [4, 22],         decl: -1 },
+  DNMM: { iata: 'LOS', name: 'Lagos',              qfu: [18, 36],        decl: -1 },
+  DTTA: { iata: 'TUN', name: 'Tunis',              qfu: [1, 19, 11, 29], decl: +2 },
+  DXXX: { iata: 'LFW', name: 'Lome',               qfu: [4, 22],         decl: -2 },
+  // ── Allemagne ───────────────────────────────────────────────────────────────
+  EDDB: { iata: 'BER', name: 'Berlin',      qfu: [6, 24],          decl: +4 },
+  EDDF: { iata: 'FRA', name: 'Francfort',   qfu: [7, 25, 18, 36],  decl: +3 },
+  EDDH: { iata: 'HAM', name: 'Hambourg',    qfu: [5, 23, 15, 33],  decl: +3 },
+  EDDL: { iata: 'DUS', name: 'Dusseldorf',  qfu: [5, 23],           decl: +2 },
+  EDDM: { iata: 'MUC', name: 'Munich',      qfu: [8, 26],           decl: +3 },
+  EDDN: { iata: 'NUE', name: 'Nuremberg',   qfu: [10, 28],          decl: +3 },
+  EDDS: { iata: 'STR', name: 'Stuttgart',   qfu: [7, 25],           decl: +3 },
+  EDDV: { iata: 'HAJ', name: 'Hanovre',     qfu: [9, 27],           decl: +3 },
+  // ── Finlande / Scandinavie ──────────────────────────────────────────────────
+  EFHK: { iata: 'HEL', name: 'Helsinki',   qfu: [4, 22, 15, 33],  decl: +7 },
+  EFKT: { iata: 'KTT', name: 'Kittila',    qfu: [16, 34],          decl: +9 },
+  EFRO: { iata: 'RVN', name: 'Rovaniemi',  qfu: [3, 21],           decl: +9 },
+  // ── Royaume-Uni ─────────────────────────────────────────────────────────────
+  EGBB: { iata: 'BHX', name: 'Birmingham',         qfu: [15, 33],          decl: -1 },
+  EGCC: { iata: 'MAN', name: 'Manchester',          qfu: [5, 23],           decl: -1 },
+  EGKK: { iata: 'LGW', name: 'Londres Gatwick',     qfu: [8, 26],           decl: -1 },
+  EGLL: { iata: 'LHR', name: 'Londres Heathrow',    qfu: [9, 27],           decl: -1 },
+  EGNT: { iata: 'NCL', name: 'Newcastle',            qfu: [7, 25],           decl: -1 },
+  EGPH: { iata: 'EDI', name: 'Edimbourg',            qfu: [6, 24],           decl: -2 },
+  EGPK: { iata: 'PIK', name: 'Glasgow Prestwick',   qfu: [2, 20, 12, 30],   decl: -2 },
+  // ── Pays-Bas / Irlande / Danemark ───────────────────────────────────────────
+  EHAM: { iata: 'AMS', name: 'Amsterdam', qfu: [4, 22, 6, 24, 9, 27, 18, 36], decl: +2 },
+  EICK: { iata: 'ORK', name: 'Cork',      qfu: [16, 34],                       decl: -3 },
+  EIDW: { iata: 'DUB', name: 'Dublin',    qfu: [10, 28, 16, 34],               decl: -3 },
+  EKBI: { iata: 'BLL', name: 'Billund',   qfu: [9, 27],                         decl: +2 },
+  EKCH: { iata: 'CPH', name: 'Copenhague',qfu: [4, 22, 12, 30],                 decl: +3 },
+  // ── Norvège ─────────────────────────────────────────────────────────────────
+  ENBR: { iata: 'BGO', name: 'Bergen', qfu: [17, 35], decl: +2 },
+  ENGM: { iata: 'OSL', name: 'Oslo',   qfu: [1, 19],  decl: +3 },
+  ENTC: { iata: 'TOS', name: 'Tromso', qfu: [18, 36], decl: +7 },
+  // ── Pologne ─────────────────────────────────────────────────────────────────
+  EPKK: { iata: 'KRK', name: 'Cracovie', qfu: [7, 25],          decl: +5 },
+  EPWA: { iata: 'WAW', name: 'Varsovie', qfu: [11, 29, 15, 33], decl: +5 },
+  // ── Suède ───────────────────────────────────────────────────────────────────
+  ESGG: { iata: 'GOT', name: 'Goteborg',  qfu: [3, 21],       decl: +3 },
+  ESSA: { iata: 'ARN', name: 'Stockholm', qfu: [1, 19, 8, 26], decl: +5 },
+  // ── Afrique australe ────────────────────────────────────────────────────────
+  FACT: { iata: 'CPT', name: 'Le Cap',        qfu: [1, 19, 16, 34], decl: -26 },
+  FAOR: { iata: 'JNB', name: 'Johannesburg',  qfu: [3, 21],          decl: -23 },
+  // ── Afrique centrale ────────────────────────────────────────────────────────
+  FCBB: { iata: 'BZV', name: 'Brazzaville',   qfu: [5, 23],   decl: +8 },
+  FCPP: { iata: 'PNR', name: 'Pointe-Noire',  qfu: [17, 35],  decl: +7 },
+  FGBT: { iata: 'SSG', name: 'Malabo',        qfu: [3, 21],   decl: +1 },
+  FIMP: { iata: 'MRU', name: 'Maurice',        qfu: [14, 32],  decl: -18 },
+  FKKD: { iata: 'DLA', name: 'Douala',         qfu: [12, 30],  decl: +1 },
+  FKYS: { iata: 'NSI', name: 'Yaounde',        qfu: [1, 19],   decl: +1 },
+  FMEE: { iata: 'RUN', name: 'La Reunion',     qfu: [12, 30, 14, 32], decl: -18 },
+  FMMI: { iata: 'TNR', name: 'Antananarivo',   qfu: [11, 29],  decl: -17 },
+  FNBJ: { iata: 'NBJ', name: 'Luanda',         qfu: [6, 24],   decl: +6 },
+  FOOL: { iata: 'LBV', name: 'Libreville',     qfu: [16, 34],  decl: +4 },
+  FTTJ: { iata: 'NDJ', name: 'NDjamena',       qfu: [5, 23],   decl: +2 },
+  FZAA: { iata: 'FIH', name: 'Kinshasa',       qfu: [6, 24],   decl: +9 },
+  // ── Maroc / Sénégal / Guinée ────────────────────────────────────────────────
+  GMME: { iata: 'RBA', name: 'Rabat',      qfu: [3, 21],  decl: -3 },
+  GMMN: { iata: 'CMN', name: 'Casablanca', qfu: [17, 35], decl: -3 },
+  GMMX: { iata: 'RAK', name: 'Marrakech',  qfu: [10, 28], decl: -3 },
+  GOBD: { iata: 'DSS', name: 'Dakar',      qfu: [1, 19],  decl: -10 },
+  GUCY: { iata: 'CKY', name: 'Conakry',    qfu: [6, 24],  decl: -9 },
+  // ── Corne de l'Afrique / Afrique de l'Est ───────────────────────────────────
+  HDAM: { iata: 'JIB', name: 'Djibouti',       qfu: [9, 27],  decl: +2 },
+  HECA: { iata: 'CAI', name: 'Le Caire',        qfu: [5, 23],  decl: +4 },
+  HKJK: { iata: 'NBO', name: 'Nairobi',         qfu: [6, 24],  decl: -1 },
+  HTKJ: { iata: 'JRO', name: 'Kilimandjaro',    qfu: [9, 27],  decl: -2 },
+  HTZA: { iata: 'ZNZ', name: 'Zanzibar',         qfu: [18, 36], decl: -3 },
+  // ── États-Unis ──────────────────────────────────────────────────────────────
+  KATL: { iata: 'ATL', name: 'Atlanta',       qfu: [8, 26, 9, 27, 10, 28],    decl: -5 },
+  KBOS: { iata: 'BOS', name: 'Boston',         qfu: [4, 22, 9, 27, 15, 33],   decl: -14 },
+  KDEN: { iata: 'DEN', name: 'Denver',          qfu: [7, 25, 8, 26, 16, 34, 17, 35], decl: +8 },
+  KDFW: { iata: 'DFW', name: 'Dallas/FW',       qfu: [13, 31, 17, 35, 18, 36], decl: +3 },
+  KDTW: { iata: 'DTW', name: 'Detroit',          qfu: [3, 21, 4, 22, 9, 27],   decl: -7 },
+  KEWR: { iata: 'EWR', name: 'Newark',           qfu: [4, 22, 11, 29],          decl: -13 },
+  KIAD: { iata: 'IAD', name: 'Washington IAD',   qfu: [1, 19, 12, 30],          decl: -11 },
+  KIAH: { iata: 'IAH', name: 'Houston',           qfu: [8, 26, 9, 27, 15, 33],  decl: +2 },
+  KJFK: { iata: 'JFK', name: 'New York JFK',      qfu: [4, 22, 13, 31],          decl: -13 },
+  KLAS: { iata: 'LAS', name: 'Las Vegas',          qfu: [1, 19, 8, 26],           decl: +11 },
+  KLAX: { iata: 'LAX', name: 'Los Angeles',        qfu: [6, 24, 7, 25],           decl: +12 },
+  KMCO: { iata: 'MCO', name: 'Orlando',            qfu: [17, 35, 18, 36],         decl: -6 },
+  KMIA: { iata: 'MIA', name: 'Miami',              qfu: [8, 26, 9, 27, 12, 30],  decl: -5 },
+  KMSP: { iata: 'MSP', name: 'Minneapolis',        qfu: [4, 22, 12, 30, 17, 35], decl: -3 },
+  KORD: { iata: 'ORD', name: 'Chicago',            qfu: [4, 22, 9, 27, 10, 28],  decl: -3 },
+  KPHX: { iata: 'PHX', name: 'Phoenix',            qfu: [7, 25, 8, 26],           decl: +9 },
+  KRDU: { iata: 'RDU', name: 'Raleigh-Durham',     qfu: [5, 23],                  decl: -9 },
+  KSAN: { iata: 'SAN', name: 'San Diego',           qfu: [9, 27],                  decl: +11 },
+  KSEA: { iata: 'SEA', name: 'Seattle',             qfu: [16, 34],                 decl: +16 },
+  KSFO: { iata: 'SFO', name: 'San Francisco',       qfu: [1, 19, 10, 28],          decl: +13 },
+  // ── Balkans / Europe de l'Est ────────────────────────────────────────────────
+  LDDU: { iata: 'DBV', name: 'Dubrovnik', qfu: [11, 29],  decl: +4 },
+  LDZA: { iata: 'ZAG', name: 'Zagreb',    qfu: [4, 22],   decl: +4 },
+  // ── Espagne ─────────────────────────────────────────────────────────────────
+  LEBB: { iata: 'BIO', name: 'Bilbao',   qfu: [10, 28, 12, 30], decl: -1 },
+  LEBL: { iata: 'BCN', name: 'Barcelone',qfu: [2, 20, 6, 24],   decl: +1 },
+  LEIB: { iata: 'IBZ', name: 'Ibiza',    qfu: [6, 24],           decl: +1 },
+  LEMD: { iata: 'MAD', name: 'Madrid',   qfu: [14, 32, 18, 36], decl: -1 },
+  LEMG: { iata: 'AGP', name: 'Malaga',   qfu: [12, 30, 13, 31], decl: -1 },
+  LEPA: { iata: 'PMI', name: 'Palma',    qfu: [6, 24],           decl: +1 },
+  LEVC: { iata: 'VLC', name: 'Valence',  qfu: [12, 30],          decl: +1 },
+  LEZL: { iata: 'SVQ', name: 'Seville',  qfu: [9, 27],           decl: -2 },
+  // ── France ──────────────────────────────────────────────────────────────────
+  LFBD: { iata: 'BOD', name: 'Bordeaux',          qfu: [5, 23, 11, 29], decl: -1 },
+  LFBO: { iata: 'TLS', name: 'Toulouse',           qfu: [14, 32],         decl: 0  },
+  LFBP: { iata: 'PUF', name: 'Pau',                qfu: [13, 31],         decl: 0  },
+  LFBT: { iata: 'LDE', name: 'Lourdes-Tarbes',     qfu: [2, 20],          decl: 0  },
+  LFBZ: { iata: 'BIQ', name: 'Biarritz',           qfu: [9, 27],          decl: -1 },
+  LFKB: { iata: 'BIA', name: 'Bastia',             qfu: [16, 34],         decl: +2 },
+  LFKC: { iata: 'CLY', name: 'Calvi',              qfu: [18, 36],         decl: +2 },
+  LFKJ: { iata: 'AJA', name: 'Ajaccio',            qfu: [2, 20],          decl: +2 },
+  LFKS: { iata: 'FSC', name: 'Figari',             qfu: [18, 36],         decl: +2 },
+  LFLC: { iata: 'CFE', name: 'Clermont-Ferrand',   qfu: [8, 26],          decl: +1 },
+  LFLL: { iata: 'LYS', name: 'Lyon',               qfu: [17, 35],         decl: +1 },
+  LFML: { iata: 'MRS', name: 'Marseille',           qfu: [13, 31],         decl: +1 },
+  LFMN: { iata: 'NCE', name: 'Nice',               qfu: [4, 22],          decl: +2 },
+  LFMT: { iata: 'MPL', name: 'Montpellier',         qfu: [12, 30],         decl: +1 },
+  LFPG: { iata: 'CDG', name: 'Paris CDG',           qfu: [8, 26, 9, 27],  decl: 0  },
+  LFPO: { iata: 'ORY', name: 'Paris ORY',           qfu: [2, 20, 6, 24, 7, 25], decl: 0 },
+  LFQQ: { iata: 'LIL', name: 'Lille',               qfu: [1, 19, 8, 26],  decl: +1 },
+  LFRB: { iata: 'BES', name: 'Brest',              qfu: [7, 25],          decl: -2 },
+  LFRD: { iata: 'DNR', name: 'Dinard',             qfu: [17, 35],         decl: -2 },
+  LFRK: { iata: 'CFR', name: 'Caen',              qfu: [13, 31],         decl: -1 },
+  LFRN: { iata: 'RNS', name: 'Rennes',            qfu: [10, 28],         decl: -2 },
+  LFRS: { iata: 'NTE', name: 'Nantes',            qfu: [3, 21],          decl: -1 },
+  LFSB: { iata: 'BSL', name: 'Bale-Mulhouse',     qfu: [7, 25, 15, 33], decl: +2 },
+  // ── Grèce ───────────────────────────────────────────────────────────────────
+  LGAV: { iata: 'ATH', name: 'Athenes',  qfu: [3, 21],  decl: +5 },
+  LGIR: { iata: 'HER', name: 'Heraklion',qfu: [9, 27],  decl: +5 },
+  LGMK: { iata: 'JMK', name: 'Mykonos', qfu: [16, 34], decl: +5 },
+  // ── Hongrie ─────────────────────────────────────────────────────────────────
+  LHBP: { iata: 'BUD', name: 'Budapest', qfu: [13, 31], decl: +5 },
+  // ── Italie ──────────────────────────────────────────────────────────────────
+  LIBD: { iata: 'BRI', name: 'Bari',              qfu: [7, 25],          decl: +4 },
+  LICC: { iata: 'CTA', name: 'Catane',            qfu: [8, 26],          decl: +3 },
+  LICJ: { iata: 'PMO', name: 'Palerme',           qfu: [2, 20, 7, 25],   decl: +3 },
+  LIEO: { iata: 'OLB', name: 'Olbia',             qfu: [5, 23],          decl: +3 },
+  LIMC: { iata: 'MXP', name: 'Milan Malpensa',    qfu: [17, 35],         decl: +3 },
+  LIMF: { iata: 'TRN', name: 'Turin',             qfu: [18, 36],         decl: +2 },
+  LIML: { iata: 'LIN', name: 'Milan Linate',      qfu: [17, 35],         decl: +3 },
+  LIPE: { iata: 'BLQ', name: 'Bologne',           qfu: [12, 30],         decl: +3 },
+  LIPX: { iata: 'VRN', name: 'Verone',            qfu: [4, 22],          decl: +3 },
+  LIPZ: { iata: 'VCE', name: 'Venise',            qfu: [4, 22],          decl: +4 },
+  LIRF: { iata: 'FCO', name: 'Rome FCO',          qfu: [7, 25, 16, 34],  decl: +3 },
+  LIRN: { iata: 'NAP', name: 'Naples',            qfu: [6, 24],          decl: +3 },
+  LIRQ: { iata: 'FLR', name: 'Florence',          qfu: [5, 23],          decl: +3 },
+  // ── Slovénie / Tchéquie ─────────────────────────────────────────────────────
+  LJLJ: { iata: 'LJU', name: 'Ljubljana', qfu: [12, 30], decl: +4 },
+  LKPR: { iata: 'PRG', name: 'Prague',    qfu: [6, 24, 12, 30], decl: +4 },
+  // ── Moyen-Orient ────────────────────────────────────────────────────────────
+  LLBG: { iata: 'TLV', name: 'Tel Aviv', qfu: [3, 21, 8, 26, 12, 30], decl: +4 },
+  // ── Malte / Autriche / Portugal / Roumanie / Suisse ─────────────────────────
+  LMML: { iata: 'MLA', name: 'Malte',     qfu: [5, 23, 13, 31], decl: +3 },
+  LOWW: { iata: 'VIE', name: 'Vienne',    qfu: [11, 29, 16, 34], decl: +4 },
+  LPPR: { iata: 'OPO', name: 'Porto',     qfu: [17, 35],         decl: -3 },
+  LPPT: { iata: 'LIS', name: 'Lisbonne',  qfu: [2, 20],          decl: -3 },
+  LROP: { iata: 'OTP', name: 'Bucarest',  qfu: [8, 26],          decl: +6 },
+  LSGG: { iata: 'GVA', name: 'Geneve',    qfu: [4, 22],          decl: +2 },
+  LSZH: { iata: 'ZRH', name: 'Zurich',    qfu: [10, 28, 14, 32, 16, 34], decl: +2 },
+  // ── Turquie ─────────────────────────────────────────────────────────────────
+  LTFM: { iata: 'IST', name: 'Istanbul', qfu: [16, 34, 17, 35, 18, 36], decl: +5 },
+  // ── Caraïbes / Mexique / Amérique centrale ───────────────────────────────────
+  MDPC: { iata: 'PUJ', name: 'Punta Cana',    qfu: [8, 26, 9, 27], decl: -6 },
+  MMGL: { iata: 'GDL', name: 'Guadalajara',   qfu: [11, 29],        decl: +7 },
+  MMMX: { iata: 'MEX', name: 'Mexico City',   qfu: [5, 23],         decl: +7 },
+  MMSM: { iata: 'NLU', name: 'Mexico NLU',    qfu: [4, 22],         decl: +7 },
+  MMUN: { iata: 'CUN', name: 'Cancun',         qfu: [12, 30],        decl: -4 },
+  MPTO: { iata: 'PTY', name: 'Panama City',    qfu: [3, 21],         decl: -3 },
+  MROC: { iata: 'SJO', name: 'San Jose CR',    qfu: [7, 25],         decl: -2 },
+  MUHA: { iata: 'HAV', name: 'La Havane',      qfu: [6, 24],         decl: -5 },
+  MYNN: { iata: 'NAS', name: 'Nassau',          qfu: [10, 28, 14, 32], decl: -5 },
+  // ── Pacifique ───────────────────────────────────────────────────────────────
+  NTAA: { iata: 'PPT', name: 'Papeete', qfu: [4, 22], decl: +10 },
+  // ── Arabie / Liban ──────────────────────────────────────────────────────────
+  OERK: { iata: 'RUH', name: 'Riyad',     qfu: [15, 33],          decl: +3 },
+  OLBA: { iata: 'BEY', name: 'Beyrouth',  qfu: [3, 21, 16, 34, 17, 35], decl: +5 },
+  OMAA: { iata: 'AUH', name: 'Abu Dhabi', qfu: [13, 31],          decl: +2 },
+  OMDB: { iata: 'DXB', name: 'Dubai',     qfu: [12, 30],          decl: +2 },
+  // ── Japon / Corée ───────────────────────────────────────────────────────────
+  RJBB: { iata: 'KIX', name: 'Osaka KIX',  qfu: [6, 24],               decl: -7 },
+  RJTT: { iata: 'HND', name: 'Tokyo Haneda',qfu: [4, 22, 5, 23, 16, 34], decl: -8 },
+  RKSI: { iata: 'ICN', name: 'Seoul ICN',   qfu: [15, 33, 16, 34],       decl: -8 },
+  // ── Philippines / Amériques du Sud ──────────────────────────────────────────
+  RPLL: { iata: 'MNL', name: 'Manille',          qfu: [6, 24, 13, 31],  decl: +1 },
+  SAEZ: { iata: 'EZE', name: 'Buenos Aires',     qfu: [11, 29, 17, 35], decl: -10 },
+  SBFZ: { iata: 'FOR', name: 'Fortaleza',         qfu: [13, 31],          decl: -21 },
+  SBGL: { iata: 'GIG', name: 'Rio de Janeiro',    qfu: [10, 28, 15, 33], decl: -23 },
+  SBGR: { iata: 'GRU', name: 'Sao Paulo',         qfu: [10, 28],          decl: -22 },
+  SBSV: { iata: 'SSA', name: 'Salvador de Bahia', qfu: [10, 28],          decl: -23 },
+  SCEL: { iata: 'SCL', name: 'Santiago',           qfu: [17, 35],          decl: -7 },
+  SKBO: { iata: 'BOG', name: 'Bogota',             qfu: [14, 32],          decl: -5 },
+  SOCA: { iata: 'CAY', name: 'Cayenne',            qfu: [8, 26],           decl: -16 },
+  SPIM: { iata: 'LIM', name: 'Lima',               qfu: [16, 34],          decl: -2 },
+  // ── Antilles françaises / Caraïbes ──────────────────────────────────────────
+  TFFF: { iata: 'FDF', name: 'Fort-de-France',  qfu: [10, 28], decl: -13 },
+  TFFR: { iata: 'PTP', name: 'Pointe-a-Pitre',  qfu: [12, 30], decl: -13 },
+  TNCM: { iata: 'SXM', name: 'Sint Maarten',    qfu: [10, 28], decl: -13 },
+  // ── Caucase ─────────────────────────────────────────────────────────────────
+  UDYZ: { iata: 'EVN', name: 'Erevan',    qfu: [8, 26],  decl: +5 },
+  UGTB: { iata: 'TBS', name: 'Tbilissi', qfu: [13, 31], decl: +5 },
+  // ── Asie du Sud / Sud-Est ────────────────────────────────────────────────────
+  VABB: { iata: 'BOM', name: 'Mumbai',       qfu: [9, 27, 14, 32], decl: +1 },
+  VHHH: { iata: 'HKG', name: 'Hong Kong',   qfu: [7, 25],          decl: -3 },
+  VIDP: { iata: 'DEL', name: 'Delhi',        qfu: [9, 27, 10, 28, 11, 29], decl: 0 },
+  VOBL: { iata: 'BLR', name: 'Bengaluru',   qfu: [9, 27],          decl: -1 },
+  VTBS: { iata: 'BKK', name: 'Bangkok',     qfu: [1, 19, 2, 20],  decl: 0 },
+  VTSP: { iata: 'HKT', name: 'Phuket',      qfu: [9, 27],          decl: 0 },
+  VVTS: { iata: 'SGN', name: 'Ho Chi Minh', qfu: [7, 25],          decl: -1 },
+  WMKK: { iata: 'KUL', name: 'Kuala Lumpur',qfu: [14, 32, 15, 33], decl: +1 },
+  WSSS: { iata: 'SIN', name: 'Singapour',   qfu: [2, 20],          decl: +1 },
+  // ── Chine ───────────────────────────────────────────────────────────────────
+  ZBAA: { iata: 'PEK', name: 'Pekin',    qfu: [1, 19, 18, 36],       decl: -6 },
+  ZSPD: { iata: 'PVG', name: 'Shanghai', qfu: [15, 33, 16, 34, 17, 35], decl: -5 },
 };
 
   // ─── Mapping complet IATA → ICAO ─────────────────────────────────────────
@@ -744,7 +781,10 @@ const AIRPORT_RUNWAYS = {
     return n;
   }
 
-  function computeCrosswind(windDir, windSpd, qfu) {
+  // decl = déclinaison magnétique de l'aéroport (est +, ouest −)
+  // Le TAF donne le vent en nord vrai ; le QFU est en nord magnétique.
+  // Conversion : vent_magnétique = vent_vrai − déclinaison
+  function computeCrosswind(windDir, windSpd, qfu, decl = 0) {
     if (!windSpd || windSpd === 0 || windDir == null || qfu == null) {
       return { crosswind: 0, headwind: 0, vrb: false };
     }
@@ -755,7 +795,9 @@ const AIRPORT_RUNWAYS = {
     if (isNaN(dir)) {
       return { crosswind: Math.round(windSpd), headwind: 0, vrb: true };
     }
-    const diff = Math.abs(dir - qfu * 10);
+    // Conversion nord vrai → nord magnétique
+    const dirMag = ((dir - decl) % 360 + 360) % 360;
+    const diff = Math.abs(dirMag - qfu * 10);
     const angle = Math.min(diff, 360 - diff);
     const cw = Math.abs(windSpd * Math.sin((angle * Math.PI) / 180));
     const hw = windSpd * Math.cos((angle * Math.PI) / 180);
@@ -1032,6 +1074,7 @@ const AIRPORT_RUNWAYS = {
     const defaultQfuList = AIRPORT_RUNWAYS[icao]?.qfu ?? [];
     const hasDefaultQfu = defaultQfuList.length > 0;
     const activeQfu = customQfuByIcao.get(icao) ?? (hasDefaultQfu ? defaultQfuList[0] : null);
+    const decl = AIRPORT_RUNWAYS[icao]?.decl ?? 0;
 
     const fcsts = tafData?.fcsts ?? [];
     const periodsWithWind = fcsts.filter(f => f.wdir != null && f.wspd != null);
@@ -1096,8 +1139,8 @@ const AIRPORT_RUNWAYS = {
           ? `<span class="text-[10px] font-semibold px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500">${f.changeIndicator}</span>`
           : '<span class="text-[10px] text-gray-400">BASE</span>';
         const isVrb = String(f.wdir ?? '').toUpperCase() === 'VRB';
-        const { crosswind: cwBase, vrb } = computeCrosswind(f.wdir, f.wspd, activeQfu);
-        const cwGust = f.wgst ? computeCrosswind(f.wdir, f.wgst, activeQfu).crosswind : null;
+        const { crosswind: cwBase, vrb } = computeCrosswind(f.wdir, f.wspd, activeQfu, decl);
+        const cwGust = f.wgst ? computeCrosswind(f.wdir, f.wgst, activeQfu, decl).crosswind : null;
         const worstCw = cwGust ?? cwBase;
         const code = getRunwayCodeForFcst(f);
         const activeLimit = code === 4 ? 27 : (code === 5 ? 38 : 38);
@@ -1152,7 +1195,7 @@ const AIRPORT_RUNWAYS = {
         let riskCell = `<td class="px-3 py-2 text-xs text-gray-400">–</td>`;
         if (baseWind) {
           const spd = baseWind.wgst ?? baseWind.wspd;
-          const { crosswind, vrb } = computeCrosswind(baseWind.wdir, spd, activeQfu);
+          const { crosswind, vrb } = computeCrosswind(baseWind.wdir, spd, activeQfu, decl);
           const code = getRunwayCode(fcsts, etaEpochSec);
           const activeLimit = code === 6 ? acInfo.code6 : (code === 5 ? acInfo.code5 : acInfo.code4);
           const status = getCrosswindColor(crosswind, activeLimit);
@@ -1170,7 +1213,7 @@ const AIRPORT_RUNWAYS = {
           if (tempoWinds.length > 0) {
             let worstCw = 0, worstTempo = null;
             for (const t of tempoWinds) {
-              const { crosswind: cwt } = computeCrosswind(t.wdir, t.wgst ?? t.wspd, activeQfu);
+              const { crosswind: cwt } = computeCrosswind(t.wdir, t.wgst ?? t.wspd, activeQfu, decl);
               if (cwt > worstCw) { worstCw = cwt; worstTempo = t; }
             }
             if (worstTempo) {
@@ -1206,6 +1249,10 @@ const AIRPORT_RUNWAYS = {
         <div class="flex items-center gap-3 px-5 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
           <span class="text-lg font-black font-mono text-gray-800 dark:text-gray-100">${iataKey}</span>
           <span class="text-sm text-gray-500">${apName}</span>
+          ${decl !== 0
+            ? `<span class="text-[10px] font-mono text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-gray-700 rounded px-1.5 py-0.5" title="Déclinaison magnétique (WMM 2025)">${decl > 0 ? '+' : ''}${decl}° mag</span>`
+            : `<span class="text-[10px] font-mono text-gray-300 dark:text-gray-600 border border-gray-100 dark:border-gray-800 rounded px-1.5 py-0.5" title="Déclinaison magnétique nulle">0° mag</span>`
+          }
           <div class="ml-auto">${qfuSelector}</div>
         </div>
         <div class="grid grid-cols-1 xl:grid-cols-2 divide-y xl:divide-y-0 xl:divide-x divide-gray-100 dark:divide-gray-700">

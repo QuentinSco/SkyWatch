@@ -251,6 +251,7 @@ import '../styles/global.css';
       function setActive(id) {
         links.forEach(l => {
           const href = l.getAttribute('href');
+          if (!href.startsWith('#')) return; // ignorer les liens de navigation inter-pages (/briefing, /chainages, /crosswind)
           if (href === '#' + id) { l.classList.add('bg-blue-50', 'dark:bg-blue-950', 'text-blue-700', 'dark:text-blue-400'); l.classList.remove('text-gray-600', 'dark:text-gray-400'); }
           else { l.classList.remove('bg-blue-50', 'dark:bg-blue-950', 'text-blue-700', 'dark:text-blue-400'); l.classList.add('text-gray-600', 'dark:text-gray-400'); }
         });

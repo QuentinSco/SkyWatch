@@ -19,15 +19,16 @@
     none:   '\u2705',
   };
   const THREAT_ICONS = {
-    THUNDERSTORM: '\u26C8',
-    SNOW:         '\uD83C\uDF28',
-    WIND:         '\uD83D\uDCA8',
-    FREEZING:     '\uD83E\uDDCA',
-    HAIL:         '\uD83C\uDF27',
-    CB_TCU:       '\u26C5',
-    LOW_VIS:      '\uD83C\uDF2B',
-    FUNNEL_CLOUD: '\uD83C\uDF2A',
-    LOW_CEILING:  '\u2601\uFE0F',
+    THUNDERSTORM:  '\u26C8',
+    SNOW:          '\uD83C\uDF28',
+    WIND:          '\uD83D\uDCA8',
+    FREEZING_RAIN: '\uD83E\uDDCA',
+    FREEZING:      '\uD83E\uDDCA',
+    HAIL:          '\uD83C\uDF27',
+    CB_TCU:        '\u26C5',
+    LOW_VIS:       '\uD83C\uDF2B',
+    FUNNEL_CLOUD:  '\uD83C\uDF2A',
+    LOW_CEILING:   '\u2601\uFE0F',
   };
   const CI_LABEL = {
     'TEMPO':       { text: 'TEMPO',         cls: 'bg-purple-100 text-purple-700 border border-purple-300' },

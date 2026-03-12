@@ -1100,7 +1100,7 @@ async function fetchVAACTokyo(): Promise<Alert[]> {
     );
 
     let fetchFailed = 0;
-    let parseFailed = 0;
+    const parsed: Alert[] = [];
     for (let i = 0; i < fileResults.length; i++) {
       const res = fileResults[i];
       if (res.status !== 'fulfilled') {
@@ -1109,17 +1109,21 @@ async function fetchVAACTokyo(): Promise<Alert[]> {
         continue;
       }
       const alert = parseVAACTokyoText(res.value, textLinks[i]);
-      if (alert) {
+      if (alert) parsed.push(alert);
+    }
+
+    // La page liste est triée du plus récent au plus ancien.
+    // On garde un seul advisory par volcan (le plus récent = premier rencontré).
+    const seenVolcano = new Set<string>();
+    for (const alert of parsed) {
+      const key = (alert.volcanoName ?? alert.headline).toUpperCase();
+      if (!seenVolcano.has(key)) {
+        seenVolcano.add(key);
         alerts.push(alert);
-      } else {
-        parseFailed++;
-        // Log first 200 chars to diagnose
-        const snippet = res.value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 200);
-        console.debug(`[VAAC Tokyo] parse=null for ${textLinks[i].split('/').pop()}: ${snippet}`);
       }
     }
 
-    console.log(`[VAAC Tokyo] ${alerts.length}/${textLinks.length} parsé(s), fetch_err=${fetchFailed}, parse_null=${parseFailed}`);
+    console.log(`[VAAC Tokyo] ${alerts.length} advisory(ies) actif(s) (${parsed.length} parsés, ${fetchFailed} fetch_err)`);
   } catch (e) {
     console.warn('[VAAC Tokyo]', e instanceof Error ? e.message : e);
   }

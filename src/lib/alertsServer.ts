@@ -1045,9 +1045,19 @@ async function fetchVAACTokyo(): Promise<Alert[]> {
         if (!isNaN(rowDate) && now - rowDate > maxAge) continue;
       }
 
-      const fullUrl = href.startsWith('http')
-        ? href
-        : `${VAAC_TOKYO_BASE}${href.startsWith('/') ? '' : '/'}${href}`;
+      // Résoudre l'URL relative par rapport à la page liste (pas juste la base du domaine)
+      // Le href peut être : absolu, absolu-path (/vaac/...), ou relatif (TextData/...)
+      let fullUrl: string;
+      if (href.startsWith('http')) {
+        fullUrl = href;
+      } else if (href.startsWith('/')) {
+        fullUrl = `${VAAC_TOKYO_BASE}${href}`;
+      } else {
+        // Relatif à l'URL de la page liste : https://www.data.jma.go.jp/vaac/data/vaac_list.html
+        // → base = https://www.data.jma.go.jp/vaac/data/
+        const base = VAAC_TOKYO_LIST.replace(/[^/]+$/, '');
+        fullUrl = `${base}${href}`;
+      }
       if (!textLinks.includes(fullUrl)) textLinks.push(fullUrl);
     }
 

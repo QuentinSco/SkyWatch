@@ -107,6 +107,8 @@ const AF_AIRPORTS = [
   { icao: 'OERK', lat: 24.9576,  lon:  46.6988, iso3: 'SAU', name: 'Riyad' },
   { icao: 'VHHH', lat: 22.3080,  lon: 113.9185, iso3: 'HKG', name: 'Hong Kong' },
   { icao: 'RJTT', lat: 35.5494,  lon: 139.7798, iso3: 'JPN', name: 'Tokyo' },
+  { icao: 'RJBB', lat: 34.4347,  lon: 135.2440, iso3: 'JPN', name: 'Osaka Kansai' },
+  { icao: 'RKSI', lat: 37.4691,  lon: 126.4510, iso3: 'KOR', name: 'Séoul Incheon' },
   { icao: 'WSSS', lat:  1.3644,  lon: 103.9915, iso3: 'SGP', name: 'Singapour' },
   { icao: 'ZBAA', lat: 40.0801,  lon: 116.5846, iso3: 'CHN', name: 'Pékin' },
   { icao: 'ZSPD', lat: 31.1434,  lon: 121.8052, iso3: 'CHN', name: 'Shanghai' },
@@ -924,10 +926,14 @@ const VAAC_TOKYO_BASE = 'https://www.data.jma.go.jp';
  */
 function parseVAACTokyoText(text: string, fileUrl: string): Alert | null {
   try {
-    // Dépouiller le HTML : balises, entités, retours chariot
+    // Dépouiller le HTML en préservant les sauts de ligne :
+    // <br> et <br/> → 
+, puis strip les autres balises, puis normaliser
     const clean = text
+      .replace(/<br\s*\/?>/gi, '
+')
       .replace(/<[^>]+>/g, ' ')
-      .replace(/&[a-z]+;/gi, ' ')
+      .replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&[a-z]+;/gi, ' ')
       .replace(/\r/g, '')
       .replace(/[ \t]+/g, ' ');
 
@@ -936,20 +942,26 @@ function parseVAACTokyoText(text: string, fileUrl: string): Alert | null {
     // Ignorer si les cendres ne sont pas identifiables satellite
     if (/VA NOT IDENTIFIABLE FM SATELLITE/i.test(clean)) return null;
 
+    // get() : capture la valeur d'un champ sur sa ligne uniquement
     const get = (tag: string) =>
-      clean.match(new RegExp(`${tag}[:\\s]+([^\\n]{2,80})`, 'i'))?.[1]?.trim() ?? '';
+      clean.match(new RegExp(`${tag}[:\s]+([^\n]{2,80})`, 'im'))?.[1]?.trim() ?? '';
 
     const volcanoRaw = get('VOLCANO');
-    // Nettoyer le suffixe numérique (ex: "SHEVELUCH 300270" → "SHEVELUCH")
+    // Nettoyer le suffixe numérique ICAO (ex: "SHEVELUCH 300270" → "SHEVELUCH")
     const volcano = volcanoRaw
       ? volcanoRaw.replace(/\s+\d{6}$/, '').trim() || null
       : null;
 
     const dtg  = get('DTG');
     const psn  = get('PSN');
-    const area = get('AREA') || 'Asie';
+    // AREA : premier mot seulement (ex: "RUSSIA" au lieu de "RUSSIA SOURCE ELEV: ...")
+    const areaRaw = get('AREA');
+    const area = areaRaw.split(/\s+/)[0] || 'Asie';
 
-    const flLevel  = vaacParseFlLevel(clean);
+    // FL level : chercher dans OBS VA CLD et FCST en priorité (ex: SFC/FL270)
+    const flMatch = clean.match(/(?:OBS|FCST)\s+VA\s+CLD[^\n]*?(?:SFC\/)?FL(\d{3})/i)
+      || clean.match(/FL\s*(\d{3})/i);
+    const flLevel  = flMatch ? `FL${flMatch[1]}` : '';
     const severity = vaacSeverity(flLevel);
 
     // Format PSN JMA : N5639 E16122 (DDMM compact, sans espace dans le groupe)
@@ -970,9 +982,13 @@ function parseVAACTokyoText(text: string, fileUrl: string): Alert | null {
     const coords = parsePSN(psn) ?? parsePSN(clean);
 
     const volcanoDisplay = volcano ?? 'Volcan inconnu';
-    const airports = coords != null
+    const baseAirports = coords != null
       ? getAirportsNearCoordsWithOverride(coords.lat, coords.lon, 800, volcano)
       : [];
+    // Les volcans VAAC Tokyo (Russie, Japon, Philippines, etc.) sont sur les routes polaires
+    // Asie-Pacifique — ajouter systématiquement Tokyo, Osaka Kansai et Séoul Incheon.
+    const VAAC_TOKYO_AIRPORTS = ['RJTT', 'RJBB', 'RKSI'];
+    const airports = [...new Set([...baseAirports, ...VAAC_TOKYO_AIRPORTS])];
 
     // Description : extraire les lignes utiles
     const descLines = clean

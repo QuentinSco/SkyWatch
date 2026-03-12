@@ -833,15 +833,27 @@ const AIRPORT_RUNWAYS = {
   }
 
   const MONTHS_FR = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-  function formatFlightId(flightId) {
-    if (!flightId) return '–';
-    const m = flightId.match(/^([A-Z]{2}\d+)-(\d{4})-(\d{2})-(\d{2})/);
-    if (!m) return flightId;
+function formatFlightId(flightId) {
+  if (!flightId) return '–';
+  // Format API normal : AF1280-2026-03-12...
+  const m = flightId.match(/^([A-Z]{2}\d+)-(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
     const flightNum = m[1];
     const month = parseInt(m[3], 10);
     const day = m[4];
     return `${flightNum}/${day}${MONTHS_FR[month - 1] ?? m[3]}`;
   }
+  // Format backup CSV : AF1280-CSV-A-EGLL-2026-03-12...
+  const mb = flightId.match(/^([A-Z]{2}\d+)-CSV-[AD]-[A-Z]{4}-(\d{4})-(\d{2})-(\d{2})/);
+  if (mb) {
+    const flightNum = mb[1];
+    const month = parseInt(mb[3], 10);
+    const day = mb[4];
+    return `${flightNum}/${day}${MONTHS_FR[month - 1] ?? mb[3]}`;
+  }
+  return flightId;
+}
+
 
   const ALL_AF_IATA = Object.keys(AF_IATA_TO_ICAO).sort();
   let selectedIcaos = new Set([]);

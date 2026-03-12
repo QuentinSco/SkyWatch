@@ -927,17 +927,15 @@ const VAAC_TOKYO_BASE = 'https://www.data.jma.go.jp';
 function parseVAACTokyoText(text: string, fileUrl: string): Alert | null {
   try {
     // Dépouiller le HTML en préservant les sauts de ligne :
-    // <br> et <br/> → 
-, puis strip les autres balises, puis normaliser
+    // <br> et <br/> → \n, puis strip les autres balises, puis normaliser
     const clean = text
-      .replace(/<br\s*\/?>/gi, '
-')
+      .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<[^>]+>/g, ' ')
       .replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&[a-z]+;/gi, ' ')
       .replace(/\r/g, '')
       .replace(/[ \t]+/g, ' ');
 
-    // Ignorer les advisories sans cendres détectables
+        // Ignorer les advisories sans cendres détectables
     if (/NO FURTHER ADVISORIES/i.test(clean)) return null;
     // Ignorer si les cendres ne sont pas identifiables satellite
     if (/VA NOT IDENTIFIABLE FM SATELLITE/i.test(clean)) return null;

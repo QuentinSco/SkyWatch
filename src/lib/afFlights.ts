@@ -286,8 +286,12 @@ export async function getCachedAfArrivals(force = false, lcOnly = true): Promise
           return eta > now - 30 * 60 * 1000;
         });
         const arrivals = futureFlights.filter(f => !f.movementType || f.movementType === 'A');
-        console.log(`[AF Flights] cache hit — ${arrivals.length} arrivées (lcOnly=${lcOnly})`);
-        return lcOnly ? arrivals.filter(f => f.isLongHaul) : arrivals;
+        // Ne retourner le cache que s'il contient des vols futurs.
+        // Si le cache est vide (tous expirés), tomber sur le backup CSV.
+        if (arrivals.length > 0) {
+          console.log(`[AF Flights] cache hit — ${arrivals.length} arrivées (lcOnly=${lcOnly})`);
+          return lcOnly ? arrivals.filter(f => f.isLongHaul) : arrivals;
+        }
       }
     } catch (e) {
       console.warn('[AF Flights] cache read error:', e);
@@ -361,8 +365,12 @@ export async function getCachedAfDepartures(force = false, lcOnly = true): Promi
           return t > now - 30 * 60 * 1000;
         });
         const departures = futureFlights.filter(f => f.movementType === 'D');
-        console.log(`[AF Flights] cache hit DEP — ${departures.length} départs (lcOnly=${lcOnly})`);
-        return lcOnly ? departures.filter(f => f.isLongHaul) : departures;
+        // Ne retourner le cache que s'il contient des vols futurs.
+        // Si le cache est vide (tous expirés), tomber sur le backup CSV.
+        if (departures.length > 0) {
+          console.log(`[AF Flights] cache hit DEP — ${departures.length} départs (lcOnly=${lcOnly})`);
+          return lcOnly ? departures.filter(f => f.isLongHaul) : departures;
+        }
       }
     } catch (e) {
       console.warn('[AF Flights] cache read error (dep):', e);

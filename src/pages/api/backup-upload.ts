@@ -9,8 +9,11 @@ export const KV_BACKUP_KEY      = 'af_backup_flights';
 export const KV_BACKUP_MODE_KEY = 'af_backup_mode';
 const KV_BACKUP_TTL_SEC         = 30 * 60 * 60; // 30 h
 
-// Clé du cache taf-vol-risks — doit correspondre à TAF_VOL_CACHE_KEY dans taf-vol-risks.ts
-const TAF_VOL_CACHE_KEY = 'taf_vol_risks_cache_v3';
+// Clés de cache à purger lors du basculement backup ON/OFF
+// → garantit que toutes les pages rechargent depuis la bonne source immédiatement
+const TAF_VOL_CACHE_KEY  = 'taf_vol_risks_cache_v3';
+const AF_FLIGHTS_KEY     = 'af_flights_cache';
+const BRIEFING_CACHE_KEY = 'briefing_cache_v4';
 
 const kv = redis;
 
@@ -68,12 +71,13 @@ export const POST: APIRoute = async ({ request }) => {
     if (body?.action === 'disable') {
       await Promise.all([
         kv.del(KV_BACKUP_MODE_KEY),
-        // Invalider le cache taf-vol-risks qui contient backupMode:true
-        // Sans ça, le cache (TTL 20min) continuerait à renvoyer backupMode:true
-        // après désactivation, jusqu'à son expiration naturelle.
+        // Purger tous les caches dérivés pour forcer un rechargement
+        // depuis l'API AF dès la prochaine requête
         kv.del(TAF_VOL_CACHE_KEY),
+        kv.del(AF_FLIGHTS_KEY),
+        kv.del(BRIEFING_CACHE_KEY),
       ]);
-      console.log('[backup-upload] Mode backup désactivé');
+      console.log('[backup-upload] Mode backup désactivé — caches purgés (af_flights, taf_vol_risks, briefing)');
       return new Response(JSON.stringify({ ok: true }), { headers });
     }
 
@@ -90,11 +94,14 @@ export const POST: APIRoute = async ({ request }) => {
     await Promise.all([
       kv.set(KV_BACKUP_KEY,      cache, { ex: KV_BACKUP_TTL_SEC }),
       kv.set(KV_BACKUP_MODE_KEY, true,  { ex: KV_BACKUP_TTL_SEC }),
-      // Invalider le cache taf-vol-risks pour forcer un rechargement avec les nouveaux vols
+      // Purger tous les caches dérivés pour forcer un rechargement
+      // immédiat depuis le CSV backup dans toutes les pages
       kv.del(TAF_VOL_CACHE_KEY),
+      kv.del(AF_FLIGHTS_KEY),
+      kv.del(BRIEFING_CACHE_KEY),
     ]);
 
-    console.log(`[backup-upload] ${cache.flights.length} vols stockés (source: ${filename})`);
+    console.log(`[backup-upload] ${cache.flights.length} vols stockés (source: ${filename}) — caches purgés (af_flights, taf_vol_risks, briefing)`);
 
     return new Response(JSON.stringify({
       ok:          true,

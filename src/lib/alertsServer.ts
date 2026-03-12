@@ -910,6 +910,144 @@ async function fetchVAACWashington(): Promise<Alert[]> {
   return alerts;
 }
 
+// ─── VAAC Tokyo — scraping dédié ──────────────────────────────────────────────────────────────
+// La JMA publie ses advisories sur https://www.data.jma.go.jp/vaac/data/vaac_list.html
+// sous forme d'un tableau de liens "Text". Chaque lien pointe vers un fichier texte brut
+// contenant le corps de l'advisory. Les advisories JMA ne comportent pas systématiquement
+// de polygone ashCloudExtent, donc le filtre hasAshCloudExtent est désactivé pour Tokyo.
+const VAAC_TOKYO_LIST = 'https://www.data.jma.go.jp/vaac/data/vaac_list.html';
+const VAAC_TOKYO_BASE = 'https://www.data.jma.go.jp';
+
+/** Parse un fichier texte brut d'advisory JMA et retourne une Alert (sans filtre extent). */
+function parseVAACTokyoText(text: string, fileUrl: string): Alert | null {
+  try {
+    const clean = text.replace(/\r/g, '');
+
+    const get = (tag: string) =>
+      clean.match(new RegExp(`^${tag}[:\\s]+(.+)$`, 'im'))?.[1]?.trim() ?? '';
+
+    const volcanoRaw = get('VOLCANO');
+    const volcano    = volcanoRaw && volcanoRaw.toUpperCase() !== 'NIL' ? volcanoRaw : null;
+    const dtg        = get('DTG');
+    const psn        = get('PSN');
+    const area       = get('AREA') || get('STATE') || 'Asie';
+
+    const flLevel  = vaacParseFlLevel(clean);
+    const severity = vaacSeverity(flLevel);
+
+    // Coordonnées : PSN d'abord, puis scan général du texte
+    let coords = vaacParseVolcanoCoords(psn || clean);
+    if (!coords) {
+      // Format degré-minute compact : N3342 E13051
+      const psnDM = (psn || clean).match(/([NS])(\d{2})(\d{2})\s+([EW])(\d{3})(\d{2})/i);
+      if (psnDM) {
+        coords = {
+          lat: (parseInt(psnDM[2]) + parseInt(psnDM[3]) / 60) * (psnDM[1].toUpperCase() === 'S' ? -1 : 1),
+          lon: (parseInt(psnDM[5]) + parseInt(psnDM[6]) / 60) * (psnDM[4].toUpperCase() === 'W' ? -1 : 1),
+        };
+      }
+    }
+
+    const volcanoDisplay = volcano ?? 'Volcan inconnu';
+    const airports = (coords != null)
+      ? getAirportsNearCoordsWithOverride(coords.lat, coords.lon, 800, volcano)
+      : [];
+
+    return {
+      id:          `VAAC-Tokyo-${volcanoDisplay.replace(/\s+/g, '_')}-${dtg || Date.now()}`,
+      source:      'VAAC',
+      region:      'ASIE',
+      severity,
+      phenomenon:  'Cendres volcaniques',
+      country:     area,
+      airports,
+      ...(coords != null ? { lat: coords.lat, lon: coords.lon } : {}),
+      validFrom:   new Date().toISOString(),
+      validTo:     null,
+      headline:    `Cendres volcaniques — ${volcanoDisplay}${flLevel ? ' ' + flLevel : ''} (VAAC Tokyo)`,
+      description: clean.slice(0, 400).trim(),
+      link:        fileUrl,
+      eventType:   'VAAC',
+      ...(volcano ? { volcanoName: volcano } : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchVAACTokyo(): Promise<Alert[]> {
+  const alerts: Alert[] = [];
+  try {
+    // 1. Récupérer la page liste
+    const listRes = await fetch(VAAC_TOKYO_LIST, {
+      headers: {
+        'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept':          'text/html,application/xhtml+xml,*/*;q=0.9',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!listRes.ok) {
+      console.warn(`[VAAC Tokyo] listing HTTP ${listRes.status}`);
+      return alerts;
+    }
+
+    const html = await listRes.text();
+
+    // 2. Extraire les liens "Text" (fichiers .txt des advisories) — max 24h
+    // Format typique : <a href="/vaac/data/FVFE01_RJTD_YYYYMMDD_HHMMSS.txt">Text</a>
+    const now = Date.now();
+    const maxAge = 24 * 3600 * 1000;
+    const textLinks: string[] = [];
+
+    const linkRe = /href="([^"]*\.txt)"/gi;
+    let m: RegExpExecArray | null;
+    while ((m = linkRe.exec(html)) !== null) {
+      const href = m[1];
+      // Tenter d'extraire la date depuis le nom de fichier (YYYYMMDD_HHMMSS)
+      const dateMatch = href.match(/(\d{8})_(\d{6})/);
+      if (dateMatch) {
+        const [, d, t] = dateMatch;
+        const fileDate = new Date(
+          `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}Z`
+        ).getTime();
+        if (!isNaN(fileDate) && now - fileDate > maxAge) continue;
+      }
+      const fullUrl = href.startsWith('http')
+        ? href
+        : `${VAAC_TOKYO_BASE}${href.startsWith('/') ? '' : '/'}${href}`;
+      if (!textLinks.includes(fullUrl)) textLinks.push(fullUrl);
+    }
+
+    if (textLinks.length === 0) {
+      console.log('[VAAC Tokyo] Aucun advisory récent (< 24h)');
+      return alerts;
+    }
+
+    // 3. Fetcher chaque fichier texte en parallèle
+    const fileResults = await Promise.allSettled(
+      textLinks.map(url =>
+        fetch(url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SkyWatch/1.0)' },
+          signal:  AbortSignal.timeout(8000),
+        }).then(r => r.ok ? r.text() : Promise.reject(r.status))
+      )
+    );
+
+    for (let i = 0; i < fileResults.length; i++) {
+      const res = fileResults[i];
+      if (res.status !== 'fulfilled') continue;
+      const alert = parseVAACTokyoText(res.value, textLinks[i]);
+      if (alert) alerts.push(alert);
+    }
+
+    console.log(`[VAAC Tokyo] ${alerts.length}/${textLinks.length} advisory(ies) parsé(s)`);
+  } catch (e) {
+    console.warn('[VAAC Tokyo]', e instanceof Error ? e.message : e);
+  }
+  return alerts;
+}
+
 export async function fetchVAAC(): Promise<Alert[]> {
   const results = await Promise.allSettled([
     fetchVAACWashington(),
@@ -918,7 +1056,7 @@ export async function fetchVAAC(): Promise<Alert[]> {
     fetchVAACHtml('Buenos Aires', 'https://www.ssd.noaa.gov/VAAC/OTH/BA/messages.html', 'AMS'),
     fetchVAACHtml('London',   'https://www.ssd.noaa.gov/VAAC/OTH/UK/messages.html',             'EUR'),
     fetchVAACRss('Toulouse',  'https://vaac.meteo.fr/rss/vaac_feed.rss',                         'EUR'),
-    fetchVAACHtml('Tokyo',    'https://ds.data.jma.go.jp/svd/vaac/data/vaac_list.html',         'ASIE'),
+    fetchVAACTokyo(),
     fetchVAACHtml('Darwin',   'http://www.bom.gov.au/aviation/volcanic-ash/',                    'ASIE'),
     fetchVAACHtml('Wellington','http://vaac.metservice.com/',                                    'PAC'),
   ]);

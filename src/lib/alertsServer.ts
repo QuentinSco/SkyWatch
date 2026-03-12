@@ -109,6 +109,7 @@ const AF_AIRPORTS = [
   { icao: 'RJTT', lat: 35.5494,  lon: 139.7798, iso3: 'JPN', name: 'Tokyo' },
   { icao: 'RJBB', lat: 34.4347,  lon: 135.2440, iso3: 'JPN', name: 'Osaka Kansai' },
   { icao: 'RKSI', lat: 37.4691,  lon: 126.4510, iso3: 'KOR', name: 'Séoul Incheon' },
+  { icao: 'RPLL', lat: 14.5086,  lon: 121.0197, iso3: 'PHL', name: 'Manila' },
   { icao: 'WSSS', lat:  1.3644,  lon: 103.9915, iso3: 'SGP', name: 'Singapour' },
   { icao: 'ZBAA', lat: 40.0801,  lon: 116.5846, iso3: 'CHN', name: 'Pékin' },
   { icao: 'ZSPD', lat: 31.1434,  lon: 121.8052, iso3: 'CHN', name: 'Shanghai' },
@@ -983,10 +984,18 @@ function parseVAACTokyoText(text: string, fileUrl: string): Alert | null {
     const baseAirports = coords != null
       ? getAirportsNearCoordsWithOverride(coords.lat, coords.lon, 800, volcano)
       : [];
-    // Les volcans VAAC Tokyo (Russie, Japon, Philippines, etc.) sont sur les routes polaires
-    // Asie-Pacifique — ajouter systématiquement Tokyo, Osaka Kansai et Séoul Incheon.
-    const VAAC_TOKYO_AIRPORTS = ['RJTT', 'RJBB', 'RKSI'];
-    const airports = [...new Set([...baseAirports, ...VAAC_TOKYO_AIRPORTS])];
+
+    // Overrides routes polaires / régionaux pour VAAC Tokyo :
+    // - Volcans russes (lat > 45, lon > 100) → routes polaires → RJTT, RJBB, RKSI
+    // - Volcans philippins (lat < 25, lon 115-130) → RPLL si pas déjà inclus
+    const extraAirports: string[] = [];
+    if (coords != null) {
+      const isRussian = coords.lat > 45 && coords.lon > 100;
+      const isPhilippines = coords.lat < 25 && coords.lon >= 115 && coords.lon <= 130;
+      if (isRussian) extraAirports.push('RJTT', 'RJBB', 'RKSI');
+      if (isPhilippines && !baseAirports.includes('RPLL')) extraAirports.push('RPLL');
+    }
+    const airports = [...new Set([...baseAirports, ...extraAirports])];
 
     // Description : extraire les lignes utiles
     const descLines = clean

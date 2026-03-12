@@ -994,25 +994,29 @@ async function fetchVAACTokyo(): Promise<Alert[]> {
 
     const html = await listRes.text();
 
-    // 2. Extraire les liens "Text" (fichiers .txt des advisories) — max 24h
-    // Format typique : <a href="/vaac/data/FVFE01_RJTD_YYYYMMDD_HHMMSS.txt">Text</a>
+    // 2. Extraire les liens "Text" des advisories récents (< 24h)
+    // Format réel JMA : liens en _Text.html, date dans la première <td> de chaque ligne
+    // ex: <td>2026/03/12 07:15:00</td> ... href="/vaac/data/TextData/2026/20260312_..._Text.html"
     const now = Date.now();
     const maxAge = 24 * 3600 * 1000;
     const textLinks: string[] = [];
 
-    const linkRe = /href="([^"]*\.txt)"/gi;
-    let m: RegExpExecArray | null;
-    while ((m = linkRe.exec(html)) !== null) {
-      const href = m[1];
-      // Tenter d'extraire la date depuis le nom de fichier (YYYYMMDD_HHMMSS)
-      const dateMatch = href.match(/(\d{8})_(\d{6})/);
+    const rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+    let rowMatch: RegExpExecArray | null;
+    while ((rowMatch = rowRe.exec(html)) !== null) {
+      const row = rowMatch[1];
+      const linkMatch = row.match(/href="([^"]*_Text\.html)"/i);
+      if (!linkMatch) continue;
+      const href = linkMatch[1];
+
+      // Date dans la première <td> : "2026/03/12 07:15:00"
+      const dateMatch = row.match(/<td[^>]*>\s*(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\s*<\/td>/i);
       if (dateMatch) {
-        const [, d, t] = dateMatch;
-        const fileDate = new Date(
-          `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}Z`
-        ).getTime();
-        if (!isNaN(fileDate) && now - fileDate > maxAge) continue;
+        const iso = dateMatch[1].replace(/\//g, '-').replace(' ', 'T') + 'Z';
+        const rowDate = new Date(iso).getTime();
+        if (!isNaN(rowDate) && now - rowDate > maxAge) continue;
       }
+
       const fullUrl = href.startsWith('http')
         ? href
         : `${VAAC_TOKYO_BASE}${href.startsWith('/') ? '' : '/'}${href}`;

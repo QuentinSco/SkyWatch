@@ -1066,14 +1066,27 @@ async function fetchVAACTokyo(): Promise<Alert[]> {
       )
     );
 
+    let fetchFailed = 0;
+    let parseFailed = 0;
     for (let i = 0; i < fileResults.length; i++) {
       const res = fileResults[i];
-      if (res.status !== 'fulfilled') continue;
+      if (res.status !== 'fulfilled') {
+        fetchFailed++;
+        console.warn(`[VAAC Tokyo] fetch failed for ${textLinks[i]}: ${(res as PromiseRejectedResult).reason}`);
+        continue;
+      }
       const alert = parseVAACTokyoText(res.value, textLinks[i]);
-      if (alert) alerts.push(alert);
+      if (alert) {
+        alerts.push(alert);
+      } else {
+        parseFailed++;
+        // Log first 200 chars to diagnose
+        const snippet = res.value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 200);
+        console.debug(`[VAAC Tokyo] parse=null for ${textLinks[i].split('/').pop()}: ${snippet}`);
+      }
     }
 
-    console.log(`[VAAC Tokyo] ${alerts.length}/${textLinks.length} advisory(ies) parsé(s)`);
+    console.log(`[VAAC Tokyo] ${alerts.length}/${textLinks.length} parsé(s), fetch_err=${fetchFailed}, parse_null=${parseFailed}`);
   } catch (e) {
     console.warn('[VAAC Tokyo]', e instanceof Error ? e.message : e);
   }

@@ -918,40 +918,68 @@ async function fetchVAACWashington(): Promise<Alert[]> {
 const VAAC_TOKYO_LIST = 'https://www.data.jma.go.jp/vaac/data/vaac_list.html';
 const VAAC_TOKYO_BASE = 'https://www.data.jma.go.jp';
 
-/** Parse un fichier texte brut d'advisory JMA et retourne une Alert (sans filtre extent). */
+/** Parse une page HTML d'advisory JMA et retourne une Alert.
+ *  Format PSN JMA : N5639 E16122 (degrés-minutes compacts, sans espace interne).
+ *  Filtre les advisories "NO FURTHER ADVISORIES" (cendres non détectées).
+ */
 function parseVAACTokyoText(text: string, fileUrl: string): Alert | null {
   try {
-    const clean = text.replace(/\r/g, '');
+    // Dépouiller le HTML : balises, entités, retours chariot
+    const clean = text
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&[a-z]+;/gi, ' ')
+      .replace(/\r/g, '')
+      .replace(/[ \t]+/g, ' ');
+
+    // Ignorer les advisories sans cendres détectables
+    if (/NO FURTHER ADVISORIES/i.test(clean)) return null;
+    // Ignorer si les cendres ne sont pas identifiables satellite
+    if (/VA NOT IDENTIFIABLE FM SATELLITE/i.test(clean)) return null;
 
     const get = (tag: string) =>
-      clean.match(new RegExp(`^${tag}[:\\s]+(.+)$`, 'im'))?.[1]?.trim() ?? '';
+      clean.match(new RegExp(`${tag}[:\\s]+([^\\n]{2,80})`, 'i'))?.[1]?.trim() ?? '';
 
     const volcanoRaw = get('VOLCANO');
-    const volcano    = volcanoRaw && volcanoRaw.toUpperCase() !== 'NIL' ? volcanoRaw : null;
-    const dtg        = get('DTG');
-    const psn        = get('PSN');
-    const area       = get('AREA') || get('STATE') || 'Asie';
+    // Nettoyer le suffixe numérique (ex: "SHEVELUCH 300270" → "SHEVELUCH")
+    const volcano = volcanoRaw
+      ? volcanoRaw.replace(/\s+\d{6}$/, '').trim() || null
+      : null;
+
+    const dtg  = get('DTG');
+    const psn  = get('PSN');
+    const area = get('AREA') || 'Asie';
 
     const flLevel  = vaacParseFlLevel(clean);
     const severity = vaacSeverity(flLevel);
 
-    // Coordonnées : PSN d'abord, puis scan général du texte
-    let coords = vaacParseVolcanoCoords(psn || clean);
-    if (!coords) {
-      // Format degré-minute compact : N3342 E13051
-      const psnDM = (psn || clean).match(/([NS])(\d{2})(\d{2})\s+([EW])(\d{3})(\d{2})/i);
-      if (psnDM) {
-        coords = {
-          lat: (parseInt(psnDM[2]) + parseInt(psnDM[3]) / 60) * (psnDM[1].toUpperCase() === 'S' ? -1 : 1),
-          lon: (parseInt(psnDM[5]) + parseInt(psnDM[6]) / 60) * (psnDM[4].toUpperCase() === 'W' ? -1 : 1),
+    // Format PSN JMA : N5639 E16122 (DDMM compact, sans espace dans le groupe)
+    // Aussi accepté : N 56.39 E 161.22 (décimal avec espace)
+    function parsePSN(s: string): { lat: number; lon: number } | null {
+      // Degré-minute compact : N5639 E16122 ou S0215 W07834
+      const dm = s.match(/([NS])(\d{2})(\d{2})\s+([EW])(\d{2,3})(\d{2})/i);
+      if (dm) {
+        return {
+          lat: (parseInt(dm[2]) + parseInt(dm[3]) / 60) * (dm[1].toUpperCase() === 'S' ? -1 : 1),
+          lon: (parseInt(dm[5]) + parseInt(dm[6]) / 60) * (dm[4].toUpperCase() === 'W' ? -1 : 1),
         };
       }
+      // Décimal : N 56.39 E 161.22 ou N56.39 E161.22
+      return vaacParseVolcanoCoords(s);
     }
 
+    const coords = parsePSN(psn) ?? parsePSN(clean);
+
     const volcanoDisplay = volcano ?? 'Volcan inconnu';
-    const airports = (coords != null)
+    const airports = coords != null
       ? getAirportsNearCoordsWithOverride(coords.lat, coords.lon, 800, volcano)
       : [];
+
+    // Description : extraire les lignes utiles
+    const descLines = clean
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 0 && !/^(FVFE|Tokyo VAAC|Volcanic Ash Advisory|Back to)/i.test(l));
+    const description = descLines.slice(0, 12).join(' | ').slice(0, 500);
 
     return {
       id:          `VAAC-Tokyo-${volcanoDisplay.replace(/\s+/g, '_')}-${dtg || Date.now()}`,
@@ -965,7 +993,7 @@ function parseVAACTokyoText(text: string, fileUrl: string): Alert | null {
       validFrom:   new Date().toISOString(),
       validTo:     null,
       headline:    `Cendres volcaniques — ${volcanoDisplay}${flLevel ? ' ' + flLevel : ''} (VAAC Tokyo)`,
-      description: clean.slice(0, 400).trim(),
+      description,
       link:        fileUrl,
       eventType:   'VAAC',
       ...(volcano ? { volcanoName: volcano } : {}),

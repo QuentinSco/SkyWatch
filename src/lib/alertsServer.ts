@@ -997,12 +997,39 @@ function parseVAACTokyoText(text: string, fileUrl: string): Alert | null {
     }
     const airports = [...new Set([...baseAirports, ...extraAirports])];
 
+    // ── Extraction direction et vitesse du mouvement (format JMA) ──────────────────────────
+    // Ligne type : "MOV: N 15KT" | "MOV: ENE 20KT" | "MOV: 045DEG 18KT" | "MOV: STNR"
+    const CARDINAL_TO_DEG: Record<string, number> = {
+      N: 360, NNE: 22, NE: 45, ENE: 67, E: 90, ESE: 112, SE: 135, SSE: 157,
+      S: 180, SSW: 202, SW: 225, WSW: 247, W: 270, WNW: 292, NW: 315, NNW: 337,
+    };
+    let direction: number | null = null;
+    let speedKt:   number | null = null;
+    // Format cardinal : "MOV: ENE 20KT" ou "MOV ENE 20KT"
+    const movCardinal = clean.match(/MOV[:\s]+([A-Z]{1,3})\s+(\d+)\s*KT/i);
+    // Format degrés   : "MOV: 045DEG 18KT"
+    const movDeg      = clean.match(/MOV[:\s]+(\d{3})\s*DEG\s+(\d+)\s*KT/i);
+    if (movCardinal) {
+      const card = movCardinal[1].toUpperCase();
+      direction = CARDINAL_TO_DEG[card] ?? null;
+      speedKt   = parseInt(movCardinal[2], 10);
+    } else if (movDeg) {
+      direction = parseInt(movDeg[1], 10);
+      speedKt   = parseInt(movDeg[2], 10);
+    }
+
     // Description : extraire les lignes utiles
     const descLines = clean
       .split('\n')
       .map(l => l.trim())
       .filter(l => l.length > 0 && !/^(FVFE|Tokyo VAAC|Volcanic Ash Advisory|Back to)/i.test(l));
-    const description = descLines.slice(0, 12).join(' | ').slice(0, 500);
+    // Injecter direction et vitesse au même format que Washington (attendu par parseVaacMotion)
+    const motionParts = [
+      direction !== null ? `Direction : ${direction}°` : '',
+      speedKt   !== null ? `Vitesse : ${speedKt} kt`   : '',
+    ].filter(Boolean).join(' — ');
+    const description = [descLines.slice(0, 12).join(' | '), motionParts]
+      .filter(Boolean).join(' — ').slice(0, 500);
 
     return {
       id:          `VAAC-Tokyo-${volcanoDisplay.replace(/\s+/g, '_')}-${dtg || Date.now()}`,

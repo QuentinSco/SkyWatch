@@ -52,7 +52,7 @@ export function parseCsvBackup(csvText: string, filename = 'upload.csv'): CsvBac
   }, []);
   // Indice 0 = AF HR départ, indice 1 = AF HR arrivée
   const afHrDepIdx   = afHrIndices.length >= 1 ? afHrIndices[0] : -1;
-  const afDateDepIdx = afHrDepIdx > 0 ? afHrDepIdx - 1 : -1;
+  const afDateDepIdx = afHrDepIdx >= 1 ? afHrDepIdx - 1 : -1;
   const afHrArrIdx   = afHrIndices.length >= 2 ? afHrIndices[1] : (afHrIndices[0] ?? -1);
   const afDateArrIdx = afHrArrIdx > 0 ? afHrArrIdx - 1 : -1;
 

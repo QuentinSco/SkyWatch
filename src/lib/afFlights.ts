@@ -302,7 +302,12 @@ export async function getCachedAfArrivals(force = false, lcOnly = true): Promise
   if (!force) {
     const backup = await getBackupFlights();
     if (backup) {
-      const arrivals = backup.filter(f => !f.movementType || f.movementType === 'A');
+      const arrivals = backup
+        .filter(f => !f.movementType || f.movementType === 'A')
+        .filter(f => {
+          const t = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
+          return t > now - 30 * 60 * 1000;
+        });
       return lcOnly ? arrivals.filter(f => f.isLongHaul) : arrivals;
     }
   }
@@ -344,7 +349,12 @@ export async function getCachedAfArrivals(force = false, lcOnly = true): Promise
     // Fallback 2 : backup CSV
     const backup = await getBackupFlights();
     if (backup) {
-      const arrivals = backup.filter(f => !f.movementType || f.movementType === 'A');
+      const arrivals = backup
+        .filter(f => !f.movementType || f.movementType === 'A')
+        .filter(f => {
+          const t = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
+          return t > now - 30 * 60 * 1000;
+        });
       return lcOnly ? arrivals.filter(f => f.isLongHaul) : arrivals;
     }
     return [];
@@ -382,7 +392,12 @@ export async function getCachedAfDepartures(force = false, lcOnly = true): Promi
   if (!force) {
     const backup = await getBackupFlights();
     if (backup) {
-      const departures = backup.filter(f => f.movementType === 'D');
+      const departures = backup
+        .filter(f => f.movementType === 'D')
+        .filter(f => {
+          const t = new Date(f.estimatedTouchDownTime ?? f.scheduledArrival).getTime();
+          return t > now - 30 * 60 * 1000;
+        });
       console.log(`[AF Flights] backup DEP — ${departures.length} départs (lcOnly=${lcOnly})`);
       return lcOnly ? departures.filter(f => f.isLongHaul) : departures;
     }

@@ -1221,14 +1221,13 @@ function formatFlightId(flightId) {
 
     let tafRows = '';
     if (!tafData) {
-      tafRows = `<tr><td colspan="6" class="px-4 py-3 text-xs text-gray-400 italic">TAF non disponible pour ${icao}</td></tr>`;
+      tafRows = `<tr><td colspan="5" class="px-4 py-3 text-xs text-gray-400 italic">TAF non disponible pour ${icao}</td></tr>`;
     } else if (periodsWithWind.length === 0) {
-      tafRows = `<tr><td colspan="6" class="px-4 py-3 text-xs text-gray-400 italic">Aucun vent dans le TAF</td></tr>`;
+      tafRows = `<tr><td colspan="5" class="px-4 py-3 text-xs text-gray-400 italic">Aucun vent dans le TAF</td></tr>`;
     } else if (activeQfu === null) {
-      tafRows = `<tr><td colspan="6" class="px-4 py-3 text-xs text-orange-500 italic">⚠️ Définir un QFU pour calculer les composantes</td></tr>`;
+      tafRows = `<tr><td colspan="5" class="px-4 py-3 text-xs text-orange-500 italic">⚠️ Définir un QFU pour calculer les composantes</td></tr>`;
     } else {
       for (const f of periodsWithWind) {
-        const ci = f.changeIndicator
           ? `<span class="text-[10px] font-semibold px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500">${f.changeIndicator}</span>`
           : '<span class="text-[10px] text-gray-400">BASE</span>';
         const isVrb = String(f.wdir ?? '').toUpperCase() === 'VRB';
@@ -1254,7 +1253,6 @@ function formatFlightId(flightId) {
         tafRows += `
           <tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition ${code !== 6 ? 'bg-blue-50/30 dark:bg-blue-900/10' : ''}">
             <td class="px-4 py-2 text-xs font-mono text-gray-500 whitespace-nowrap">${formatEpoch(f.timeFrom)}→${formatEpoch(f.timeTo)}</td>
-            <td class="px-4 py-2 text-xs">${ci}</td>
             <td class="px-4 py-2 text-xs font-mono font-semibold text-gray-800 dark:text-gray-200">${windStr}${codeBadge}</td>
             <td class="px-4 py-2 text-xs font-mono text-gray-500">${qfuCell}</td>
             <td class="px-4 py-2 text-xs font-bold font-mono ${status.text}">${cwStr}</td>

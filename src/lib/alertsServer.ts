@@ -624,6 +624,13 @@ function parseVaaTextBlock(block: string, sourceName: string, region: string, so
 
     if (!hasAshCloudExtent(clean)) return null;
 
+    // Ignorer les advisories de clôture
+    if (/NO FURTHER ADVISORIES/i.test(clean)) return null;
+
+    // Ignorer si toutes les prévisions FCST sont à NO VA EXP (cendres dissipées)
+    const fcstLines = clean.match(/FCST VA CLD \+\d+HR[^\n\r]*/gi) ?? [];
+    if (fcstLines.length > 0 && fcstLines.every(l => /NO VA EXP/i.test(l))) return null;
+
     const get = (tag: string) =>
       clean.match(new RegExp(`${tag}[:\\s]+([^\\n\\r]{2,60})`, 'i'))?.[1]?.trim() ?? '';
 
@@ -645,6 +652,20 @@ function parseVaaTextBlock(block: string, sourceName: string, region: string, so
       }
     }
 
+    // Parser NXT ADVISORY pour calculer un validTo (même logique que Washington)
+    const nxtMatch = clean.match(/NXT ADVISORY[:\s]+(?:WILL BE ISSUED BY\s+)?(\d{8}\/\d{4})Z/i);
+    let validTo: string | null = null;
+    if (nxtMatch) {
+      const s = nxtMatch[1]; // ex: "20260312/2000"
+      const iso = `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T${s.slice(9, 11)}:${s.slice(11, 13)}:00Z`;
+      const d = new Date(iso);
+      if (!isNaN(d.getTime())) {
+        // Si la date NXT est déjà passée, l'advisory est périmé
+        if (d < new Date()) return null;
+        validTo = iso;
+      }
+    }
+
     const volcanoDisplay = volcano ?? 'Volcan';
     const airports = (lat != null && lon != null)
       ? getAirportsNearCoordsWithOverride(lat, lon, 800, volcano)
@@ -660,7 +681,7 @@ function parseVaaTextBlock(block: string, sourceName: string, region: string, so
       airports,
       ...(lat != null && lon != null ? { lat, lon } : {}),
       validFrom:  new Date().toISOString(),
-      validTo:    null,
+      validTo,
       headline:   `Cendres volcaniques — ${volcanoDisplay}${flLevel ? ' ' + flLevel : ''} (VAAC ${sourceName})`,
       description: clean.slice(0, 400).trim(),
       link:       sourceUrl,
@@ -940,6 +961,12 @@ function parseVAACTokyoText(text: string, fileUrl: string): Alert | null {
     if (/NO FURTHER ADVISORIES/i.test(clean)) return null;
     // Ignorer si les cendres ne sont pas identifiables satellite
     if (/VA NOT IDENTIFIABLE FM SATELLITE/i.test(clean)) return null;
+    // Ignorer si VAAC Tokyo a transféré la responsabilité à un autre VAAC
+    // (ex: "VAAC TOKYO HAS TRANSFERRED RESPONSIBILITY OF THIS EVENT TO VAAC ANCHORAGE")
+    if (/VAAC TOKYO HAS TRANSFERRED RESPONSIBILITY/i.test(clean)) return null;
+    // Ignorer si toutes les prévisions FCST indiquent NO VA EXP (cendres entièrement dissipées)
+    const fcstLines = clean.match(/FCST VA CLD \+\d+HR[^\n]*/gi) ?? [];
+    if (fcstLines.length > 0 && fcstLines.every(l => /NO VA EXP/i.test(l))) return null;
 
     // get() : capture la valeur d'un champ sur sa ligne uniquement
     const get = (tag: string) =>

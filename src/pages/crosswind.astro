@@ -1228,8 +1228,6 @@ function formatFlightId(flightId) {
       tafRows = `<tr><td colspan="5" class="px-4 py-3 text-xs text-orange-500 italic">⚠️ Définir un QFU pour calculer les composantes</td></tr>`;
     } else {
       for (const f of periodsWithWind) {
-          ? `<span class="text-[10px] font-semibold px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500">${f.changeIndicator}</span>`
-          : '<span class="text-[10px] text-gray-400">BASE</span>';
         const isVrb = String(f.wdir ?? '').toUpperCase() === 'VRB';
         const { crosswind: cwBase, vrb } = computeCrosswind(f.wdir, f.wspd, activeQfu, decl);
         const cwGust = f.wgst ? computeCrosswind(f.wdir, f.wgst, activeQfu, decl).crosswind : null;

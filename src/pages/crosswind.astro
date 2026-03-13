@@ -752,6 +752,7 @@ const AIRPORT_RUNWAYS = {
 
   // ─── Limites vent de travers ────────────────────────────────────────────────
   const AIRCRAFT_LIMITS = {
+    '77X': { label: '77F', code6: 45, code5: 40, code4: 35 },
     '77W': { label: '777-300ER', code6: 45, code5: 40, code4: 35 },
     '772': { label: '777-200ER', code6: 45, code5: 40, code4: 35 },
     '789': { label: '787-9',     code6: 45, code5: 40, code4: 35 },
@@ -885,7 +886,7 @@ function formatFlightId(flightId) {
     A220:      ['223', '220'],
     A320:      ['318', '319', '320', '321','E70','E90'],
     A330_A350: ['332', '333', '359'],
-    B777_B787: ['77W', '772', '789'],
+    B777_B787: ['77X','77W', '772', '789'],
   };
 
   let selectedAircraftGroups = new Set(['ALL']); // 'ALL' = pas de filtre

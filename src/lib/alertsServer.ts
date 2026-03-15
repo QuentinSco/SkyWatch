@@ -79,7 +79,7 @@ const AF_AIRPORTS = [
   { icao: 'KSEA', lat: 47.4502,  lon:-122.3088, iso3: 'USA', name: 'Seattle' },
   { icao: 'KPDX', lat: 45.5898,  lon:-122.5951, iso3: 'USA', name: 'Portland' },
   { icao: 'KBWI', lat: 39.1754,  lon: -76.6683, iso3: 'USA', name: 'Baltimore' },
-  { icao: 'KDEN', lat: 39.8561,  lon:-104.6737, iso3: 'USA', name: 'Denver' },
+  { icao: 'KMSP', lat: 44.8848,  lon: -93.2223, iso3: 'USA', name: 'Minneapolis' },
   { icao: 'PHOG', lat: 20.8986,  lon:-156.4305, iso3: 'USA', name: 'Maui (Kahului)' },
   { icao: 'PHNL', lat: 21.3187,  lon:-157.9224, iso3: 'USA', name: 'Honolulu' },
   { icao: 'SBGR', lat: -23.4356, lon: -46.4731, iso3: 'BRA', name: 'São Paulo' },

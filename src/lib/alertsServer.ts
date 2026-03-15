@@ -240,6 +240,12 @@ const NWS_ZONE_AIRPORTS: Record<string, string[]> = {
   MAZ004: ['KBOS'], MAZ005: ['KBOS'], MAZ006: ['KBOS'],
   MAZ007: ['KBOS'], MAZ013: ['KBOS'], MAZ014: ['KBOS'],
   MAZ015: ['KBOS'], MAZ016: ['KBOS'],
+  MAZ017: ['KBOS'], MAZ018: ['KBOS'], MAZ019: ['KBOS'],
+  MAZ020: ['KBOS'], MAZ021: ['KBOS'], MAZ022: ['KBOS'],
+  MAZ023: ['KBOS'], MAZ024: ['KBOS'],
+  RIZ001: ['KBOS'], RIZ002: ['KBOS'], RIZ003: ['KBOS'],
+  RIZ004: ['KBOS'], RIZ005: ['KBOS'], RIZ006: ['KBOS'],
+  RIZ007: ['KBOS'], RIZ008: ['KBOS'],
   ILZ006: ['KORD'], ILZ012: ['KORD'], ILZ013: ['KORD'],
   ILZ014: ['KORD'], ILZ103: ['KORD'], ILZ104: ['KORD'],
   CAZ006: ['KSFO'], CAZ007: ['KSFO'], CAZ008: ['KSFO'],
@@ -363,30 +369,9 @@ export async function fetchNOAA(): Promise<Alert[]> {
       });
     }
 
-    const SEVERITY_ORDER: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
-    const seen = new Map<string, Alert>();
-    for (const a of raw) {
-      const key = a.phenomenon;
-      if (!seen.has(key)) {
-        seen.set(key, { ...a });
-      } else {
-        const ex = seen.get(key)!;
-        const severity = SEVERITY_ORDER[a.severity] < SEVERITY_ORDER[ex.severity]
-          ? a.severity : ex.severity;
-        const airports = [...new Set([...ex.airports, ...a.airports])];
-        const mergedCoords = airports
-          .map(icao => AF_AIRPORTS.find(ap => ap.icao === icao))
-          .filter((ap): ap is typeof AF_AIRPORTS[0] => ap != null);
-        const lat = mergedCoords.length
-          ? mergedCoords.reduce((s, ap) => s + ap.lat, 0) / mergedCoords.length
-          : ex.lat;
-        const lon = mergedCoords.length
-          ? mergedCoords.reduce((s, ap) => s + ap.lon, 0) / mergedCoords.length
-          : ex.lon;
-        seen.set(key, { ...ex, severity, airports, ...(lat !== undefined ? { lat } : {}), ...(lon !== undefined ? { lon } : {}) });
-      }
-    }
-    alerts.push(...seen.values());
+    // Pas de déduplication : chaque feature NOAA est une alerte géographiquement distincte.
+    // L'id `NOAA-${p.id}` garantit l'unicité.
+    alerts.push(...raw);
   } catch (e) {
     console.error('[NOAA]', e);
   }

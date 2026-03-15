@@ -22,7 +22,7 @@ const PHENOMENON_EMOJI = {
   'Inondation / Pluie':    '🌊',
   'Pluie intense':         '🌧',
   // NOAA keywords
-  'Blizzard':              '❄️',
+  'Blizzard':              '🌨',
   'Hurricane':             '🌀',
   'Tornado':               '🌪',
   'Fog':                   '🌫',

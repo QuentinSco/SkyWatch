@@ -46,7 +46,7 @@
     'Froid extrême':         '❄️',
     'Inondation / Pluie':    '🌊',
     'Pluie intense':         '🌧',
-    'Blizzard':              '❄️',
+    'Blizzard':              '🌨️',
     'Hurricane':             '🌀',
     'Tornade':               '🌪',
     'Brume':                 '🌫',

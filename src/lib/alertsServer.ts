@@ -369,9 +369,27 @@ export async function fetchNOAA(): Promise<Alert[]> {
       });
     }
 
-    // Pas de déduplication : chaque feature NOAA est une alerte géographiquement distincte.
-    // L'id `NOAA-${p.id}` garantit l'unicité.
-    alerts.push(...raw);
+    // Déduplication alert/update : l'API NOAA émet parfois une feature "alert" et
+    // une feature "update" pour le même événement physique (même phénomène + même zone).
+    // On garde la plus récente (update > alert) en dédupliquant par (phenomenon + airports triés).
+    // Deux alertes de même phénomène mais de zones différentes (ex. Blizzard Boston ≠ Blizzard MSP)
+    // conservent des clés distinctes et restent séparées.
+    const deduped = new Map<string, Alert>();
+    for (const a of raw) {
+      const key = `${a.phenomenon}|${[...a.airports].sort().join(',')}`;
+      const existing = deduped.get(key);
+      if (!existing) {
+        deduped.set(key, a);
+      } else {
+        // Préférer l'update (validFrom plus récent) et la sévérité la plus haute
+        const SEVERITY_ORDER: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
+        const useSeverity = SEVERITY_ORDER[a.severity] <= SEVERITY_ORDER[existing.severity]
+          ? a.severity : existing.severity;
+        const useAlert = a.validFrom >= existing.validFrom ? a : existing;
+        deduped.set(key, { ...useAlert, severity: useSeverity });
+      }
+    }
+    alerts.push(...deduped.values());
   } catch (e) {
     console.error('[NOAA]', e);
   }

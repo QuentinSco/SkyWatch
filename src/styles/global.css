@@ -119,7 +119,7 @@ aside nav a:hover {
   color: var(--hover-text) !important;
 }
 
-/* Lien actif (bg-blue-50 injecté par JS) */
+/* Lien actif (bg-blue-50 injecté par JS ou Astro lc()) */
 .sidebar-link.bg-blue-50,
 aside nav a.bg-blue-50 {
   background: var(--accent-light) !important;
@@ -132,23 +132,6 @@ aside nav a.bg-blue-50 {
 .dark .sidebar-link:hover {
   background: var(--hover-bg) !important;
   color: var(--hover-text) !important;
-}
-
-/* Lien Trame briefing (purple → bleu AF) */
-aside a[href="/briefing"].bg-purple-50,
-aside a[href="/briefing"][class*="purple"] {
-  background: var(--accent-light) !important;
-  color: var(--accent) !important;
-}
-
-.dark aside a[href="/briefing"]:hover {
-  background: var(--hover-bg) !important;
-  color: var(--hover-text) !important;
-}
-
-.dark aside a[href="/briefing"].bg-blue-50 {
-  background: var(--hover-bg);
-  color: var(--hover-text);
 }
 
 /* ================================

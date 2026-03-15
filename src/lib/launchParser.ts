@@ -1,5 +1,5 @@
-import type { Alert } from './geoUtils';
-import { getAirportsNearCoords, regionFromCoords } from './geoUtils';
+import type { Alert } from './alertsServer';
+import { LC_AIRPORTS } from './airports';
 
 // ─── Debug ────────────────────────────────────────────────────────────────────
 // Passer à true pour voir les logs détaillés dans la console serveur
@@ -35,7 +35,34 @@ const EXCLUDE_STATUS_IDS = new Set([4, 7]);
  */
 const BACKUP_STATUS_IDS = new Set([2, 8]);
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers géo (inline, ne dépendent plus de geoUtils) ─────────────────────
+
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(a));
+}
+
+function getAirportsNearCoords(lat: number, lon: number, radiusKm = 500): string[] {
+  return LC_AIRPORTS
+    .filter(a => haversineKm(lat, lon, a.lat, a.lon) <= radiusKm)
+    .map(a => a.icao);
+}
+
+function regionFromCoords(lat: number, lon: number): string {
+  if (lon > 60) return 'ASIE';
+  if (lon > 20 && lat < 40) return 'AFR';
+  if (lon > -20 && lat < 40) return 'AFR';
+  if (lon < -30 && lat > 20) return 'AMN';
+  if (lon < -30 && lat <= 20) return 'AMS';
+  return 'EUR';
+}
+
+// ─── Helpers divers ───────────────────────────────────────────────────────────
 
 function slugFromUrl(url: string | undefined): string {
   if (!url) return '';
@@ -58,25 +85,14 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
   try {
     const now = Date.now();
 
-    /**
-     * FIX : on filtre côté API avec window_start__lte pour s'assurer que
-     * les lancements dans les LAUNCH_WINDOW_HOURS suivantes sont toujours
-     * inclus dans les résultats, même si la file d'attente LL2 dépasse
-     * la limite de 50 entrées (nombreux TBD/TBC lointains).
-     *
-     * Sans ce filtre, un lancement "Go" dans 20h pouvait être absent si
-     * 50+ lancements TBD/TBC étaient listés avant lui par window_start.
-     */
-    const windowTo = new Date(now + LAUNCH_WINDOW_HOURS * 3_600_000).toISOString();
+    const windowTo = new URL(`${LL2_BASE}/launch/upcoming/`);
+    windowTo.searchParams.set('limit',              '50');
+    windowTo.searchParams.set('ordering',           'window_start');
+    windowTo.searchParams.set('window_start__lte',  new Date(now + LAUNCH_WINDOW_HOURS * 3_600_000).toISOString());
 
-    const url = new URL(`${LL2_BASE}/launch/upcoming/`);
-    url.searchParams.set('limit',              '50');
-    url.searchParams.set('ordering',           'window_start');
-    url.searchParams.set('window_start__lte',  windowTo);
+    dbg(`Requête LL2 : ${windowTo.toString()}`);
 
-    dbg(`Requête LL2 : ${url.toString()}`);
-
-    const res = await fetch(url.toString(), {
+    const res = await fetch(windowTo.toString(), {
       headers: { 'User-Agent': 'SkyWatch/0.1', 'Accept': 'application/json' },
       signal: AbortSignal.timeout(10_000),
     });
@@ -101,23 +117,10 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
 
       dbg(`→ ${launch.name} | status=${statusName}(${statusId}) | hoursUntil=${hoursUntil.toFixed(1)}`);
 
-      // Exclure les échecs
-      if (EXCLUDE_STATUS_IDS.has(statusId)) {
-        dbg(`  ✗ exclu (statut échec)`);
-        continue;
-      }
+      if (EXCLUDE_STATUS_IDS.has(statusId)) { dbg(`  ✗ exclu (statut échec)`); continue; }
+      if (hoursUntil < 0) { dbg(`  ✗ exclu (passé)`); continue; }
+      if (hoursUntil > LAUNCH_WINDOW_HOURS) { dbg(`  ✗ exclu (trop loin)`); continue; }
 
-      // Exclure ce qui est passé ou trop loin
-      if (hoursUntil < 0) {
-        dbg(`  ✗ exclu (passé, hoursUntil=${hoursUntil.toFixed(1)})`);
-        continue;
-      }
-      if (hoursUntil > LAUNCH_WINDOW_HOURS) {
-        dbg(`  ✗ exclu (trop loin, hoursUntil=${hoursUntil.toFixed(1)} > ${LAUNCH_WINDOW_HOURS})`);
-        continue;
-      }
-
-      // Coordonnées du pad
       const lat = launch.pad?.latitude  ? parseFloat(launch.pad.latitude)  : null;
       const lon = launch.pad?.longitude ? parseFloat(launch.pad.longitude) : null;
       if (lat === null || lon === null || isNaN(lat) || isNaN(lon)) {
@@ -125,20 +128,14 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
         continue;
       }
 
-      // Aéroports AF dans le rayon d'impact
       const airports = getAirportsNearCoords(lat, lon, LAUNCH_IMPACT_RADIUS_KM);
       dbg(`  Aéroports AF dans ${LAUNCH_IMPACT_RADIUS_KM} km : [${airports.join(', ')}]`);
-      if (airports.length === 0) {
-        dbg(`  ✗ exclu (aucun aéroport AF dans le rayon)`);
-        continue;
-      }
+      if (airports.length === 0) { dbg(`  ✗ exclu (aucun aéroport AF dans le rayon)`); continue; }
 
-      // Sévérité
       const severity = isBackup
         ? 'yellow'
         : (SEVERITY_BY_HOURS.find(s => hoursUntil <= s.maxH)?.severity ?? 'yellow');
 
-      // Métadonnées
       const provider    = launch.launch_service_provider?.abbrev ?? launch.launch_service_provider?.name ?? '?';
       const rocket      = launch.rocket?.configuration?.name ?? 'Lanceur inconnu';
       const siteName    = launch.pad?.name ?? launch.pad?.location?.name ?? 'Site inconnu';
@@ -148,29 +145,17 @@ export async function fetchRocketLaunches(): Promise<Alert[]> {
       const providerName: string    = launch.launch_service_provider?.name ?? provider;
       const nrUrl = nextrocketUrl(launch);
 
-      // Dernier update (ordonné du plus ancien au plus récent dans LL2)
       const updates = Array.isArray(launch.updates) ? launch.updates : [];
       const lastUpdate = updates.length > 0 ? updates[updates.length - 1] : null;
       const lastUpdateUrl: string     = lastUpdate?.info_url ?? '';
       const lastUpdateComment: string = lastUpdate?.comment  ?? '';
 
-      /**
-       * Ordre de priorité des liens :
-       * 1. updates[last].info_url  → lien spécifique à la mission
-       * 2. NextRocket.space        → fiche lisible si slug disponible
-       * 3. provider.info_url       → site générique du provider (fallback)
-       * On n'expose jamais l'URL LL2 brute.
-       */
       const sourceLinks: { label: string; url: string }[] = [];
-      if (lastUpdateUrl)   sourceLinks.push({
-        label: lastUpdateComment ? lastUpdateComment.slice(0, 45) : 'Page lancement',
-        url:   lastUpdateUrl,
-      });
+      if (lastUpdateUrl)   sourceLinks.push({ label: lastUpdateComment ? lastUpdateComment.slice(0, 45) : 'Page lancement', url: lastUpdateUrl });
       if (nrUrl)           sourceLinks.push({ label: 'NextRocket.space', url: nrUrl });
       if (providerInfoUrl) sourceLinks.push({ label: providerName,       url: providerInfoUrl });
 
-      const launchDetailUrl = launch.url
-        ?? `${LL2_BASE}/launch/${launch.id}/`;
+      const launchDetailUrl = launch.url ?? `${LL2_BASE}/launch/${launch.id}/`;
 
       dbg(`  ✓ ajouté | severity=${severity} | airports=[${airports.join(', ')}]`);
 

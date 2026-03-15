@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
-import { fetchGDACS, fetchNOAA, fetchEMMA, fetchMeteoFrance, fetchVAAC } from '../../lib/alertsServer';
+import { fetchGDACS, fetchNOAA, fetchEMMA, fetchMeteoFrance } from '../../lib/alertsServer';
+import { fetchVAAC } from '../../lib/vaacParser';
 import { fetchRocketLaunches } from '../../lib/launchParser';
 import { fetchSWPC } from '../../lib/swpcParser';
 import { redis } from '../../lib/redis';
@@ -12,7 +13,6 @@ const TWO_HOURS  = 2 * 60 * 60 * 1000;
 const SIX_HOURS  = 6 * 60 * 60 * 1000;
 
 export const GET: APIRoute = async () => {
-  // Lecture cache Redis (si disponible)
   if (redis) {
     try {
       const cached = await redis.get<unknown[]>(CACHE_KEY);
@@ -40,7 +40,6 @@ export const GET: APIRoute = async () => {
   const all = [...gdacs, ...noaa, ...emma, ...mf, ...vaac, ...swpc, ...launches]
     .sort((a: any, b: any) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])
     .filter((a: any) => {
-      // Les alertes SWPC sans validTo sont conservées 6h
       if (a.source === 'SWPC' && !a.validTo) {
         if (!a.validFrom) return false;
         return Date.now() - new Date(a.validFrom).getTime() < SIX_HOURS;
@@ -49,7 +48,6 @@ export const GET: APIRoute = async () => {
       return Date.now() - new Date(a.validTo).getTime() < TWO_HOURS;
     });
 
-  // Écriture cache Redis (si disponible)
   if (redis) {
     try {
       await redis.set(CACHE_KEY, all, { ex: CACHE_TTL_SEC });

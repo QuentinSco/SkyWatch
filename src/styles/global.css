@@ -106,7 +106,7 @@ aside .border-gray-200,
 }
 
 /* ================================
-   Sidebar Links
+   Sidebar Links — état par défaut & hover
    ================================ */
 .sidebar-link,
 aside nav a {
@@ -119,19 +119,55 @@ aside nav a:hover {
   color: var(--hover-text) !important;
 }
 
-/* Lien actif (bg-blue-50 injecté par JS ou Astro lc()) */
+/* Overrides dark mode inline Tailwind hover */
+.dark aside nav a:hover,
+.dark .sidebar-link:hover {
+  background: var(--hover-bg) !important;
+  color: var(--hover-text) !important;
+}
+
+/* ================================
+   Sidebar Links — états actifs (lc() Astro)
+   Chaque outil a sa couleur Tailwind active ;
+   on les remplace toutes par la charte AF.
+   ================================ */
+
+/* Tableau de bord & Vent de travers → bg-blue-50 */
 .sidebar-link.bg-blue-50,
 aside nav a.bg-blue-50 {
   background: var(--accent-light) !important;
   color: var(--accent) !important;
   font-weight: 600;
 }
-
-/* Overrides dark mode inline Tailwind hover */
-.dark aside nav a:hover,
-.dark .sidebar-link:hover {
-  background: var(--hover-bg) !important;
+.dark .sidebar-link.bg-blue-50,
+.dark aside nav a.bg-blue-50 {
+  background: var(--accent-light) !important;
   color: var(--hover-text) !important;
+  font-weight: 600;
+}
+
+/* Trame briefing → bg-purple-50 */
+aside nav a.bg-purple-50 {
+  background: var(--accent-light) !important;
+  color: var(--accent) !important;
+  font-weight: 600;
+}
+.dark aside nav a.bg-purple-50 {
+  background: var(--accent-light) !important;
+  color: var(--hover-text) !important;
+  font-weight: 600;
+}
+
+/* Chaînages → bg-indigo-50 */
+aside nav a.bg-indigo-50 {
+  background: var(--accent-light) !important;
+  color: var(--accent) !important;
+  font-weight: 600;
+}
+.dark aside nav a.bg-indigo-50 {
+  background: var(--accent-light) !important;
+  color: var(--hover-text) !important;
+  font-weight: 600;
 }
 
 /* ================================

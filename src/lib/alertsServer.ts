@@ -264,8 +264,8 @@ export async function fetchNOAA(): Promise<Alert[]> {
         if (airports.length === 0) continue;
  
         const airportCoords = airports
-          .map(icao => AF_AIRPORTS.find(a => a.icao === icao))
-          .filter((a): a is typeof AF_AIRPORTS[0] => a != null);
+          .map(icao => AIRPORTS.find(a => a.icao === icao))
+          .filter((a): a is typeof AIRPORTS[0] => a != null);
         const lat = airportCoords.length
           ? airportCoords.reduce((s, a) => s + a.lat, 0) / airportCoords.length
           : undefined;
@@ -305,8 +305,8 @@ export async function fetchNOAA(): Promise<Alert[]> {
             ? a.severity : ex.severity;
           const airports = [...new Set([...ex.airports, ...a.airports])];
           const mergedCoords = airports
-            .map(icao => AF_AIRPORTS.find(ap => ap.icao === icao))
-            .filter((ap): ap is typeof AF_AIRPORTS[0] => ap != null);
+            .map(icao => AIRPORTS.find(ap => ap.icao === icao))
+            .filter((ap): ap is typeof AIRPORTS[0] => ap != null);
           const lat = mergedCoords.length
             ? mergedCoords.reduce((s, ap) => s + ap.lat, 0) / mergedCoords.length
             : ex.lat;

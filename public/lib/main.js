@@ -46,7 +46,7 @@
     'Froid extrême':         '❄️',
     'Inondation / Pluie':    '🌊',
     'Pluie intense':         '🌧',
-    'Blizzard':              '🌨️',
+    'Blizzard':              '🌨',
     'Hurricane':             '🌀',
     'Tornade':               '🌪',
     'Brume':                 '🌫',
@@ -189,7 +189,7 @@
         <td class="py-2 px-3">
           <span class="${badgeCls} inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-xs font-bold uppercase">${badgeLabel}</span>
         </td>
-        <td class="py-2 px-3 text-sm font-medium text-gray-800">${icon} ${alert.phenomenon}</td>
+        <td class="py-2 px-3 text-sm font-medium text-gray-800">${phenomenonEmoji(alert.phenomenon)} ${alert.phenomenon}</td>
         <td class="py-2 px-3 text-sm text-gray-600">${alert.country}</td>
         <td class="py-2 px-3"><div class="flex flex-wrap gap-1">${airportsHtml}</div></td>
         <td class="py-2 px-3 text-xs text-gray-500">

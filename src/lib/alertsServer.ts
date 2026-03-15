@@ -217,91 +217,129 @@ function noaaSeverity(event: string): Severity {
   return 'yellow';
 }
 
+const NOAA_URL = 'https://api.weather.gov/alerts/active?status=actual&message_type=alert,update';
+const NOAA_TIMEOUT_MS = 20_000;  // 20 s — Vercel autorise ~25 s sur les fonctions standard
+const NOAA_MAX_ATTEMPTS = 2;
+ 
+async function fetchNOAAOnce(): Promise<Response> {
+  return fetch(NOAA_URL, {
+    headers: { 'User-Agent': 'SkyWatch/0.1', 'Accept': 'application/geo+json' },
+    signal: AbortSignal.timeout(NOAA_TIMEOUT_MS),
+  });
+}
+ 
 export async function fetchNOAA(): Promise<Alert[]> {
   const alerts: Alert[] = [];
-  try {
-    const res = await fetch(
-      'https://api.weather.gov/alerts/active?status=actual&message_type=alert,update',
-      {
-        headers: { 'User-Agent': 'SkyWatch/0.1', 'Accept': 'application/geo+json' },
-        signal: AbortSignal.timeout(10000),
+  let lastError: unknown;
+ 
+  for (let attempt = 1; attempt <= NOAA_MAX_ATTEMPTS; attempt++) {
+    try {
+      const res = await fetchNOAAOnce();
+ 
+      if (!res.ok) {
+        console.error(`[NOAA] HTTP ${res.status}`);
+        return alerts;
       }
-    );
-    if (!res.ok) {
-      console.error('[NOAA] HTTP', res.status);
+ 
+      const ct = res.headers.get('content-type') ?? '';
+      if (!ct.includes('json') && !ct.includes('geo+json')) {
+        console.error('[NOAA] Unexpected content-type:', ct);
+        return alerts;
+      }
+ 
+      const json = await res.json();
+      const raw: Alert[] = [];
+ 
+      for (const f of (json.features ?? [])) {
+        const p = f.properties;
+        if (!RELEVANT_EVENTS.has(p.event)) continue;
+ 
+        const zones = p.geocode?.UGC ?? [];
+        const airportSet = new Set<string>();
+        for (const zone of zones) {
+          const found = NWS_ZONE_AIRPORTS[zone];
+          if (found) found.forEach((a: string) => airportSet.add(a));
+        }
+        const airports = [...airportSet];
+        if (airports.length === 0) continue;
+ 
+        const airportCoords = airports
+          .map(icao => AF_AIRPORTS.find(a => a.icao === icao))
+          .filter((a): a is typeof AF_AIRPORTS[0] => a != null);
+        const lat = airportCoords.length
+          ? airportCoords.reduce((s, a) => s + a.lat, 0) / airportCoords.length
+          : undefined;
+        const lon = airportCoords.length
+          ? airportCoords.reduce((s, a) => s + a.lon, 0) / airportCoords.length
+          : undefined;
+ 
+        const phenomenon = NOAA_PHENOMENON_FR[p.event] ?? p.event;
+ 
+        raw.push({
+          id:          `NOAA-${p.id}`,
+          source:      'NOAA',
+          region:      'AMN',
+          severity:    noaaSeverity(p.event),
+          phenomenon,
+          country:     'United States',
+          airports,
+          ...(lat !== undefined ? { lat } : {}),
+          ...(lon !== undefined ? { lon } : {}),
+          validFrom:   p.onset || p.effective || '',
+          validTo:     p.expires || '',
+          headline:    p.headline || p.event,
+          description: p.description?.slice(0, 500) || p.headline || '',
+          link:        p['@id'] || 'https://www.weather.gov/alerts',
+        });
+      }
+ 
+      const SEVERITY_ORDER: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
+      const seen = new Map<string, Alert>();
+      for (const a of raw) {
+        const key = a.phenomenon;
+        if (!seen.has(key)) {
+          seen.set(key, { ...a });
+        } else {
+          const ex = seen.get(key)!;
+          const severity = SEVERITY_ORDER[a.severity] < SEVERITY_ORDER[ex.severity]
+            ? a.severity : ex.severity;
+          const airports = [...new Set([...ex.airports, ...a.airports])];
+          const mergedCoords = airports
+            .map(icao => AF_AIRPORTS.find(ap => ap.icao === icao))
+            .filter((ap): ap is typeof AF_AIRPORTS[0] => ap != null);
+          const lat = mergedCoords.length
+            ? mergedCoords.reduce((s, ap) => s + ap.lat, 0) / mergedCoords.length
+            : ex.lat;
+          const lon = mergedCoords.length
+            ? mergedCoords.reduce((s, ap) => s + ap.lon, 0) / mergedCoords.length
+            : ex.lon;
+          seen.set(key, {
+            ...ex,
+            severity,
+            airports,
+            ...(lat !== undefined ? { lat } : {}),
+            ...(lon !== undefined ? { lon } : {}),
+          });
+        }
+      }
+ 
+      alerts.push(...seen.values());
+      return alerts; // succès — on sort immédiatement
+ 
+    } catch (e) {
+      lastError = e;
+      const isTimeout = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
+      if (isTimeout && attempt < NOAA_MAX_ATTEMPTS) {
+        console.warn(`[NOAA] Timeout (tentative ${attempt}/${NOAA_MAX_ATTEMPTS}) — retry…`);
+        continue;
+      }
+      // Erreur non-timeout ou dernière tentative
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[NOAA] Échec après ${attempt} tentative(s) :`, msg);
       return alerts;
     }
-    const ct = res.headers.get('content-type') ?? '';
-    if (!ct.includes('json') && !ct.includes('geo+json')) {
-      console.error('[NOAA] Unexpected content-type:', ct);
-      return alerts;
-    }
-    const json = await res.json();
-    const raw: Alert[] = [];
-
-    for (const f of (json.features ?? [])) {
-      const p = f.properties;
-      if (!RELEVANT_EVENTS.has(p.event)) continue;
-
-      const zones = p.geocode?.UGC ?? [];
-      const airportSet = new Set<string>();
-      for (const zone of zones) {
-        const found = NWS_ZONE_AIRPORTS[zone];
-        if (found) found.forEach((a: string) => airportSet.add(a));
-      }
-      const airports = [...airportSet];
-      if (airports.length === 0) continue;
-
-      // NWS_ZONE_AIRPORTS ne contient que des ICAO LC → garantie maintenue
-      const airportCoords = airports
-        .map(icao => LC_AIRPORTS.find(a => a.icao === icao))
-        .filter((a): a is typeof LC_AIRPORTS[0] => a != null);
-      const lat = airportCoords.length
-        ? airportCoords.reduce((s, a) => s + a.lat, 0) / airportCoords.length
-        : undefined;
-      const lon = airportCoords.length
-        ? airportCoords.reduce((s, a) => s + a.lon, 0) / airportCoords.length
-        : undefined;
-
-      const phenomenon = NOAA_PHENOMENON_FR[p.event] ?? p.event;
-
-      raw.push({
-        id: `NOAA-${p.id}`,
-        source: 'NOAA',
-        region: 'AMN',
-        severity: noaaSeverity(p.event),
-        phenomenon,
-        country: 'United States',
-        airports,
-        ...(lat !== undefined ? { lat } : {}),
-        ...(lon !== undefined ? { lon } : {}),
-        validFrom: p.onset || p.effective || '',
-        validTo: p.expires || '',
-        headline: p.headline || p.event,
-        description: p.description?.slice(0, 500) || p.headline || '',
-        link: p['@id'] || 'https://www.weather.gov/alerts',
-      });
-    }
-
-    // Déduplication alert/update
-    const deduped = new Map<string, Alert>();
-    for (const a of raw) {
-      const key = `${a.phenomenon}|${[...a.airports].sort().join(',')}`;
-      const existing = deduped.get(key);
-      if (!existing) {
-        deduped.set(key, a);
-      } else {
-        const SEVERITY_ORDER: Record<string, number> = { red: 0, orange: 1, yellow: 2 };
-        const useSeverity = SEVERITY_ORDER[a.severity] <= SEVERITY_ORDER[existing.severity]
-          ? a.severity : existing.severity;
-        const useAlert = a.validFrom >= existing.validFrom ? a : existing;
-        deduped.set(key, { ...useAlert, severity: useSeverity });
-      }
-    }
-    alerts.push(...deduped.values());
-  } catch (e) {
-    console.error('[NOAA]', e);
   }
+ 
   return alerts;
 }
 
